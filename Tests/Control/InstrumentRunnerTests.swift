@@ -188,6 +188,14 @@ private final class FakeDetector: StreamingInstrument, @unchecked Sendable {
     private let lock: NSLock = .init()
     private var context: Context?
 
+    /// The status of the activation this instrument is running under, which is
+    /// what a fault carries with it so a late one can be told from a live one.
+    var raisingStatus: AtomicStatus? {
+        lock.lock()
+        defer { lock.unlock() }
+        return context?.status
+    }
+
     init() {}
 
     func observe(_ context: Context) {
@@ -377,6 +385,37 @@ struct RuntimeConvergenceTests {
             opener.stream(2)?.count == 1,
             "the finished activation still holds its own context, and it delivers nowhere"
         )
+    }
+
+    /// A fault checks that its request is live on the thread that raised it and
+    /// then waits for the runner's lock. A request ending inside that wait used
+    /// to leave the fault with nothing but a kind, and the activation that
+    /// replaced it is what the fault was recorded against — a hang from a
+    /// finished capture, attributed to the request that came after it.
+    ///
+    /// The wait cannot be forced from a test, so what is asserted is the state
+    /// it produces: a source from a finished activation, handed to a runner that
+    /// has since started another.
+    @Test func aFaultFromAFinishedActivationIsNotRecordedByItsReplacement() throws {
+        let (subject, _) = runtime(faultPair)
+        let both = ["concurrency.mainThreadHang", "runtime.threadSnapshot"]
+
+        subject.converge(to: [request(1, instruments: both)], ingestEndpoint: "in")
+        let finished = try #require(subject.detector?.raisingStatus)
+
+        subject.converge(to: [], ingestEndpoint: "in")
+        subject.converge(to: [request(2, instruments: both)], ingestEndpoint: "in")
+        subject.settle()
+        let replacement = try #require(subject.contributor)
+
+        subject.fault(.hang, from: finished)
+        subject.settle()
+        #expect(replacement.askedCount == 0, "the request that raised it is over")
+
+        let live = try #require(subject.detector?.raisingStatus)
+        subject.fault(.hang, from: live)
+        subject.settle()
+        #expect(replacement.askedCount == 1, "and a live one is still delivered")
     }
 
     @Test func anInstrumentStoppedAndStartedAgainReportsEachCallOnce() {

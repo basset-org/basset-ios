@@ -207,6 +207,45 @@ final class InstrumentRunner: @unchecked Sendable {
         queue.sync { instances[I.id] as? I }
     }
 
+    /// Every active instrument with something to add gets asked, including the
+    /// one that raised it if it also contributes. Synchronous, because the
+    /// state worth reading is the one the caller is standing in.
+    ///
+    /// A fault arrives on whichever thread noticed it — the hang watchdog runs
+    /// on its own — while every dictionary here is written from `queue`. Reading
+    /// one from that thread is a data race on a Swift dictionary, which
+    /// terminates the app the SDK is a guest in. The contributors are copied on
+    /// the queue instead, so this path touches no dictionary at all.
+    func fault(_ kind: FaultKind, from source: AtomicStatus) {
+        // Held across delivery, and taken by `deactivate` too. Reading the list
+        // and then asking each contributor leaves a gap in between, and a
+        // request ending inside it means a stopped instrument still does the
+        // work — `runtime.threadSnapshot` suspends every thread in the process
+        // to answer, which is not something to do on behalf of a capture that
+        // has already finished.
+        //
+        // The cost is that a deactivation waits for a fault already being
+        // captured. That is the right way round: the capture is bounded and the
+        // request it belongs to is still live when it starts.
+        faultLock.lock()
+        defer { faultLock.unlock() }
+
+        // Checked again here, against the activation that raised it. `Context`
+        // checks once on the caller's thread, and a fault that then waits on
+        // this lock through its own request's deactivation would otherwise be
+        // delivered to whatever activation replaced it — a hang from a finished
+        // capture, recorded as if the new request had seen it.
+        guard source.isActive else {
+            return
+        }
+
+        for contributor in faultContributors {
+            var readings = contributor.context.readings()
+            contributor.instrument.fault(kind, &readings)
+            contributor.context.deliver(readings)
+        }
+    }
+
     private func installLoadTimeHooks() {
         let hooks = HookTable(swizzle: loadTimeSwizzle, registries: registries)
         for registration in registrations where registration.isAvailableHere {
@@ -358,45 +397,6 @@ final class InstrumentRunner: @unchecked Sendable {
         }
         if let streaming = instrument as? any StreamingInstrument {
             streaming.observe(context)
-        }
-    }
-
-    /// Every active instrument with something to add gets asked, including the
-    /// one that raised it if it also contributes. Synchronous, because the
-    /// state worth reading is the one the caller is standing in.
-    ///
-    /// A fault arrives on whichever thread noticed it — the hang watchdog runs
-    /// on its own — while every dictionary here is written from `queue`. Reading
-    /// one from that thread is a data race on a Swift dictionary, which
-    /// terminates the app the SDK is a guest in. The contributors are copied on
-    /// the queue instead, so this path touches no dictionary at all.
-    private func fault(_ kind: FaultKind, from source: AtomicStatus) {
-        // Held across delivery, and taken by `deactivate` too. Reading the list
-        // and then asking each contributor leaves a gap in between, and a
-        // request ending inside it means a stopped instrument still does the
-        // work — `runtime.threadSnapshot` suspends every thread in the process
-        // to answer, which is not something to do on behalf of a capture that
-        // has already finished.
-        //
-        // The cost is that a deactivation waits for a fault already being
-        // captured. That is the right way round: the capture is bounded and the
-        // request it belongs to is still live when it starts.
-        faultLock.lock()
-        defer { faultLock.unlock() }
-
-        // Checked again here, against the activation that raised it. `Context`
-        // checks once on the caller's thread, and a fault that then waits on
-        // this lock through its own request's deactivation would otherwise be
-        // delivered to whatever activation replaced it — a hang from a finished
-        // capture, recorded as if the new request had seen it.
-        guard source.isActive else {
-            return
-        }
-
-        for contributor in faultContributors {
-            var readings = contributor.context.readings()
-            contributor.instrument.fault(kind, &readings)
-            contributor.context.deliver(readings)
         }
     }
 

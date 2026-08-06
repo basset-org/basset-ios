@@ -163,6 +163,22 @@ is new code written under the pressure of a finding, which is when a lifecycle
 guard gets added in one place and forgotten in the neighbouring one. A thread is
 resolved when the re-review passes over it, not when the fix is pushed.
 
+**A finding nobody ran gets a test before it gets a fix.** Most findings here are
+reasoned rather than observed: a race read out of the code, a claim about what a
+framework returns, an ordering nobody watched happen. Fixing one by reasoning
+leaves both halves unproven — that the defect was real, and that the fix removes
+it — and both can be answered by running something.
+
+Reproduce the state the finding describes, watch the test fail, fix it, watch it
+pass. Then revert the fix and confirm the test fails again: one that still passes
+without it was testing something else.
+
+Where the state cannot be forced — a thread interleaving, a device asleep, a
+simulator with no camera — assert the state it produces rather than the timing
+that produces it, and say in the test which half is out of reach. A reviewer
+asking "what did you run" is asking for that, and "it should be fine now" is not
+an answer.
+
 ### Already answered
 
 - **`stopObserving()` may be empty.** An instrument does not release its own
