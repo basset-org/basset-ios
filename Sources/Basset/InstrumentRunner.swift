@@ -304,7 +304,7 @@ final class InstrumentRunner: @unchecked Sendable {
             activate(registration)
         }
         active = Set(wanted.keys).intersection(instances.keys)
-        rememberFaultContributors()
+        faultLock.withLock { rememberFaultContributors() }
     }
 
     private func activate(_ registration: Registration) {
@@ -371,18 +371,20 @@ final class InstrumentRunner: @unchecked Sendable {
     /// terminates the app the SDK is a guest in. The contributors are copied on
     /// the queue instead, so this path touches no dictionary at all.
     private func fault(_ kind: FaultKind) {
-        let contributors = faultLock.withLock { faultContributors }
+        // Held across delivery, and taken by `deactivate` too. Reading the list
+        // and then asking each contributor leaves a gap in between, and a
+        // request ending inside it means a stopped instrument still does the
+        // work — `runtime.threadSnapshot` suspends every thread in the process
+        // to answer, which is not something to do on behalf of a capture that
+        // has already finished.
+        //
+        // The cost is that a deactivation waits for a fault already being
+        // captured. That is the right way round: the capture is bounded and the
+        // request it belongs to is still live when it starts.
+        faultLock.lock()
+        defer { faultLock.unlock() }
 
-        for contributor in contributors {
-            // The snapshot is rebuilt when activation settles, and a fault can
-            // arrive from the watchdog thread before it does. Each contributor
-            // carries the status its own activation owns, so a stopped
-            // instrument is never asked to describe a fault it is no longer
-            // observing.
-            guard contributor.context.isActive else {
-                continue
-            }
-
+        for contributor in faultContributors {
             var readings = contributor.context.readings()
             contributor.instrument.fault(kind, &readings)
             contributor.context.deliver(readings)
@@ -404,7 +406,7 @@ final class InstrumentRunner: @unchecked Sendable {
             ))
         }
 
-        faultLock.withLock { faultContributors = contributors }
+        faultContributors = contributors
     }
 
     /// Deactivating drops the instrument, its context and its status rather than
@@ -418,6 +420,13 @@ final class InstrumentRunner: @unchecked Sendable {
     /// capture. Dropped, that callback holds a status that stays deactivated for
     /// as long as it lives, and lands nowhere.
     private func deactivate(_ id: InstrumentWireID) {
+        // Ordered against fault delivery rather than racing it: a fault already
+        // being captured finishes against the instrument that was live when it
+        // started, and one arriving after this returns finds the instrument
+        // gone from the list rather than gone from under it.
+        faultLock.lock()
+        defer { faultLock.unlock() }
+
         statuses[id]?.deactivate()
         contexts[id]?.teardown()
         if let streaming = instances[id] as? any StreamingInstrument {

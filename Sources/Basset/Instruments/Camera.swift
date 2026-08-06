@@ -274,6 +274,7 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
     /// was already there. Every output bound to such a class has to be named
     /// again, not just the one that happened to be seen first.
     private var defined: Set<ObjectIdentifier> = []
+    private var rebinding: Set<ObjectIdentifier> = []
     private var watching = 0
 
     private var isWatchingSomething: Bool {
@@ -336,6 +337,7 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
         instrumented.removeAll()
         watching = 0
         defined.removeAll()
+        rebinding.removeAll()
         lock.unlock()
     }
 
@@ -416,6 +418,13 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
     /// The same object on the same queue, which is what it was already set to.
     /// AVFoundation reads a delegate's callbacks once, when it is named, so a
     /// method defined after that moment is one it will never ask for.
+    ///
+    /// **Guarded against itself.** The setter this calls is the same one the
+    /// load-time hook announces on, and the announcement runs the followers
+    /// synchronously — so naming the delegate again re-enters here, names it
+    /// again, and recurses until the host process runs out of stack. The guard
+    /// is per output rather than per class: two outputs sharing a delegate type
+    /// each need naming, and only the one already in flight may be skipped.
     private func rebind(
         _ output: AVCaptureVideoDataOutput,
         delegate: AVCaptureVideoDataOutputSampleBufferDelegate
@@ -424,7 +433,19 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
             return
         }
 
+        let key = ObjectIdentifier(output)
+        lock.lock()
+        let alreadyRebinding = !rebinding.insert(key).inserted
+        lock.unlock()
+        guard !alreadyRebinding else {
+            return
+        }
+
         output.setSampleBufferDelegate(delegate, queue: queue)
+
+        lock.lock()
+        rebinding.remove(key)
+        lock.unlock()
     }
 
     /// Highest weight wins the interval, so the reason that explains a stall

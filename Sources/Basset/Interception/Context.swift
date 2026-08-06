@@ -252,8 +252,10 @@ public final class Context: @unchecked Sendable {
         // first reading after an instrument starts again re-establishes the
         // state rather than being suppressed as a repeat of the last capture.
         lastEmitted.removeAll()
-        // Released under the lock rather than after it, so an install racing
-        // teardown is ordered against it rather than landing behind it.
+        // Under the lock, unlike the two below it: `installIfActive` takes this
+        // same lock, so releasing here is what orders an install racing teardown
+        // against it rather than letting it land behind. Cancelling a timer and
+        // running an unfollow can re-enter this context, so those stay outside.
         swizzle.releaseObservers()
         lock.unlock()
 

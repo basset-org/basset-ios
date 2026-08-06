@@ -663,6 +663,61 @@ struct WeakRegistryTests {
         #expect(registry.count == 0, "basset never retains an app object")
     }
 
+    /// A follower saw the object while there was nothing on it worth hooking,
+    /// and `add` says nothing about one it already holds — so a video output
+    /// handed to a session before it is told who receives its frames was
+    /// instrumented once, uselessly, and never again.
+    @Test func announcingAKnownObjectTellsTheFollowersAgain() {
+        let registry = WeakRegistry<Caught>()
+        let caught = Caught()
+        registry.add(caught)
+
+        var attached = [Caught]()
+        registry.attachAndFollow { object, _ in attached.append(object) }
+        #expect(attached.count == 1)
+
+        registry.add(caught)
+        #expect(attached.count == 1, "adding what is already held stays silent")
+
+        registry.announce(caught)
+        #expect(attached.count == 2, "announcing it does not")
+        #expect(attached.last === caught)
+    }
+
+    /// Both orders reach the follower through one call: the app may set the
+    /// delegate before the output is ever added, and an announcement of
+    /// something unknown is that object arriving.
+    @Test func announcingAnUnknownObjectAddsIt() {
+        let registry = WeakRegistry<Caught>()
+        var attached = [Caught]()
+        registry.attachAndFollow { object, _ in attached.append(object) }
+
+        let caught = Caught()
+        registry.announce(caught)
+
+        #expect(registry.count == 1)
+        #expect(attached.count == 1)
+    }
+
+    /// The number survives what the address does not. A sample kept under a
+    /// released controller's address is one the next allocation at that address
+    /// inherits, and inheriting a sample reads as "nothing changed".
+    @Test func theInstanceNumberIsNotReusedWhenAnAddressIs() {
+        let registry = WeakRegistry<Caught>()
+        var first: UInt32?
+        autoreleasepool {
+            let transient = Caught()
+            registry.add(transient)
+            first = registry.tracked.first?.instance
+        }
+
+        let replacement = Caught()
+        registry.add(replacement)
+
+        #expect(first != nil)
+        #expect(registry.tracked.first?.instance != first)
+    }
+
     @Test func addingTheSameObjectTwiceKeepsOneEntry() {
         let registry = WeakRegistry<Caught>()
         let caught = Caught()
