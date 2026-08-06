@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec 1>&2
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+contains() {
+    local needle=$1
+    shift
+    local item
+    for item in "$@"; do
+        if [ "$item" = "$needle" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+read_paths() {
+    paths=()
+    local path
+    while IFS= read -r -d '' path; do
+        paths+=("$path")
+    done < <("$@")
+}
+
+staged_in() {
+    git diff --cached --name-only --diff-filter=ACM -z -- "$1"
+}
+
+unstaged_in() {
+    git diff --name-only -z -- "$1"
+}
+
+format_with() {
+    local language=$1
+    shift
+    case "$language" in
+        swift) swiftformat "$@" --config "$repo_root/.swiftformat" ;;
+    esac
+}
+
+is_formatted() {
+    case "$1" in
+        swift) swiftformat "$2" --config "$repo_root/.swiftformat" --lint >/dev/null 2>&1 ;;
+    esac
+}
+
+fix_command() {
+    local language=$1
+    shift
+    case "$language" in
+        swift) echo "swiftformat $* --config .swiftformat" ;;
+    esac
+}
+
+enforce() {
+    local language=$1 pathspec=$2 tool=$3 install=$4
+
+    read_paths staged_in "$pathspec"
+    local staged=(${paths[@]+"${paths[@]}"})
+    if [ ${#staged[@]} -eq 0 ]; then
+        return 0
+    fi
+
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "$tool not found."
+        echo "install it with: $install"
+        exit 1
+    fi
+
+    read_paths unstaged_in "$pathspec"
+    local dirty_before=(${paths[@]+"${paths[@]}"})
+
+    local path
+    local fully_staged=()
+    local partially_staged=()
+    for path in "${staged[@]}"; do
+        if contains "$path" ${dirty_before[@]+"${dirty_before[@]}"}; then
+            partially_staged+=("$path")
+        else
+            fully_staged+=("$path")
+        fi
+    done
+
+    if [ ${#fully_staged[@]} -gt 0 ]; then
+        format_with "$language" "${fully_staged[@]}"
+        git add -- "${fully_staged[@]}"
+    fi
+
+    read_paths unstaged_in "$pathspec"
+    local collateral=()
+    for path in ${paths[@]+"${paths[@]}"}; do
+        if ! contains "$path" ${dirty_before[@]+"${dirty_before[@]}"}; then
+            collateral+=("$path")
+        fi
+    done
+
+    if [ ${#collateral[@]} -gt 0 ]; then
+        echo "formatting the staged files also rewrote files that were not staged:"
+        for path in "${collateral[@]}"; do
+            echo "  $path"
+        done
+        echo
+        echo "the edits are on disk and nothing was committed. review them, then stage"
+        echo "what belongs in this commit."
+        exit 1
+    fi
+
+    if [ ${#partially_staged[@]} -eq 0 ]; then
+        return 0
+    fi
+
+    local unformatted=()
+    for path in "${partially_staged[@]}"; do
+        if [ ! -f "$path" ]; then
+            continue
+        fi
+        if ! is_formatted "$language" "$path"; then
+            unformatted+=("$path")
+        fi
+    done
+
+    if [ ${#unformatted[@]} -eq 0 ]; then
+        return 0
+    fi
+
+    echo "these files are only partially staged and are not formatted:"
+    for path in "${unformatted[@]}"; do
+        echo "  $path"
+    done
+    echo
+    echo "formatting them here would stage the hunks you left out, so the hook will not."
+    echo "stage the whole file, or format it yourself:"
+    echo "  $(fix_command "$language" "${unformatted[@]}")"
+    exit 1
+}
+
+enforce swift '*.swift' swiftformat "brew install swiftformat"
