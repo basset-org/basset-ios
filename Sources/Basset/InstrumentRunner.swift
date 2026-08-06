@@ -337,7 +337,7 @@ final class InstrumentRunner: @unchecked Sendable {
             sink: { [weak self, status] entity in
                 self?.emit(entity, from: registration, activation: status)
             },
-            raise: { [weak self] kind in self?.fault(kind) }
+            raise: { [weak self] kind, source in self?.fault(kind, from: source) }
         )
         contexts[id] = context
 
@@ -370,7 +370,7 @@ final class InstrumentRunner: @unchecked Sendable {
     /// one from that thread is a data race on a Swift dictionary, which
     /// terminates the app the SDK is a guest in. The contributors are copied on
     /// the queue instead, so this path touches no dictionary at all.
-    private func fault(_ kind: FaultKind) {
+    private func fault(_ kind: FaultKind, from source: AtomicStatus) {
         // Held across delivery, and taken by `deactivate` too. Reading the list
         // and then asking each contributor leaves a gap in between, and a
         // request ending inside it means a stopped instrument still does the
@@ -383,6 +383,15 @@ final class InstrumentRunner: @unchecked Sendable {
         // request it belongs to is still live when it starts.
         faultLock.lock()
         defer { faultLock.unlock() }
+
+        // Checked again here, against the activation that raised it. `Context`
+        // checks once on the caller's thread, and a fault that then waits on
+        // this lock through its own request's deactivation would otherwise be
+        // delivered to whatever activation replaced it — a hang from a finished
+        // capture, recorded as if the new request had seen it.
+        guard source.isActive else {
+            return
+        }
 
         for contributor in faultContributors {
             var readings = contributor.context.readings()

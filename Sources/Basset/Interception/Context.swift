@@ -48,7 +48,11 @@ public final class Context: @unchecked Sendable {
     private let instrumentName: String
     private let defaultEntity: Entity.WireID
     private let sink: @Sendable (Entity) -> Void
-    private let raise: @Sendable (FaultKind) -> Void
+    /// Takes the raising activation's status as well as the kind. A fault can
+    /// wait on the runner's lock while the request that raised it ends, and
+    /// without a source there is nothing left to say which capture it belonged
+    /// to — so it would be recorded against whichever one replaced it.
+    private let raise: @Sendable (FaultKind, AtomicStatus) -> Void
     private let timerQueue: DispatchQueue
     private let lock: NSLock = .init()
     private var timers: [DispatchSourceTimer] = []
@@ -71,7 +75,7 @@ public final class Context: @unchecked Sendable {
         registries: Registries,
         timerQueue: DispatchQueue,
         sink: @escaping @Sendable (Entity) -> Void,
-        raise: @escaping @Sendable (FaultKind) -> Void = { _ in }
+        raise: @escaping @Sendable (FaultKind, AtomicStatus) -> Void = { _, _ in }
     ) {
         self.instrumentName = instrumentName
         self.defaultEntity = defaultEntity
@@ -96,7 +100,7 @@ public final class Context: @unchecked Sendable {
             return
         }
 
-        raise(kind)
+        raise(kind, status)
     }
 
     public func registry<Tracked: AnyObject>(_ type: Tracked.Type) -> [Tracked] {
