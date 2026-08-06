@@ -48,7 +48,11 @@ final class DisplayListChurn: StreamingInstrument {
     private static let hostCeiling = 4
 
     private let lock: NSLock = .init()
-    private var lastSample: [ObjectIdentifier: Sample] = [:]
+    /// Keyed by the registry's instance number, never by the controller's
+    /// address: an address is reused as soon as the controller at it is
+    /// released, and a new screen inheriting a dead one's sample reads as
+    /// unchanged — which is the one reading this instrument exists to take.
+    private var lastSample: [UInt32: Sample] = [:]
     private var changes: UInt64 = 0
     private var latest: Sample?
     private var generation: String?
@@ -157,15 +161,15 @@ final class DisplayListChurn: StreamingInstrument {
         // the app retains it, and one kept alive behind a navigation push took a
         // slot under the ceiling ahead of the screen being looked at — so the
         // reading described a screen nobody could see.
-        let live = hosts.all
-            .filter { $0.viewIfLoaded?.window != nil }
+        let live = hosts.tracked
+            .filter { $0.object.viewIfLoaded?.window != nil }
             .suffix(Self.hostCeiling)
         guard !live.isEmpty else {
             record(status: "no swiftui host on screen")
             return
         }
 
-        for controller in live {
+        for (controller, instance) in live {
             switch SwiftUIReflection.renderer(of: controller.viewIfLoaded) {
             case .noHostingView:
                 record(status: "host has no view loaded")
@@ -185,28 +189,24 @@ final class DisplayListChurn: StreamingInstrument {
                         seed: shape.seed,
                         fingerprint: shape.fingerprint
                     ),
-                    for: ObjectIdentifier(controller),
+                    for: instance,
                     generation: generation
                 )
             }
         }
 
-        forget(everythingBut: Set(live.map(ObjectIdentifier.init)))
+        forget(everythingBut: Set(live.map(\.instance)))
     }
 
-    /// `ObjectIdentifier` is an address, and an address is reused. A sample kept
-    /// under a controller that has since been released is one a new controller
-    /// allocated in its place inherits — and inheriting a sample reads as "no
-    /// change", which is the one thing this instrument exists to measure. It also
-    /// bounds the dictionary, which otherwise grows for as long as a capture
+    /// Bounds the dictionary, which otherwise grows for as long as a capture
     /// visits screens.
-    private func forget(everythingBut live: Set<ObjectIdentifier>) {
+    private func forget(everythingBut live: Set<UInt32>) {
         lock.lock()
         lastSample = lastSample.filter { live.contains($0.key) }
         lock.unlock()
     }
 
-    private func note(_ sample: Sample, for key: ObjectIdentifier, generation: String) {
+    private func note(_ sample: Sample, for key: UInt32, generation: String) {
         lock.lock()
         if let previous = lastSample[key], previous != sample {
             changes += 1
@@ -261,13 +261,14 @@ final class HostAppear: StreamingInstrument {
                 return
             }
 
+            // Pruned to what the registry still holds, rather than emptied on a
+            // count. Clearing the map takes the identity of every live host with
+            // it, and those hosts then report their next appearance with no
+            // identity at all — where an entry whose controller is gone is one
+            // whose address is free to be handed to a new one.
+            let alive = Set(hosts.tracked.map { ObjectIdentifier($0.object) })
             lock.lock()
-            // The same ceiling `loadedAt` carries, for the same reason: an
-            // address is reused, so a stale entry hands a new controller the
-            // instance number of a dead one.
-            if identifiers.count >= Self.pendingCeiling {
-                identifiers.removeAll()
-            }
+            identifiers = identifiers.filter { alive.contains($0.key) }
             identifiers[ObjectIdentifier(controller)] = instance
             lock.unlock()
         }
@@ -465,12 +466,21 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
         // observer nothing will ever release, and leaves the class recorded as
         // hooked — so the fix is checked here rather than left to the hook body.
         DispatchQueue.main.async { [weak self] in
-            guard context.isActive else {
-                self?.forget(key)
+            guard let self else {
                 return
             }
 
-            self?.hookLayout(of: hostingView, context)
+            let installed = context.installIfActive {
+                self.hookLayout(of: hostingView, context)
+            }
+            guard !installed else {
+                return
+            }
+
+            // The request ended in the turn this waited. Un-recorded, so the
+            // class is hooked again if it is asked for a second time rather than
+            // being remembered as hooked by an observer that was never installed.
+            self.forget(key)
         }
     }
 
@@ -821,6 +831,11 @@ enum SwiftUIHost {
     /// walk covers presented controllers and children, because a sheet's host is
     /// neither the root nor a child of it.
     ///
+    /// Foreground-active scenes and visible windows only. A connected scene may
+    /// be a backgrounded window on iPad or a hidden overlay, and a host found
+    /// there would be sampled and hooked as though somebody were looking at it —
+    /// which is the same mistake as reporting a screen that has gone away.
+    ///
     /// Main-thread only: reading a view hierarchy from anywhere else races the
     /// render it is describing.
     static func onScreen() -> [UIViewController] {
@@ -828,7 +843,9 @@ enum SwiftUIHost {
         var pending = UIApplication.shared
             .connectedScenes
             .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
             .flatMap(\.windows)
+            .filter { !$0.isHidden && $0.alpha > 0 }
             .compactMap(\.rootViewController)
 
         while let controller = pending.popLast() {

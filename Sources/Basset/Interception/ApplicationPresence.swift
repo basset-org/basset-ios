@@ -2,6 +2,8 @@ import Foundation
 
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
 /// Whether the app is in front, tracked from the moment `start` runs rather than
@@ -38,7 +40,6 @@ enum ApplicationPresence {
     /// any thread; the first read needs main, and takes it asynchronously rather
     /// than blocking the caller's launch.
     static func capture() {
-        #if canImport(UIKit)
         lock.lock()
         let already = watching
         watching = true
@@ -48,6 +49,7 @@ enum ApplicationPresence {
         }
 
         let center = NotificationCenter.default
+        #if canImport(UIKit)
         center.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
@@ -64,21 +66,45 @@ enum ApplicationPresence {
             queue: nil
         ) { _ in foreground.deactivate() }
 
+        #elseif canImport(AppKit)
+        center.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: nil
+        ) { _ in foreground.activate() }
+        center.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: nil
+        ) { _ in foreground.deactivate() }
+        #else
+        // Neither framework: a process with no application to be in front of is
+        // always in front. Left inactive, `concurrency.mainThreadHang` reports
+        // nothing at all and `lifecycle.lastRunEnded` calls every run
+        // backgrounded — a whole platform reading as an app nobody opened.
+        foreground.activate()
+        #endif
+
         if Thread.isMainThread {
             read()
         } else {
             DispatchQueue.main.async { read() }
         }
-        #endif
     }
 
-    #if canImport(UIKit)
     private static func read() {
+        #if canImport(UIKit)
         if UIApplication.shared.applicationState == .background {
             foreground.deactivate()
         } else {
             foreground.activate()
         }
+        #elseif canImport(AppKit)
+        if NSApplication.shared.isActive {
+            foreground.activate()
+        } else {
+            foreground.deactivate()
+        }
+        #endif
     }
-    #endif
 }

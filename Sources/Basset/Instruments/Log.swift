@@ -77,8 +77,8 @@ struct LogDigest {
             // and a ceiling that drops one of them by whichever order the
             // dictionary happened to yield drops a different one each capture.
             .sorted {
-                ($0.count, $1.message, $1.subsystem, $1.category)
-                    > ($1.count, $0.message, $0.subsystem, $0.category)
+                ($0.count, $1.message, $1.subsystem, $1.category, $1.level.rawValue)
+                    > ($1.count, $0.message, $0.subsystem, $0.category, $0.level.rawValue)
             }
 
         subjects = Array(ranked.prefix(ceiling))

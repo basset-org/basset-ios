@@ -84,6 +84,22 @@ struct LocaleSettingsTests {
         #expect(rendered(english.sealed(), .layoutDirection) == "leftToRight")
     }
 
+    /// Punjabi is written in Gurmukhi in India and in the Arabic script in
+    /// Pakistan, and Foundation answers `rightToLeft` for `pa-Arab` only when it
+    /// is asked about the locale's own language. Asked about a language rebuilt
+    /// from the code alone it answers `leftToRight` for both, which is what this
+    /// guards. `ar`/`en` cannot: they read the same either way.
+    @Test func rightToLeftFollowsTheScriptRatherThanTheLanguageCode() {
+        var arabicScript = readings()
+        LocaleSettings.write(Locale(identifier: "pa_Arab_PK"), into: &arabicScript)
+
+        var gurmukhiScript = readings()
+        LocaleSettings.write(Locale(identifier: "pa_Guru_IN"), into: &gurmukhiScript)
+
+        #expect(rendered(arabicScript.sealed(), .layoutDirection) == "rightToLeft")
+        #expect(rendered(gurmukhiScript.sealed(), .layoutDirection) == "leftToRight")
+    }
+
     @Test func aNonGregorianCalendarIsReportedAsItself() {
         var out = readings()
         LocaleSettings.write(Locale(identifier: "fa_IR@calendar=persian"), into: &out)

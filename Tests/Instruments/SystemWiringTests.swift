@@ -88,12 +88,15 @@ struct SystemWiringTests {
         #expect(reading?.components.contains { $0.id == .memoryUsedBytes } == true)
     }
 
+    /// On the main actor because `capture()` reads `applicationState` there. Off
+    /// main it queues that read, which can land after the notification below and
+    /// overwrite the state this test just established — and the assertion would
+    /// then turn on whatever the host app running it happened to be doing.
+    @MainActor
     @Test func theAppStateIsReportedOnActivationAndFollowsTheApp() {
         // `start` establishes presence before any request can arrive, and this
-        // instrument now reports what the app is actually doing rather than
-        // assuming the foreground. The notification stands in for a launch that
-        // reached the front, so the test does not depend on whatever the host
-        // app running it happens to be doing.
+        // instrument reports what the app is actually doing rather than assuming
+        // the foreground.
         ApplicationPresence.capture()
         NotificationCenter.default.post(
             name: UIApplication.didBecomeActiveNotification,

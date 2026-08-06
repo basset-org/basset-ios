@@ -270,6 +270,10 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
 
     private let lock: NSLock = .init()
     private var instrumented: Set<ObjectIdentifier> = []
+    /// Delegate classes this defined a callback on rather than wrapped one that
+    /// was already there. Every output bound to such a class has to be named
+    /// again, not just the one that happened to be seen first.
+    private var defined: Set<ObjectIdentifier> = []
     private var watching = 0
 
     private var isWatchingSomething: Bool {
@@ -331,6 +335,7 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
         lock.lock()
         instrumented.removeAll()
         watching = 0
+        defined.removeAll()
         lock.unlock()
     }
 
@@ -352,6 +357,11 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
         }
         lock.unlock()
         guard fresh else {
+            // The class is hooked, but this output is not the one that was bound
+            // when the callback was defined, and AVFoundation asked *it* what its
+            // delegate answers to. A second output sharing the delegate's type
+            // counted nothing at all.
+            rebindIfDefined(output, delegate: delegate, subject: subject)
             return
         }
 
@@ -374,19 +384,47 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
                 hot.raise(Self.reason, to: Self.weigh(buffer))
             }
 
-        // AVFoundation reads a delegate's callbacks once, when it is named.
-        // A method defined after that moment is one it will never ask for,
-        // so the delegate is named again — the same object on the same
-        // queue, which is what it was already set to.
-        //
         // Either callback. A delegate that implements only the drop callback is
         // one this defined `didOutput` on, and delivered frames went uncounted
         // while the reading said zero — which is the answer the request was
         // opened for.
-        let defined = delivery == .implemented || drop == .implemented
-        if defined, let queue = output.sampleBufferCallbackQueue {
-            output.setSampleBufferDelegate(delegate, queue: queue)
+        guard delivery == .implemented || drop == .implemented else {
+            return
         }
+
+        lock.lock()
+        self.defined.insert(ObjectIdentifier(subject))
+        lock.unlock()
+        rebind(output, delegate: delegate)
+    }
+
+    private func rebindIfDefined(
+        _ output: AVCaptureVideoDataOutput,
+        delegate: AVCaptureVideoDataOutputSampleBufferDelegate,
+        subject: AnyClass
+    ) {
+        lock.lock()
+        let wasDefined = defined.contains(ObjectIdentifier(subject))
+        lock.unlock()
+        guard wasDefined else {
+            return
+        }
+
+        rebind(output, delegate: delegate)
+    }
+
+    /// The same object on the same queue, which is what it was already set to.
+    /// AVFoundation reads a delegate's callbacks once, when it is named, so a
+    /// method defined after that moment is one it will never ask for.
+    private func rebind(
+        _ output: AVCaptureVideoDataOutput,
+        delegate: AVCaptureVideoDataOutputSampleBufferDelegate
+    ) {
+        guard let queue = output.sampleBufferCallbackQueue else {
+            return
+        }
+
+        output.setSampleBufferDelegate(delegate, queue: queue)
     }
 
     /// Highest weight wins the interval, so the reason that explains a stall

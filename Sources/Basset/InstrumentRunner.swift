@@ -329,7 +329,14 @@ final class InstrumentRunner: @unchecked Sendable {
                 qos: .utility,
                 target: flushPool
             ),
-            sink: { [weak self] entity in self?.emit(entity, from: registration) },
+            // The status this activation owns, carried into the sink. A reading
+            // that passed `deliver`'s check and is still in the air when the
+            // request ends would otherwise be sent against whatever is live by
+            // the time the queue reaches it — a finished capture's reading,
+            // attributed to the request that replaced it.
+            sink: { [weak self, status] entity in
+                self?.emit(entity, from: registration, activation: status)
+            },
             raise: { [weak self] kind in self?.fault(kind) }
         )
         contexts[id] = context
@@ -367,6 +374,15 @@ final class InstrumentRunner: @unchecked Sendable {
         let contributors = faultLock.withLock { faultContributors }
 
         for contributor in contributors {
+            // The snapshot is rebuilt when activation settles, and a fault can
+            // arrive from the watchdog thread before it does. Each contributor
+            // carries the status its own activation owns, so a stopped
+            // instrument is never asked to describe a fault it is no longer
+            // observing.
+            guard contributor.context.isActive else {
+                continue
+            }
+
             var readings = contributor.context.readings()
             contributor.instrument.fault(kind, &readings)
             contributor.context.deliver(readings)
@@ -411,9 +427,14 @@ final class InstrumentRunner: @unchecked Sendable {
         statuses.removeValue(forKey: id)
         contexts.removeValue(forKey: id)
         instances.removeValue(forKey: id)
+        rememberFaultContributors()
     }
 
-    private func emit(_ entity: Entity, from registration: Registration) {
+    private func emit(
+        _ entity: Entity,
+        from registration: Registration,
+        activation: AtomicStatus
+    ) {
         var record = entity
         record.add(.instrument(registration.id.rawValue))
         // Which run of the app this came from. Rides on every reading rather
@@ -423,6 +444,10 @@ final class InstrumentRunner: @unchecked Sendable {
         let frame = encoder.frame(encoder.encode(record))
 
         queue.async { [self] in
+            guard activation.isActive else {
+                return
+            }
+
             for (requestId, request) in live
                 where request.instruments.contains(registration.name)
             {

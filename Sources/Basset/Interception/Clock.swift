@@ -17,6 +17,22 @@ public struct MonotonicTime: Equatable, Comparable, Sendable {
 }
 
 public struct Clock: Sendable {
+    /// Read once, and never with a zero denominator: dividing by what a system
+    /// call left in a struct it may not have filled takes the host app down, and
+    /// this runs in an app that asked for a reading rather than for a crash.
+    ///
+    /// One-to-one is the fallback because it is the real ratio on every arm64
+    /// device — the only place the sleep-inclusive clock is read — so the guard
+    /// costs nothing where it applies and degrades to raw ticks where it cannot.
+    private static let timebase: mach_timebase_info_data_t = {
+        var timebase = mach_timebase_info_data_t()
+        guard mach_timebase_info(&timebase) == KERN_SUCCESS, timebase.denom != 0 else {
+            return mach_timebase_info_data_t(numer: 1, denom: 1)
+        }
+
+        return timebase
+    }()
+
     public init() {}
 
     public func now() -> MonotonicTime {
@@ -37,11 +53,9 @@ public struct Clock: Sendable {
     /// that stops reports its smallest number exactly when the true one is
     /// largest.
     public func continuous() -> MonotonicTime {
-        var timebase = mach_timebase_info_data_t()
-        mach_timebase_info(&timebase)
-        let ticks = mach_continuous_time()
-        return MonotonicTime(
-            nanoseconds: ticks * UInt64(timebase.numer) / UInt64(timebase.denom)
+        MonotonicTime(
+            nanoseconds: mach_continuous_time() * UInt64(Self.timebase.numer)
+                / UInt64(Self.timebase.denom)
         )
     }
 }

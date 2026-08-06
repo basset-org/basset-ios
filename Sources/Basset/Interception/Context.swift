@@ -224,6 +224,24 @@ public final class Context: @unchecked Sendable {
     /// to the context, so releasing them is not the instrument's to remember.
     /// Everything here is released outside the lock, so a handler running its
     /// last time cannot reach back into a context mid-teardown and deadlock.
+    /// Installs while the request is still live, or not at all. Returns whether
+    /// it ran.
+    ///
+    /// A hook deferred to a later run-loop turn can arrive after the request
+    /// ended, and one installed after `teardown` released this context's
+    /// observers is a hook nothing will ever release. Checking `isActive` first
+    /// narrows that to a race; holding the same lock teardown holds closes it.
+    func installIfActive(_ install: () -> Void) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard status.isActive else {
+            return false
+        }
+
+        install()
+        return true
+    }
+
     func teardown() {
         lock.lock()
         let running = timers
@@ -234,10 +252,12 @@ public final class Context: @unchecked Sendable {
         // first reading after an instrument starts again re-establishes the
         // state rather than being suppressed as a repeat of the last capture.
         lastEmitted.removeAll()
+        // Released under the lock rather than after it, so an install racing
+        // teardown is ordered against it rather than landing behind it.
+        swizzle.releaseObservers()
         lock.unlock()
 
         running.forEach { $0.cancel() }
         releasing.forEach { $0() }
-        swizzle.releaseObservers()
     }
 }

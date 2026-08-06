@@ -227,14 +227,19 @@ final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
     static let entity = Entity.WireID.networkTask
 
     #if os(iOS)
-    /// Every task-producing call on `URLSession`, by argument count, because the
-    /// hook shape is decided by the arity.
+    /// Every HTTP and WebSocket task-producing call on `URLSession`, by argument
+    /// count, because the hook shape is decided by the arity.
+    ///
+    /// Stream tasks are the deliberate omission. `streamTaskWithHostName:port:`
+    /// takes an object and an integer, a shape nothing here can hook, and a
+    /// stream task carries no HTTP transaction to report — so the reading it
+    /// would produce is a name and a failure with no phases under it.
     ///
     /// The completion-handler variants matter most: they are how most app
     /// traffic is written, and they bypass the delegate messages a task delegate
-    /// would otherwise be the obvious home for. The list has to be exhaustive
-    /// rather than representative — a request made through a variant that is
-    /// missing produces no reading at all, and a capture that is silent about a
+    /// would otherwise be the obvious home for. Within HTTP the list has to be
+    /// exhaustive rather than representative — a request made through a variant
+    /// that is missing produces no reading at all, and a capture silent about a
     /// file upload reads as an app that made no request.
     private static let oneObjectFactories = [
         "dataTaskWithRequest:",

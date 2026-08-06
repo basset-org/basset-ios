@@ -28,6 +28,17 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
         all.count
     }
 
+    /// Each live object with the number this registry gave it. An address is
+    /// reused the moment the object at it is released, so anything keyed on
+    /// `ObjectIdentifier` can hand a new object the state of a dead one. This
+    /// number only ever counts up.
+    public var tracked: [(object: Tracked, instance: UInt32)] {
+        lock.lock()
+        defer { lock.unlock() }
+        boxes.removeAll { $0.tracked == nil }
+        return boxes.compactMap { box in box.tracked.map { ($0, box.instance) } }
+    }
+
     public init() {}
 
     public func add(_ tracked: Tracked) {

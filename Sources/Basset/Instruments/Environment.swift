@@ -267,11 +267,11 @@ final class LocaleSettings: SnapshotInstrument {
     /// Right-to-left is the setting most likely to break a layout that was never
     /// tested against it, and it follows the language rather than the region.
     private static func direction(of locale: Locale) -> String {
-        // The locale's own language, not one rebuilt from its code. A language
-        // written in more than one script carries the direction on the script,
-        // and `az-Arab`, `pa-Arab` and `sr-Cyrl` all read as left-to-right once
-        // that is thrown away — which is the reading that decides whether a
-        // layout was ever exercised in the direction it broke in.
+        // The locale's own language, not one rebuilt from its code. Punjabi is
+        // written in Gurmukhi in India and in the Arabic script in Pakistan, and
+        // `pa-Arab` reads as left-to-right once the script is thrown away —
+        // which is the reading that decides whether a layout was ever exercised
+        // in the direction it broke in.
         guard locale.language.languageCode != nil else {
             return "unknown"
         }
