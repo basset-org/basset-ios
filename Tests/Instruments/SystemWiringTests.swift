@@ -89,6 +89,17 @@ struct SystemWiringTests {
     }
 
     @Test func theAppStateIsReportedOnActivationAndFollowsTheApp() {
+        // `start` establishes presence before any request can arrive, and this
+        // instrument now reports what the app is actually doing rather than
+        // assuming the foreground. The notification stands in for a launch that
+        // reached the front, so the test does not depend on whatever the host
+        // app running it happens to be doing.
+        ApplicationPresence.capture()
+        NotificationCenter.default.post(
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+
         let harness = InstrumentHarness<AppState>()
         harness.start()
         defer { harness.stop() }

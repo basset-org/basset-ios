@@ -38,6 +38,11 @@ public enum Basset {
         // stopped answering. Taken here, while the app is still healthy.
         MainThreadPort.capture()
 
+        // Before any request can arrive, so an instrument activating later reads
+        // the state the app is actually in rather than assuming the one it
+        // would have been in had the request been there at launch.
+        ApplicationPresence.capture()
+
         lock.lock()
         defer { lock.unlock() }
         guard loop == nil else {

@@ -26,10 +26,14 @@ final class AppState: StreamingInstrument {
 
     func observe(_ context: Context) {
         #if canImport(UIKit)
-        report("foreground", context: context)
+        // What the app is doing now, not what it would be doing had the request
+        // been here at launch. A capture that opens during a background launch
+        // is the case this instrument exists to explain, and reporting
+        // `foreground` into it mislabels every reading until the next resume.
+        report(ApplicationPresence.state, context: context)
 
         watch(UIApplication.didEnterBackgroundNotification, context) { [weak self] in
-            self?.lock.withLock { self?.leftForegroundAt = context.clock.now() }
+            self?.lock.withLock { self?.leftForegroundAt = context.clock.continuous() }
             self?.report("background", context: context)
         }
         watch(UIApplication.willEnterForegroundNotification, context) { [weak self] in
@@ -50,7 +54,7 @@ final class AppState: StreamingInstrument {
                 return
             }
 
-            let elapsed = context.clock.now().nanoseconds - away.nanoseconds
+            let elapsed = context.clock.continuous().nanoseconds - away.nanoseconds
             context.emit { out in
                 out.put(.appState("resumed"))
                 out.put(.totalNanoseconds(elapsed))
@@ -173,7 +177,7 @@ final class LastRunEnded: StreamingInstrument {
         record.launchId = LaunchIdentity.current
         record.startedAtMicroseconds = Entity.microsecondsSinceEpoch()
         record.recordedAtMicroseconds = record.startedAtMicroseconds
-        record.appState = .foreground
+        record.appState = ApplicationPresence.isForeground ? .foreground : .background
         record.appVersion = Self.appVersion
         return record
     }

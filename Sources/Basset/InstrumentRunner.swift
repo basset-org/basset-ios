@@ -40,6 +40,11 @@ protocol TransportOpener: Sendable {
     func open(request: BassetRequest, ingestEndpoint: String) -> Transport?
 }
 
+struct FaultContributor {
+    let instrument: any FaultInstrument
+    let context: Context
+}
+
 final class InstrumentRunner: @unchecked Sendable {
     private let registrations: [Registration]
     private let byName: [String: Registration]
@@ -76,6 +81,8 @@ final class InstrumentRunner: @unchecked Sendable {
     private var transports: [UInt64: Transport] = [:]
     private var active: Set<InstrumentWireID> = []
     private var instances: [InstrumentWireID: any Instrument] = [:]
+    private let faultLock: NSLock = .init()
+    private var faultContributors: [FaultContributor] = []
     private var contexts: [InstrumentWireID: Context] = [:]
     private var statuses: [InstrumentWireID: AtomicStatus] = [:]
     private var sent: [UInt64: Int] = [:]
@@ -297,6 +304,7 @@ final class InstrumentRunner: @unchecked Sendable {
             activate(registration)
         }
         active = Set(wanted.keys).intersection(instances.keys)
+        rememberFaultContributors()
     }
 
     private func activate(_ registration: Registration) {
@@ -349,26 +357,60 @@ final class InstrumentRunner: @unchecked Sendable {
     /// Every active instrument with something to add gets asked, including the
     /// one that raised it if it also contributes. Synchronous, because the
     /// state worth reading is the one the caller is standing in.
+    ///
+    /// A fault arrives on whichever thread noticed it — the hang watchdog runs
+    /// on its own — while every dictionary here is written from `queue`. Reading
+    /// one from that thread is a data race on a Swift dictionary, which
+    /// terminates the app the SDK is a guest in. The contributors are copied on
+    /// the queue instead, so this path touches no dictionary at all.
     private func fault(_ kind: FaultKind) {
-        for (id, instrument) in instances where active.contains(id) {
-            guard let contributor = instrument as? any FaultInstrument,
+        let contributors = faultLock.withLock { faultContributors }
+
+        for contributor in contributors {
+            var readings = contributor.context.readings()
+            contributor.instrument.fault(kind, &readings)
+            contributor.context.deliver(readings)
+        }
+    }
+
+    private func rememberFaultContributors() {
+        var contributors = [FaultContributor]()
+        for id in active {
+            guard let instrument = instances[id] as? any FaultInstrument,
                   let context = contexts[id]
             else {
                 continue
             }
 
-            var readings = context.readings()
-            contributor.fault(kind, &readings)
-            context.deliver(readings)
+            contributors.append(FaultContributor(
+                instrument: instrument,
+                context: context
+            ))
         }
+
+        faultLock.withLock { faultContributors = contributors }
     }
 
+    /// Deactivating drops the instrument, its context and its status rather than
+    /// keeping them for the next activation.
+    ///
+    /// Whatever is still in flight holds this context: a queue probe already
+    /// submitted, a notification block that entered before `removeObserver`
+    /// returned, a log reader's watermark. Keeping them meant the next
+    /// activation reused the same objects with the status flipped live again, so
+    /// a callback belonging to a finished request landed in the next request's
+    /// capture. Dropped, that callback holds a status that stays deactivated for
+    /// as long as it lives, and lands nowhere.
     private func deactivate(_ id: InstrumentWireID) {
         statuses[id]?.deactivate()
         contexts[id]?.teardown()
         if let streaming = instances[id] as? any StreamingInstrument {
             streaming.stopObserving()
         }
+
+        statuses.removeValue(forKey: id)
+        contexts.removeValue(forKey: id)
+        instances.removeValue(forKey: id)
     }
 
     private func emit(_ entity: Entity, from registration: Registration) {

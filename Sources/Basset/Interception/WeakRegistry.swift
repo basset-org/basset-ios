@@ -47,6 +47,30 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
         waiting.forEach { $0(tracked, instance) }
     }
 
+    /// The same object again, because something a follower needs has changed
+    /// about it.
+    ///
+    /// `add` is silent for an object it already holds, which is right for
+    /// arrival and wrong for a video output added to a session before it was
+    /// told who receives its frames. The follower saw it while there was no
+    /// delegate to hook, and nothing ever said otherwise — so a camera in that
+    /// ordinary order reported no frames at all.
+    public func announce(_ tracked: Tracked) {
+        lock.lock()
+        boxes.removeAll { $0.tracked == nil }
+        guard let box = boxes.first(where: { $0.tracked === tracked }) else {
+            lock.unlock()
+            add(tracked)
+            return
+        }
+
+        let instance = box.instance
+        let waiting = Array(arrivals.values)
+        lock.unlock()
+
+        waiting.forEach { $0(tracked, instance) }
+    }
+
     /// Everything caught so far, and everything caught from here on. An
     /// instrument activated while the app is running has to reach both: the
     /// registry answers for objects born before the request, and this closure

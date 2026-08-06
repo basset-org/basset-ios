@@ -157,3 +157,15 @@ about design. Skip praise. If it is fine, say `LGTM` and stop.
 An automated review has no memory of why the code is shaped this way. Where it
 is wrong about this repository, the fix usually belongs in this file rather than
 in the code — that is what stops the next review repeating it.
+
+A push that answers a review is reviewed again before the branch merges. A fix
+is new code written under the pressure of a finding, which is when a lifecycle
+guard gets added in one place and forgotten in the neighbouring one. A thread is
+resolved when the re-review passes over it, not when the fix is pushed.
+
+### Already answered
+
+- **`stopObserving()` may be empty.** An instrument does not release its own
+  swizzles: `Context.teardown()` calls `swizzle.releaseObservers()`, and the
+  runner calls `teardown()` on every deactivate. An empty `stopObserving()` on
+  an instrument holding no state of its own is correct.

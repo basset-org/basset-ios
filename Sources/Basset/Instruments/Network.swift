@@ -227,22 +227,40 @@ final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
     static let entity = Entity.WireID.networkTask
 
     #if os(iOS)
-    /// Every task in the catalog's reach comes from one of these. The
-    /// completion-handler variants are the ones that matter most: they are how
-    /// most app traffic is written, and they bypass the delegate messages a
-    /// task delegate would otherwise be the obvious home for.
+    /// Every task-producing call on `URLSession`, by argument count, because the
+    /// hook shape is decided by the arity.
+    ///
+    /// The completion-handler variants matter most: they are how most app
+    /// traffic is written, and they bypass the delegate messages a task delegate
+    /// would otherwise be the obvious home for. The list has to be exhaustive
+    /// rather than representative — a request made through a variant that is
+    /// missing produces no reading at all, and a capture that is silent about a
+    /// file upload reads as an app that made no request.
     private static let oneObjectFactories = [
         "dataTaskWithRequest:",
         "dataTaskWithURL:",
         "downloadTaskWithRequest:",
         "downloadTaskWithURL:",
+        "downloadTaskWithResumeData:",
+        "uploadTaskWithStreamedRequest:",
+        "webSocketTaskWithURL:",
+        "webSocketTaskWithRequest:",
     ]
 
     private static let twoObjectFactories = [
         "dataTaskWithRequest:completionHandler:",
         "dataTaskWithURL:completionHandler:",
         "uploadTaskWithRequest:fromData:",
+        "uploadTaskWithRequest:fromFile:",
         "downloadTaskWithRequest:completionHandler:",
+        "downloadTaskWithURL:completionHandler:",
+        "downloadTaskWithResumeData:completionHandler:",
+        "webSocketTaskWithURL:protocols:",
+    ]
+
+    private static let threeObjectFactories = [
+        "uploadTaskWithRequest:fromData:completionHandler:",
+        "uploadTaskWithRequest:fromFile:completionHandler:",
     ]
 
     private static func attach(
@@ -291,6 +309,13 @@ final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
             _ = hooks.swizzle.afterFactory(
                 URLSession.self, Selector(name), takingTwoObjects: ()
             ) { receiver, _, _, made in
+                Self.attach(to: made, of: receiver, hooks)
+            }
+        }
+        for name in threeObjectFactories {
+            _ = hooks.swizzle.afterFactory(
+                URLSession.self, Selector(name), takingThreeObjects: ()
+            ) { receiver, _, _, _, made in
                 Self.attach(to: made, of: receiver, hooks)
             }
         }

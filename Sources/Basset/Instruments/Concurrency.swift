@@ -107,18 +107,16 @@ final class MainThreadHang: StreamingInstrument {
     static let id: InstrumentWireID = .mainThreadHang
     static let entity = Entity.WireID.mainThread
 
-    /// Two seconds to report, checked five times within it. The threshold is
-    /// Sentry's and Apple's alike; the divisor bounds how late the report is
-    /// without making the thread wake more often than it has to.
+    /// Two seconds to report, checked five times within it. Two seconds is what
+    /// Apple's own tooling counts as a hang; the divisor bounds how late the
+    /// report is without making the thread wake more often than it has to.
     private static let threshold: UInt64 = 2000000000
     private static let pollsPerThreshold: UInt64 = 5
 
     private let heartbeat: MainRunLoopHeartbeat
     private let watch: HangWatch
     private let clock: Clock
-    private let foreground: AtomicStatus = .init()
     private var watchdog: Thread?
-    private var lifecycle: [NSObjectProtocol] = []
 
     convenience init() {
         self.init(
@@ -135,13 +133,11 @@ final class MainThreadHang: StreamingInstrument {
     }
 
     func observe(_ context: Context) {
-        foreground.activate()
-        followApplicationState()
         heartbeat.start()
 
         let interval = Double(watch.threshold) / Double(Self.pollsPerThreshold) /
             1000000000
-        let watching = Thread { [heartbeat, watch, clock, foreground] in
+        let watching = Thread { [heartbeat, watch, clock] in
             var state = HangWatch.State()
 
             while !Thread.current.isCancelled {
@@ -157,7 +153,7 @@ final class MainThreadHang: StreamingInstrument {
                         beat: heartbeat.read(),
                         now: clock.now(),
                         overshoot: Date().timeIntervalSince(deadline),
-                        foreground: foreground.isActive,
+                        foreground: ApplicationPresence.isForeground,
                         debugged: Debugger.isAttached
                     )
                 )
@@ -192,30 +188,6 @@ final class MainThreadHang: StreamingInstrument {
         watchdog?.cancel()
         watchdog = nil
         heartbeat.stop()
-        lifecycle.forEach(NotificationCenter.default.removeObserver)
-        lifecycle.removeAll()
-    }
-
-    /// Read from a flag rather than from `UIApplication`, whose state is only
-    /// readable on the thread this instrument exists because it cannot reach.
-    /// The flag goes stale in the safe direction: a backgrounded app whose
-    /// notification never arrived is one whose main thread is busy anyway.
-    private func followApplicationState() {
-        #if canImport(UIKit)
-        let center = NotificationCenter.default
-        lifecycle = [
-            center.addObserver(
-                forName: UIApplication.didBecomeActiveNotification,
-                object: nil,
-                queue: nil
-            ) { [foreground] _ in foreground.activate() },
-            center.addObserver(
-                forName: UIApplication.didEnterBackgroundNotification,
-                object: nil,
-                queue: nil
-            ) { [foreground] _ in foreground.deactivate() },
-        ]
-        #endif
     }
 }
 

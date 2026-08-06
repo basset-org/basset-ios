@@ -72,7 +72,14 @@ struct LogDigest {
                     count: count
                 )
             }
-            .sorted { ($0.count, $1.message) > ($1.count, $0.message) }
+            // Loudest first, and everything after it so the order is total.
+            // Two subjects that tie on count and message are still two findings,
+            // and a ceiling that drops one of them by whichever order the
+            // dictionary happened to yield drops a different one each capture.
+            .sorted {
+                ($0.count, $1.message, $1.subsystem, $1.category)
+                    > ($1.count, $0.message, $0.subsystem, $0.category)
+            }
 
         subjects = Array(ranked.prefix(ceiling))
         omitted = max(0, ranked.count - subjects.count)
@@ -131,8 +138,8 @@ struct LogTraffic {
                 )
             }
             .sorted {
-                ($0.diagnostics, $0.count, $1.subsystem)
-                    > ($1.diagnostics, $1.count, $0.subsystem)
+                ($0.diagnostics, $0.count, $1.subsystem, $1.category)
+                    > ($1.diagnostics, $1.count, $0.subsystem, $0.category)
             }
 
         sources = Array(ranked.prefix(ceiling))

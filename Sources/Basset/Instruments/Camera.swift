@@ -282,7 +282,11 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
 
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)
-        hooks.catchSelf(
+        // Announced rather than merely caught: an output handed to a session
+        // before it is told who receives its frames is one the follower saw with
+        // no delegate to hook, and `add` says nothing about an output it already
+        // holds. Both orders are ordinary, and only this one was covered.
+        hooks.catchChanges(
             of: AVCaptureVideoDataOutput.self,
             atCallTakingTwo: #selector(
                 AVCaptureVideoDataOutput.setSampleBufferDelegate(_:queue:)
@@ -352,13 +356,14 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
         }
 
         let hot = context.hotPath
-        _ = context.swizzle.sampleBufferCallback(subject, Self.didOutput) { _, _, _, _ in
-            guard hot.isActive else {
-                return
-            }
+        let delivery = context.swizzle
+            .sampleBufferCallback(subject, Self.didOutput) { _, _, _, _ in
+                guard hot.isActive else {
+                    return
+                }
 
-            hot.add(Self.delivered)
-        }
+                hot.add(Self.delivered)
+            }
         let drop = context.swizzle
             .sampleBufferCallback(subject, Self.didDrop) { _, _, buffer, _ in
                 guard hot.isActive else {
@@ -373,7 +378,13 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
         // A method defined after that moment is one it will never ask for,
         // so the delegate is named again — the same object on the same
         // queue, which is what it was already set to.
-        if drop == .implemented, let queue = output.sampleBufferCallbackQueue {
+        //
+        // Either callback. A delegate that implements only the drop callback is
+        // one this defined `didOutput` on, and delivered frames went uncounted
+        // while the reading said zero — which is the answer the request was
+        // opened for.
+        let defined = delivery == .implemented || drop == .implemented
+        if defined, let queue = output.sampleBufferCallbackQueue {
             output.setSampleBufferDelegate(delegate, queue: queue)
         }
     }

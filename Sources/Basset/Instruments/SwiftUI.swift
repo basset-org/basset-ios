@@ -76,6 +76,17 @@ final class DisplayListChurn: StreamingInstrument {
             self?.hosts.add(controller)
         }
 
+        // The screen the request was opened about is usually the one already on
+        // it. Without this the first reading is `no swiftui host on screen`
+        // until the user navigates, which reads as a finding and is not one.
+        DispatchQueue.main.async { [weak self] in
+            guard context.isActive else {
+                return
+            }
+
+            SwiftUIHost.onScreen().forEach { self?.hosts.add($0) }
+        }
+
         // On the main queue because the display list is written there: a
         // background sampler would race the render it is describing. Between
         // run-loop turns rather than inside a layout hook — reading a view tree
@@ -142,7 +153,13 @@ final class DisplayListChurn: StreamingInstrument {
 
     #if canImport(UIKit)
     private func sample() {
-        let live = hosts.all.prefix(Self.hostCeiling)
+        // On screen, not merely alive. The registry holds a host for as long as
+        // the app retains it, and one kept alive behind a navigation push took a
+        // slot under the ceiling ahead of the screen being looked at — so the
+        // reading described a screen nobody could see.
+        let live = hosts.all
+            .filter { $0.viewIfLoaded?.window != nil }
+            .suffix(Self.hostCeiling)
         guard !live.isEmpty else {
             record(status: "no swiftui host on screen")
             return
@@ -173,6 +190,20 @@ final class DisplayListChurn: StreamingInstrument {
                 )
             }
         }
+
+        forget(everythingBut: Set(live.map(ObjectIdentifier.init)))
+    }
+
+    /// `ObjectIdentifier` is an address, and an address is reused. A sample kept
+    /// under a controller that has since been released is one a new controller
+    /// allocated in its place inherits — and inheriting a sample reads as "no
+    /// change", which is the one thing this instrument exists to measure. It also
+    /// bounds the dictionary, which otherwise grows for as long as a capture
+    /// visits screens.
+    private func forget(everythingBut live: Set<ObjectIdentifier>) {
+        lock.lock()
+        lastSample = lastSample.filter { live.contains($0.key) }
+        lock.unlock()
     }
 
     private func note(_ sample: Sample, for key: ObjectIdentifier, generation: String) {
@@ -231,6 +262,12 @@ final class HostAppear: StreamingInstrument {
             }
 
             lock.lock()
+            // The same ceiling `loadedAt` carries, for the same reason: an
+            // address is reused, so a stale entry hands a new controller the
+            // instance number of a dead one.
+            if identifiers.count >= Self.pendingCeiling {
+                identifiers.removeAll()
+            }
             identifiers[ObjectIdentifier(controller)] = instance
             lock.unlock()
         }
@@ -353,6 +390,17 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
             self?.appeared(receiver, context)
         }
 
+        // The layout hook goes on a hosting view's class when one appears, so a
+        // request arriving after the screen did counts nothing until the user
+        // navigates away and back.
+        DispatchQueue.main.async { [weak self] in
+            guard context.isActive else {
+                return
+            }
+
+            SwiftUIHost.onScreen().forEach { self?.appeared($0, context) }
+        }
+
         context.flush(every: .seconds(1)) { [weak self] out, window in
             let passes = context.tally.take(Self.passes)
             guard passes > 0 else {
@@ -411,9 +459,25 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
         // Off this call stack on purpose. Installing a hook from inside a
         // running hook re-enters the swizzle table's lock, and the delay
         // costs one run-loop turn of a counter that aggregates over a second.
+        //
+        // A turn is long enough for the request to end. Installing after
+        // teardown has already released this context's observers leaves an
+        // observer nothing will ever release, and leaves the class recorded as
+        // hooked — so the fix is checked here rather than left to the hook body.
         DispatchQueue.main.async { [weak self] in
+            guard context.isActive else {
+                self?.forget(key)
+                return
+            }
+
             self?.hookLayout(of: hostingView, context)
         }
+    }
+
+    private func forget(_ key: ObjectIdentifier) {
+        lock.lock()
+        hookedClasses.remove(key)
+        lock.unlock()
     }
 
     private func hookLayout(of hostingView: AnyClass, _ context: Context) {
@@ -747,6 +811,40 @@ enum SwiftUIHost {
     static func kind(of object: AnyObject) -> Kind? {
         kind(fromDescription: String(describing: type(of: object)))
     }
+
+    #if canImport(UIKit)
+    /// The hosts already on screen when a request arrives.
+    ///
+    /// A `viewDidAppear` hook catches every host that appears from here on and
+    /// none of the ones standing there — and the screen a request is opened
+    /// about is usually the one the user is looking at while it is opened. The
+    /// walk covers presented controllers and children, because a sheet's host is
+    /// neither the root nor a child of it.
+    ///
+    /// Main-thread only: reading a view hierarchy from anywhere else races the
+    /// render it is describing.
+    static func onScreen() -> [UIViewController] {
+        var found = [UIViewController]()
+        var pending = UIApplication.shared
+            .connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .compactMap(\.rootViewController)
+
+        while let controller = pending.popLast() {
+            if kind(of: controller) != nil {
+                found.append(controller)
+            }
+
+            pending.append(contentsOf: controller.children)
+            if let presented = controller.presentedViewController {
+                pending.append(presented)
+            }
+        }
+
+        return found
+    }
+    #endif
 
     static func kind(fromDescription name: String) -> Kind? {
         if name.hasPrefix("UIHostingController") {

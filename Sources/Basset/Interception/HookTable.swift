@@ -71,4 +71,22 @@ public final class HookTable: Sendable {
             }
         }
     }
+
+    /// A call that changes something a follower already decided on. The delegate
+    /// a video output delivers to is set through its own call, which the app may
+    /// make before or after handing the output to a session — and a follower that
+    /// saw the output first saw one with nothing to hook.
+    @discardableResult
+    public func catchChanges<Caught: AnyObject>(
+        of caught: Caught.Type,
+        atCallTakingTwo selector: Selector,
+        on owner: AnyClass?
+    ) -> SwizzleOutcome {
+        let registry = registries.registry(caught)
+        return swizzle.after(owner, selector, takingTwoObjects: ()) { receiver, _, _ in
+            if let changed = receiver as? Caught {
+                registry.announce(changed)
+            }
+        }
+    }
 }

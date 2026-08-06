@@ -334,14 +334,49 @@ struct RuntimeConvergenceTests {
             to: [request(1, instruments: ["memory.footprint"])],
             ingestEndpoint: "in"
         )
-        subject.memory?.take()
+        let memory = subject.memory
+        memory?.take()
         subject.settle()
         subject.converge(to: [], ingestEndpoint: "in")
 
         #expect(subject.liveRequestIds.isEmpty)
         #expect(subject.activeInstruments.isEmpty)
-        #expect(subject.memory?.stopCount == 1)
+        #expect(memory?.stopCount == 1)
         #expect(opener.stream(1)?.closed == true)
+    }
+
+    /// A stopped instrument does not come back — the second activation gets a
+    /// new instance, a new context and a new status.
+    ///
+    /// The runner used to keep all three, so anything still in flight from a
+    /// finished request found the status live again and wrote into the next
+    /// request's capture: a queue probe already submitted, a log reader's
+    /// watermark, a notification block that entered before `removeObserver`
+    /// returned.
+    @Test func aRestartedInstrumentSharesNothingWithTheRunBefore() {
+        let (subject, opener) = runtime()
+
+        subject.converge(
+            to: [request(1, instruments: ["memory.footprint"])],
+            ingestEndpoint: "in"
+        )
+        let first = subject.memory
+        subject.converge(to: [], ingestEndpoint: "in")
+
+        subject.converge(
+            to: [request(2, instruments: ["memory.footprint"])],
+            ingestEndpoint: "in"
+        )
+        let second = subject.memory
+        #expect(first !== second)
+
+        second?.take()
+        first?.take()
+        subject.settle()
+        #expect(
+            opener.stream(2)?.count == 1,
+            "the finished activation still holds its own context, and it delivers nowhere"
+        )
     }
 
     @Test func anInstrumentStoppedAndStartedAgainReportsEachCallOnce() {
@@ -415,11 +450,12 @@ struct RuntimeConvergenceTests {
             ingestEndpoint: "in"
         )
         let detector = subject.detector
+        let contributor = subject.contributor
         subject.converge(to: [], ingestEndpoint: "in")
         detector?.detect()
         subject.settle()
 
-        #expect(subject.contributor?.askedCount == 0)
+        #expect(contributor?.askedCount == 0)
     }
 
     /// A request stops itself. Without that, one the control plane never withdrew
@@ -432,7 +468,8 @@ struct RuntimeConvergenceTests {
             to: [request(1, instruments: ["memory.footprint"], expiresIn: 60)],
             ingestEndpoint: "in"
         )
-        subject.memory?.take()
+        let memory = subject.memory
+        memory?.take()
         subject.settle()
         #expect(subject.activeInstruments == [.memoryFootprint])
 
@@ -440,7 +477,7 @@ struct RuntimeConvergenceTests {
 
         #expect(subject.liveRequestIds.isEmpty)
         #expect(subject.activeInstruments.isEmpty)
-        #expect(subject.memory?.stopCount == 1)
+        #expect(memory?.stopCount == 1)
         #expect(opener.stream(1)?.closed == true)
     }
 
@@ -455,13 +492,14 @@ struct RuntimeConvergenceTests {
             ingestEndpoint: "in"
         )
         #expect(subject.activeInstruments == [.memoryFootprint])
+        let memory = subject.memory
 
         try await Task.sleep(for: .milliseconds(900))
         subject.settle()
 
         #expect(subject.liveRequestIds.isEmpty)
         #expect(subject.activeInstruments.isEmpty)
-        #expect(subject.memory?.stopCount == 1)
+        #expect(memory?.stopCount == 1)
     }
 
     @Test func aRequestStillWithinItsTimeIsLeftRunning() {
