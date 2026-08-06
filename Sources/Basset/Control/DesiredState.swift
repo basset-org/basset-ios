@@ -100,13 +100,32 @@ enum Timestamps {
     /// A value, not `ISO8601DateFormatter`: that is a class with mutable options
     /// and cannot be shared across the queues that read a request. It also caps
     /// fractional seconds at three digits, where the control plane sends six.
-    private static let iso8601: Date.ISO8601FormatStyle = .init()
+    ///
+    /// **Two styles, because one style parses one shape.** A style built without
+    /// `includingFractionalSeconds` rejects `2026-07-28T13:49:12.410488Z`, and
+    /// one built with it rejects `2026-07-28T13:49:12Z`. The control plane sends
+    /// the first and a request may carry either, so both are tried.
+    ///
+    /// Newer releases of Foundation accept fractional digits through the plain
+    /// style anyway, which is what made this look correct: on the current OS
+    /// every timestamp parsed, and at the deployment floor `expires_at` returned
+    /// nil, the response failed to decode, and the device converged on nothing.
+    /// A capture that never starts is indistinguishable from a request nobody
+    /// made.
+    private static let fractional: Date.ISO8601FormatStyle = .init(
+        includingFractionalSeconds: true
+    )
+    private static let whole: Date.ISO8601FormatStyle = .init()
 
     static func parse(_ text: String) -> Date? {
-        try? iso8601.parse(text)
+        if let moment = try? fractional.parse(text) {
+            return moment
+        }
+
+        return try? whole.parse(text)
     }
 
     static func render(_ date: Date) -> String {
-        iso8601.format(date)
+        whole.format(date)
     }
 }
