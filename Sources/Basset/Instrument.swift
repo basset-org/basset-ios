@@ -1,7 +1,7 @@
 import BassetECS
 import Foundation
 
-/// What the runtime consults, and nothing else. Mechanism, cadence, overhead and
+/// What the runner consults, and nothing else. Mechanism, cadence, overhead and
 /// App Store standing describe an instrument to a reader; no code path on the
 /// device reads them, so they live in `InstrumentMetadata` rather than here,
 /// where a reader cannot tell which fields decide anything.
@@ -95,7 +95,7 @@ public struct Registration: @unchecked Sendable {
 public extension Registration {
     /// Two independent reasons an instrument may not run on the device in hand:
     /// the hardware it observes is absent from a simulator, and the API its
-    /// mechanism needs postdates this OS. Both are declared, and the runtime
+    /// mechanism needs postdates this OS. Both are declared, and the runner
     /// refuses to activate what fails either — a request naming an unavailable
     /// instrument is ignored the same way one naming an unknown instrument is.
     var isAvailableHere: Bool {

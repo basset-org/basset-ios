@@ -13,7 +13,7 @@ public struct TallySlot: Equatable, Sendable {
     }
 }
 
-/// Counters an instrument accumulates on a hot path and the runtime drains on an
+/// Counters an instrument accumulates on a hot path and the runner drains on an
 /// interval. Preallocated and lock-free, because the catalog's hottest surfaces —
 /// a 60 fps sample-buffer delegate, a 100 Hz CoreMotion handler, layoutSubviews —
 /// may not allocate or lock, and because a naive per-reading emit burns a

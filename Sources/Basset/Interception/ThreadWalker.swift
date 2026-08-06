@@ -34,7 +34,7 @@ public final class ThreadWalker: @unchecked Sendable {
     /// thread while B has already suspended A's — both are stopped, and the only
     /// threads that could call `thread_resume` are the two that cannot run. The
     /// process stops with no timeout. It is reachable in production, not only in
-    /// a parallel test suite: `reading()` runs on the runtime queue and
+    /// a parallel test suite: `reading()` runs on the runner queue and
     /// `fault()` on the hang watchdog, and a snapshot request arriving while a
     /// hang is being reported puts both in flight at once.
     ///

@@ -48,7 +48,11 @@ public final class Context: @unchecked Sendable {
     private let instrumentName: String
     private let defaultEntity: Entity.WireID
     private let sink: @Sendable (Entity) -> Void
-    private let raise: @Sendable (FaultKind) -> Void
+    /// Takes the raising activation's status as well as the kind. A fault can
+    /// wait on the runner's lock while the request that raised it ends, and
+    /// without a source there is nothing left to say which capture it belonged
+    /// to — so it would be recorded against whichever one replaced it.
+    private let raise: @Sendable (FaultKind, AtomicStatus) -> Void
     private let timerQueue: DispatchQueue
     private let lock: NSLock = .init()
     private var timers: [DispatchSourceTimer] = []
@@ -71,7 +75,7 @@ public final class Context: @unchecked Sendable {
         registries: Registries,
         timerQueue: DispatchQueue,
         sink: @escaping @Sendable (Entity) -> Void,
-        raise: @escaping @Sendable (FaultKind) -> Void = { _ in }
+        raise: @escaping @Sendable (FaultKind, AtomicStatus) -> Void = { _, _ in }
     ) {
         self.instrumentName = instrumentName
         self.defaultEntity = defaultEntity
@@ -84,7 +88,7 @@ public final class Context: @unchecked Sendable {
     }
 
     /// Something went wrong that other instruments may have something to say
-    /// about. Whoever detected it does not know who those are — the runtime
+    /// about. Whoever detected it does not know who those are — the runner
     /// asks whatever the request left active, so a fault carries context only
     /// when the request asked for it.
     ///
@@ -96,7 +100,7 @@ public final class Context: @unchecked Sendable {
             return
         }
 
-        raise(kind)
+        raise(kind, status)
     }
 
     public func registry<Tracked: AnyObject>(_ type: Tracked.Type) -> [Tracked] {
@@ -224,6 +228,24 @@ public final class Context: @unchecked Sendable {
     /// to the context, so releasing them is not the instrument's to remember.
     /// Everything here is released outside the lock, so a handler running its
     /// last time cannot reach back into a context mid-teardown and deadlock.
+    /// Installs while the request is still live, or not at all. Returns whether
+    /// it ran.
+    ///
+    /// A hook deferred to a later run-loop turn can arrive after the request
+    /// ended, and one installed after `teardown` released this context's
+    /// observers is a hook nothing will ever release. Checking `isActive` first
+    /// narrows that to a race; holding the same lock teardown holds closes it.
+    func installIfActive(_ install: () -> Void) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard status.isActive else {
+            return false
+        }
+
+        install()
+        return true
+    }
+
     func teardown() {
         lock.lock()
         let running = timers
@@ -234,10 +256,14 @@ public final class Context: @unchecked Sendable {
         // first reading after an instrument starts again re-establishes the
         // state rather than being suppressed as a repeat of the last capture.
         lastEmitted.removeAll()
+        // Under the lock, unlike the two below it: `installIfActive` takes this
+        // same lock, so releasing here is what orders an install racing teardown
+        // against it rather than letting it land behind. Cancelling a timer and
+        // running an unfollow can re-enter this context, so those stay outside.
+        swizzle.releaseObservers()
         lock.unlock()
 
         running.forEach { $0.cancel() }
         releasing.forEach { $0() }
-        swizzle.releaseObservers()
     }
 }
