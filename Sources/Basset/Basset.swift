@@ -75,7 +75,7 @@ final class DeviceLoop: @unchecked Sendable {
     private let config: Config
     private let control: ControlClient
     private let identity: DeviceIdentity
-    private let runtime: Runtime
+    private let runner: InstrumentRunner
     private let lock: NSLock = .init()
     private var userId: String?
     private var following: Task<Void, Never>?
@@ -87,13 +87,13 @@ final class DeviceLoop: @unchecked Sendable {
         self.config = config
         self.identity = DeviceIdentity.current()
         self.control = ControlClient(endpoint: config.control, apiKey: config.apiKey)
-        self.runtime = Runtime(opener: IngestTransports(config: config))
+        self.runner = InstrumentRunner(opener: IngestTransports(config: config))
     }
 
     func start() {
         // Before the network: an at_launch instrument that waited for a response
         // would be measuring something already over.
-        runtime.startFromDisk()
+        runner.startFromDisk()
 
         following = Task.detached(priority: .utility) { [self] in
             await follow()
@@ -127,8 +127,8 @@ final class DeviceLoop: @unchecked Sendable {
             control: config.control,
             userId: user,
             lastCtrlResponse: answer,
-            requests: runtime.requestStates(),
-            activeInstruments: runtime.activeInstrumentNames()
+            requests: runner.requestStates(),
+            activeInstruments: runner.activeInstrumentNames()
         )
     }
 
@@ -144,7 +144,7 @@ final class DeviceLoop: @unchecked Sendable {
         }
 
         record(.putDevice, .accepted(requestCount: response.requests.count))
-        runtime.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
+        runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
         lock.withLock { ingestEndpoint = response.ingestEndpoint }
         return response.deviceToken
     }
@@ -190,7 +190,7 @@ final class DeviceLoop: @unchecked Sendable {
 
                     record(.requests, .accepted(requestCount: requests.count))
                     let endpoint = lock.withLock { ingestEndpoint }
-                    runtime.converge(to: requests, ingestEndpoint: endpoint)
+                    runner.converge(to: requests, ingestEndpoint: endpoint)
                 }
             } catch ControlError.unauthorized {
                 // No refresh token exists: re-upserting is the refresh, and the

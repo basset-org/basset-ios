@@ -1,6 +1,6 @@
 enum QueueLabel {
-    static let runtime = "basset.runtime"
-    static let runtimeFlush = "basset.runtime.flush"
+    static let instrumentRunner = "basset.instruments"
+    static let instrumentRunnerFlush = "basset.instruments.flush"
     static let http2 = "basset.http2"
     static let networkPath = "basset.path"
     static let mainThreadHang = "basset.hang"
@@ -11,6 +11,6 @@ enum QueueLabel {
     }
 
     static func flush(instrument: String) -> String {
-        "\(runtimeFlush).\(instrument)"
+        "\(instrumentRunnerFlush).\(instrument)"
     }
 }

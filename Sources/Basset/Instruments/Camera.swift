@@ -1,0 +1,582 @@
+import BassetECS
+import Foundation
+
+#if os(iOS)
+import AVFoundation
+import CoreMedia
+import ObjectiveC
+#endif
+
+final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
+    static let id: InstrumentWireID = .cameraDeviceFormat
+    static let entity = Entity.WireID.captureDevice
+
+    private var observations: [Observation] = []
+
+    init() {}
+
+    static func installAtLoad(_ hooks: HookTable) {
+        #if os(iOS)
+        hooks.catchSelf(
+            of: AVCaptureSession.self,
+            atCallTaking: #selector(AVCaptureSession.addOutput(_:)),
+            on: AVCaptureSession.self
+        )
+        hooks.catchSelf(
+            of: AVCaptureSession.self,
+            at: #selector(AVCaptureSession.startRunning),
+            on: AVCaptureSession.self
+        )
+        #endif
+    }
+
+    func observe(_ context: Context) {
+        #if os(iOS)
+        context.follow(AVCaptureSession.self) { [weak self] session, instance in
+            guard let self else {
+                return
+            }
+
+            self.observations.removeAll { !$0.isAttached }
+            self.observations.append(
+                Observation.attach(to: session, keyPath: "running") { [weak self] _ in
+                    self?.report(session, instance: instance, into: context)
+                }
+            )
+        }
+        #endif
+    }
+
+    func stopObserving() {
+        observations.forEach { $0.detach() }
+        observations.removeAll()
+    }
+
+    #if os(iOS)
+    private func report(
+        _ session: AVCaptureSession,
+        instance: UInt32,
+        into context: Context
+    ) {
+        for input in session.inputs.compactMap({ $0 as? AVCaptureDeviceInput }) {
+            let device = input.device
+            let format = device.activeFormat
+            let dimensions = CMVideoFormatDescriptionGetDimensions(
+                format.formatDescription
+            )
+            let rates = format.videoSupportedFrameRateRanges
+            let path = Self.videoPath(for: input, in: session)
+
+            context.emitIfChanged(.captureDevice, of: device.uniqueID) { out in
+                out.put(.instanceId(instance))
+                out.put(.deviceType(device.deviceType.rawValue))
+                out.put(.devicePosition(Self.named(device.position)))
+                out.put(.deviceUniqueId(device.uniqueID))
+                out.put(.formatWidthPixels(dimensions.width))
+                out.put(.formatHeightPixels(dimensions.height))
+                out.put(
+                    .formatPixelFormat(
+                        Self.fourCharacterCode(
+                            CMFormatDescriptionGetMediaSubType(format.formatDescription)
+                        )
+                    )
+                )
+                out
+                    .put(.formatMinFramesPerSecond(Float(rates.map(\.minFrameRate)
+                            .min() ?? 0)))
+                out
+                    .put(.formatMaxFramesPerSecond(Float(rates.map(\.maxFrameRate)
+                            .max() ?? 0)))
+                out.put(.formatMultiCamSupported(format.isMultiCamSupported))
+                out.put(.formatCount(UInt32(device.formats.count)))
+                out.put(.activeColorSpace(Self.named(device.activeColorSpace)))
+                out.put(.systemPressureLevel(device.systemPressureState.level.rawValue))
+
+                guard let path else {
+                    return
+                }
+
+                // The join that decides whether frames can flow at all: a
+                // pixel format the output was told to hand over, against the
+                // ones the format now active is able to give it. The two are
+                // set at different moments and nothing reconciles them.
+                if let requested = path.output.videoSettings[
+                    kCVPixelBufferPixelFormatTypeKey as String
+                ] as? UInt32 {
+                    out.put(.outputPixelFormat(Self.fourCharacterCode(requested)))
+                    out.put(
+                        .outputPixelFormatSupported(
+                            path.output
+                                .availableVideoPixelFormatTypes
+                                .contains(OSType(requested))
+                        )
+                    )
+                }
+                out.put(.videoRotationDegrees(Float(path.connection.videoRotationAngle)))
+                out.put(.videoMirrored(path.connection.isVideoMirrored))
+            }
+        }
+    }
+
+    private static func videoPath(
+        for input: AVCaptureDeviceInput,
+        in session: AVCaptureSession
+    ) -> (output: AVCaptureVideoDataOutput, connection: AVCaptureConnection)? {
+        for output in session.outputs.compactMap({ $0 as? AVCaptureVideoDataOutput }) {
+            guard let connection = output.connection(with: .video) else {
+                continue
+            }
+
+            let feeds = connection.inputPorts.contains { port in
+                (port.input as? AVCaptureDeviceInput) === input
+            }
+            if feeds {
+                return (output, connection)
+            }
+        }
+        return nil
+    }
+
+    private static func fourCharacterCode(_ code: UInt32) -> String {
+        let bytes = [
+            UInt8((code >> 24) & 0xff), UInt8((code >> 16) & 0xff),
+            UInt8((code >> 8) & 0xff), UInt8(code & 0xff),
+        ]
+        let printable = bytes.allSatisfy { $0 >= 0x20 && $0 < 0x7f }
+        guard printable else {
+            return "0x\(String(code, radix: 16))"
+        }
+
+        return String(bytes.map { Character(UnicodeScalar($0)) })
+    }
+
+    private static func named(_ position: AVCaptureDevice.Position) -> String {
+        switch position {
+        case .front: "front"
+        case .back: "back"
+        case .unspecified: "unspecified"
+        @unknown default: "unknown"
+        }
+    }
+
+    private static func named(_ space: AVCaptureColorSpace) -> String {
+        switch space {
+        case .sRGB: "sRGB"
+        case .P3_D65: "P3_D65"
+        case .HLG_BT2020: "HLG_BT2020"
+        case .appleLog: "appleLog"
+        @unknown default: "unknown"
+        }
+    }
+    #endif
+}
+
+final class CameraDeviceInventory: StreamingInstrument {
+    static let id: InstrumentWireID = .cameraDeviceInventory
+    static let entity = Entity.WireID.captureDevice
+
+    #if os(iOS)
+    // Named rather than derived from `allCases`, which AVFoundation does not
+    // offer: a type Apple adds with a new phone is absent from any list
+    // written before it, and the set this reports is the one a caller's own
+    // discovery would have missed.
+    private static let probed: [AVCaptureDevice.DeviceType] = [
+        .builtInWideAngleCamera,
+        .builtInUltraWideCamera,
+        .builtInTelephotoCamera,
+        .builtInDualCamera,
+        .builtInDualWideCamera,
+        .builtInTripleCamera,
+        .builtInTrueDepthCamera,
+        .builtInLiDARDepthCamera,
+        .continuityCamera,
+        .external,
+    ]
+    #endif
+
+    init() {}
+
+    #if os(iOS)
+    private static func describe(_ set: Set<AVCaptureDevice>) -> String {
+        set
+            .map { "\($0.deviceType.rawValue)@\(named($0.position))" }
+            .sorted()
+            .joined(separator: "+")
+    }
+
+    private static func named(_ position: AVCaptureDevice.Position) -> String {
+        switch position {
+        case .front: "front"
+        case .back: "back"
+        case .unspecified: "unspecified"
+        @unknown default: "unknown"
+        }
+    }
+    #endif
+
+    func observe(_ context: Context) {
+        #if os(iOS)
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: Self.probed,
+            mediaType: .video,
+            position: .unspecified
+        )
+
+        for device in discovery.devices {
+            context.emit(.captureDevice) { out in
+                out.put(.deviceType(device.deviceType.rawValue))
+                out.put(.devicePosition(Self.named(device.position)))
+                out.put(.deviceUniqueId(device.uniqueID))
+                out.put(.formatCount(UInt32(device.formats.count)))
+                out.put(
+                    .formatMultiCamSupported(
+                        device.formats.contains { $0.isMultiCamSupported }
+                    )
+                )
+            }
+        }
+
+        // The matrix itself, not only its members. Which pairs the hardware
+        // will actually run at once is the question a caller answers by
+        // asking for a set and being told no, and it changes between phones.
+        for (index, set) in discovery.supportedMultiCamDeviceSets.enumerated() {
+            context.emit(.multiCamSet) { out in
+                out.put(.multiCamSetIndex(UInt32(index)))
+                out.put(.multiCamSetMembers(Self.describe(set)))
+            }
+        }
+        #endif
+    }
+
+    func stopObserving() {}
+}
+
+final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
+    static let id: InstrumentWireID = .cameraFrameDelivery
+    static let entity = Entity.WireID.videoFrames
+
+    private static let delivered: TallySlot = .first
+    private static let dropped: TallySlot = .second
+    private static let reason: TallySlot = .third
+
+    #if os(iOS)
+    private static let didOutput: Selector = .init(
+        "captureOutput:didOutputSampleBuffer:fromConnection:"
+    )
+    private static let didDrop: Selector = .init(
+        "captureOutput:didDropSampleBuffer:fromConnection:"
+    )
+    #endif
+
+    private let lock: NSLock = .init()
+    private var instrumented: Set<ObjectIdentifier> = []
+    private var watching = 0
+
+    private var isWatchingSomething: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return watching > 0
+    }
+
+    init() {}
+
+    static func installAtLoad(_ hooks: HookTable) {
+        #if os(iOS)
+        hooks.catchSelf(
+            of: AVCaptureVideoDataOutput.self,
+            atCallTakingTwo: #selector(
+                AVCaptureVideoDataOutput.setSampleBufferDelegate(_:queue:)
+            ),
+            on: AVCaptureVideoDataOutput.self
+        )
+        hooks.catchBirths(
+            of: AVCaptureVideoDataOutput.self,
+            at: #selector(AVCaptureSession.addOutput(_:)),
+            on: AVCaptureSession.self
+        )
+        #endif
+    }
+
+    func observe(_ context: Context) {
+        #if os(iOS)
+        context.follow(AVCaptureVideoDataOutput.self) { [weak self] output, _ in
+            self?.instrument(output, with: context)
+        }
+
+        // Emitted on every interval, including the ones where nothing
+        // arrived. A silent instrument and a camera delivering no frames
+        // read the same in a capture, and the second is the answer the
+        // request was opened for.
+        context.flush(every: .seconds(1)) { [weak self] out, window in
+            guard let self, self.isWatchingSomething else {
+                return
+            }
+
+            out.put(.windowNanoseconds(window.nanoseconds))
+            out.put(.framesDeliveredCount(context.tally.take(Self.delivered)))
+            out.put(.framesDroppedCount(context.tally.take(Self.dropped)))
+            let weight = context.tally.take(Self.reason)
+            if weight > 0 {
+                out.put(.dropReason(Self.named(weight)))
+            }
+        }
+        #endif
+    }
+
+    func stopObserving() {
+        lock.lock()
+        instrumented.removeAll()
+        watching = 0
+        lock.unlock()
+    }
+
+    #if os(iOS)
+    private func instrument(_ output: AVCaptureVideoDataOutput, with context: Context) {
+        guard let delegate = output.sampleBufferDelegate,
+              let subject = object_getClass(delegate)
+        else {
+            return
+        }
+
+        // Per delegate class, not per output: the hook rewrites a method on
+        // the class, so a second output sharing the delegate's type would
+        // otherwise add a second observer and count every frame twice.
+        lock.lock()
+        let fresh = instrumented.insert(ObjectIdentifier(subject)).inserted
+        if fresh {
+            watching += 1
+        }
+        lock.unlock()
+        guard fresh else {
+            return
+        }
+
+        let hot = context.hotPath
+        _ = context.swizzle.sampleBufferCallback(subject, Self.didOutput) { _, _, _, _ in
+            guard hot.isActive else {
+                return
+            }
+
+            hot.add(Self.delivered)
+        }
+        let drop = context.swizzle
+            .sampleBufferCallback(subject, Self.didDrop) { _, _, buffer, _ in
+                guard hot.isActive else {
+                    return
+                }
+
+                hot.add(Self.dropped)
+                hot.raise(Self.reason, to: Self.weigh(buffer))
+            }
+
+        // AVFoundation reads a delegate's callbacks once, when it is named.
+        // A method defined after that moment is one it will never ask for,
+        // so the delegate is named again — the same object on the same
+        // queue, which is what it was already set to.
+        if drop == .implemented, let queue = output.sampleBufferCallbackQueue {
+            output.setSampleBufferDelegate(delegate, queue: queue)
+        }
+    }
+
+    /// Highest weight wins the interval, so the reason that explains a stall
+    /// survives alongside the ones that merely accompany it.
+    private static func weigh(_ buffer: UnsafeRawPointer?) -> UInt64 {
+        guard let buffer else {
+            return 0
+        }
+
+        let sample = Unmanaged<CMSampleBuffer>.fromOpaque(buffer).takeUnretainedValue()
+        guard let reason = CMGetAttachment(
+            sample,
+            key: kCMSampleBufferAttachmentKey_DroppedFrameReason,
+            attachmentModeOut: nil
+        ) as? String else {
+            return 0
+        }
+
+        let discontinuity = kCMSampleBufferDroppedFrameReason_Discontinuity as String
+        let late = kCMSampleBufferDroppedFrameReason_FrameWasLate as String
+        let outOfBuffers = kCMSampleBufferDroppedFrameReason_OutOfBuffers as String
+
+        if reason == outOfBuffers {
+            return 3
+        }
+        if reason == late {
+            return 2
+        }
+        if reason == discontinuity {
+            return 1
+        }
+        return 0
+    }
+
+    private static func named(_ weight: UInt64) -> String {
+        switch weight {
+        case 1: "Discontinuity"
+        case 2: "FrameWasLate"
+        case 3: "OutOfBuffers"
+        default: "unknown"
+        }
+    }
+    #endif
+}
+
+final class CameraSessionConfiguration: StreamingInstrument, LoadTimeInstall {
+    static let id: InstrumentWireID = .cameraSessionConfiguration
+    static let entity = Entity.WireID.captureSession
+
+    private var observations: [Observation] = []
+
+    init() {}
+
+    static func installAtLoad(_ hooks: HookTable) {
+        #if os(iOS)
+        hooks.catchSelf(
+            of: AVCaptureSession.self,
+            atCallTaking: #selector(AVCaptureSession.addOutput(_:)),
+            on: AVCaptureSession.self
+        )
+        hooks.catchSelf(
+            of: AVCaptureSession.self,
+            at: #selector(AVCaptureSession.startRunning),
+            on: AVCaptureSession.self
+        )
+        #endif
+    }
+
+    func observe(_ context: Context) {
+        #if os(iOS)
+        context.follow(AVCaptureSession.self) { [weak self] session, instance in
+            guard let self else {
+                return
+            }
+
+            self.observations.removeAll { !$0.isAttached }
+            // Once when the session is caught, and again whenever it starts
+            // or stops. A configuration that never reaches running is the
+            // reading worth having, so it is emitted before anything runs
+            // rather than only alongside a state change.
+            self.observations.append(
+                Observation.attach(to: session, keyPath: "running") { [weak self] _ in
+                    self?.report(session, instance: instance, into: context)
+                }
+            )
+        }
+        #endif
+    }
+
+    func stopObserving() {
+        observations.forEach { $0.detach() }
+        observations.removeAll()
+    }
+
+    #if os(iOS)
+    private func report(
+        _ session: AVCaptureSession,
+        instance: UInt32,
+        into context: Context
+    ) {
+        let connections = session.connections
+        let carrying = connections.filter { $0.isActive && $0.isEnabled }
+
+        context.emit { out in
+            out.put(.instanceId(instance))
+            out.put(.sessionClass(String(describing: type(of: session))))
+            out.put(.sessionPreset(session.sessionPreset.rawValue))
+            out.put(.inputCount(UInt32(session.inputs.count)))
+            out.put(.outputCount(UInt32(session.outputs.count)))
+            out.put(.connectionCount(UInt32(connections.count)))
+            out.put(.activeConnectionCount(UInt32(carrying.count)))
+            out.put(.sessionRunning(session.isRunning))
+
+            // Multi-camera only, and the number a session refuses to start
+            // over. A caller that gates its own start on this and gives up
+            // leaves a session that is configured, not running, and silent.
+            if let multiCam = session as? AVCaptureMultiCamSession {
+                out.put(.hardwareCostRatio(multiCam.hardwareCost))
+                out.put(.systemPressureCostRatio(multiCam.systemPressureCost))
+            }
+        }
+    }
+    #endif
+}
+
+final class CameraSessionState: StreamingInstrument, LoadTimeInstall {
+    static let id: InstrumentWireID = .cameraSessionState
+    static let entity = Entity.WireID.captureSession
+
+    private static let observed = ["running", "interrupted"]
+
+    private var observations: [Observation] = []
+
+    init() {}
+
+    static func installAtLoad(_ hooks: HookTable) {
+        #if os(iOS)
+        hooks.catchSelf(
+            of: AVCaptureSession.self,
+            atCallTaking: #selector(AVCaptureSession.addOutput(_:)),
+            on: AVCaptureSession.self
+        )
+        hooks.catchSelf(
+            of: AVCaptureSession.self,
+            at: #selector(AVCaptureSession.startRunning),
+            on: AVCaptureSession.self
+        )
+        #endif
+    }
+
+    func observe(_ context: Context) {
+        #if os(iOS)
+        context.follow(AVCaptureSession.self) { [weak self] session, instance in
+            guard let self else {
+                return
+            }
+
+            // Bounded by live sessions rather than by how many the app has
+            // ever made: an app building one per screen visit would other-
+            // wise accumulate a registration per visit for the life of the
+            // request.
+            self.observations.removeAll { !$0.isAttached }
+            // One reading per change, and one at attach — not one per
+            // observed key path. `report` writes both components whichever
+            // key woke it, so asking each for its initial value emitted the
+            // same reading twice and spent two of the request's readings on
+            // it.
+            for keyPath in Self.observed {
+                self.observations.append(
+                    Observation.attach(
+                        to: session,
+                        keyPath: keyPath,
+                        initial: keyPath == Self.observed.first
+                    ) { [weak self] _ in
+                        self?.report(session, instance: instance, into: context)
+                    }
+                )
+            }
+        }
+        #endif
+    }
+
+    func stopObserving() {
+        observations.forEach { $0.detach() }
+        observations.removeAll()
+    }
+
+    #if os(iOS)
+    /// Which session, not just what state. Several sessions are observed at
+    /// once — an app with a preview and a capture has two — and without this
+    /// their readings are distinguishable only by arrival order.
+    private func report(
+        _ session: AVCaptureSession,
+        instance: UInt32,
+        into context: Context
+    ) {
+        context.emit { out in
+            out.put(.instanceId(instance))
+            out.put(.sessionRunning(session.isRunning))
+            out.put(.sessionInterrupted(session.isInterrupted))
+        }
+    }
+    #endif
+}

@@ -1,0 +1,437 @@
+import BassetECS
+import Foundation
+
+protocol Transport: AnyObject, Sendable {
+    var kind: TransportType? { get }
+    var isReady: Bool { get }
+    var note: String? { get }
+    var refused: String? { get }
+    /// Readings this transport took and could not deliver. A diagnostics tool
+    /// that loses them quietly reports absence as "nothing happened", which is
+    /// the one thing it cannot afford to say wrongly.
+    var dropped: Int { get }
+    func send(_ frame: Data)
+    func close()
+}
+
+extension Transport {
+    var kind: TransportType? {
+        nil
+    }
+
+    var isReady: Bool {
+        true
+    }
+
+    var note: String? {
+        nil
+    }
+
+    var refused: String? {
+        nil
+    }
+
+    var dropped: Int {
+        0
+    }
+}
+
+protocol TransportOpener: Sendable {
+    func open(request: BassetRequest, ingestEndpoint: String) -> Transport?
+}
+
+final class InstrumentRunner: @unchecked Sendable {
+    private let registrations: [Registration]
+    private let byName: [String: Registration]
+    private let opener: TransportOpener
+    private let atLaunchRequests: AtLaunchRequests
+    private let encoder: FrameEncoder = .init()
+    private let queue: DispatchQueue = .init(
+        label: QueueLabel.instrumentRunner,
+        qos: .utility
+    )
+
+    /// Flushes run one instrument at a time but not one *process* at a time. On
+    /// one shared serial queue the slowest instrument sets the interval for all
+    /// of them: `swiftui.runtimeIssues` enumerating `OSLogStore` starves
+    /// one-second timers into arriving six to thirteen seconds apart, so every
+    /// rate in the capture is wrong and every count stale when it is read.
+    ///
+    /// Each instrument gets its own serial queue targeting this pool, which keeps
+    /// one instrument's flushes ordered and non-overlapping while letting a slow
+    /// one wait on its own.
+    private let flushPool: DispatchQueue = .init(
+        label: QueueLabel.instrumentRunnerFlush,
+        qos: .utility,
+        attributes: .concurrent
+    )
+
+    /// The load-time handle. Its observers are the ones that must outlive every
+    /// activation — a chokepoint that stops registering births cannot be caught
+    /// up later — so nothing ever releases them.
+    private let loadTimeSwizzle: Swizzle = .init()
+    private let registries: Registries = .init()
+
+    private var live: [UInt64: BassetRequest] = [:]
+    private var transports: [UInt64: Transport] = [:]
+    private var active: Set<InstrumentWireID> = []
+    private var instances: [InstrumentWireID: any Instrument] = [:]
+    private var contexts: [InstrumentWireID: Context] = [:]
+    private var statuses: [InstrumentWireID: AtomicStatus] = [:]
+    private var sent: [UInt64: Int] = [:]
+    private var evicted: [UInt64: Int] = [:]
+    private var endpoint: String?
+
+    private var buffered: [(requestId: UInt64, frame: Data)] = []
+    private let maxBuffered = 1024
+    private var expiryTimer: DispatchSourceTimer?
+
+    var liveRequestIds: Set<UInt64> {
+        queue.sync { Set(live.keys) }
+    }
+
+    var activeInstruments: Set<InstrumentWireID> {
+        queue.sync { active }
+    }
+
+    var bufferedFrameCount: Int {
+        queue.sync { buffered.count }
+    }
+
+    init(
+        instruments: [Registration] = Instruments.all,
+        opener: TransportOpener,
+        atLaunchRequests: AtLaunchRequests = AtLaunchRequests()
+    ) {
+        self.registrations = instruments
+        self.byName = Dictionary(instruments.map { ($0.name, $0) }) { first, _ in first }
+        self.opener = opener
+        self.atLaunchRequests = atLaunchRequests
+        installLoadTimeHooks()
+    }
+
+    func startFromDisk(at moment: Date = Date()) {
+        converge(
+            to: atLaunchRequests.load(at: moment),
+            ingestEndpoint: nil,
+            persisting: false
+        )
+    }
+
+    func converge(
+        to desired: [BassetRequest],
+        ingestEndpoint: String?,
+        persisting: Bool = true
+    ) {
+        queue.sync {
+            let incoming = Dictionary(uniqueKeysWithValues: desired.map { (
+                $0.requestId,
+                $0
+            ) })
+
+            // Snapshot the ids: dropping mutates `live`, and a keys view is a
+            // window onto the dictionary being changed underneath it.
+            for requestId in Array(live.keys) where incoming[requestId] == nil {
+                drop(requestId)
+            }
+
+            endpoint = ingestEndpoint ?? endpoint
+            for (requestId, request) in incoming {
+                live[requestId] = request
+                if buffered.contains(where: { $0.requestId == requestId }) {
+                    _ = transport(for: requestId, request)
+                }
+            }
+
+            convergeInstruments()
+            scheduleExpiry()
+
+            if persisting {
+                atLaunchRequests.save(desired)
+            }
+        }
+    }
+
+    /// The device stops its own instruments. A request the control plane never
+    /// withdraws — nobody cancelled it, or this device has not been able to reach
+    /// the control plane since — expires anyway, which is the difference between
+    /// a bounded capture and a battery complaint.
+    func expire(at moment: Date = Date()) {
+        queue.sync { expireLocked(at: moment) }
+    }
+
+    func settle() {
+        queue.sync {}
+    }
+
+    func requestStates() -> [RequestState] {
+        queue.sync {
+            live.values
+                .sorted { $0.requestId < $1.requestId }
+                .map { request in
+                    let transport = transports[request.requestId]
+                    return RequestState(
+                        requestId: request.requestId,
+                        instruments: request.instruments,
+                        atLaunch: request.atLaunch,
+                        expiresAt: request.expiresAt,
+                        maxFrames: request.maxFrames,
+                        framesSent: sent[request.requestId] ?? 0,
+                        framesHeld: buffered.filter { $0.requestId == request.requestId }
+                            .count,
+                        framesDropped: (evicted[request.requestId] ?? 0)
+                            + (transport?.dropped ?? 0),
+                        transport: transport?.kind,
+                        transportIsReady: transport?.isReady ?? false,
+                        transportNote: transport?.note,
+                        refused: transport?.refused
+                    )
+                }
+        }
+    }
+
+    func activeInstrumentNames() -> [String] {
+        queue.sync {
+            registrations.filter { active.contains($0.id) }.map(\.name)
+        }
+    }
+
+    func instance<I: Instrument>(_ type: I.Type) -> I? {
+        queue.sync { instances[I.id] as? I }
+    }
+
+    private func installLoadTimeHooks() {
+        let hooks = HookTable(swizzle: loadTimeSwizzle, registries: registries)
+        for registration in registrations where registration.isAvailableHere {
+            registration.installAtLoad?(hooks)
+        }
+    }
+
+    private func drop(_ requestId: UInt64) {
+        transports.removeValue(forKey: requestId)?.close()
+        live.removeValue(forKey: requestId)
+        sent.removeValue(forKey: requestId)
+        evicted.removeValue(forKey: requestId)
+        buffered.removeAll { $0.requestId == requestId }
+    }
+
+    private func expireLocked(at moment: Date) {
+        let elapsed = Array(live.filter { !$0.value.isLive(at: moment) }.keys)
+        guard !elapsed.isEmpty else {
+            scheduleExpiry()
+            return
+        }
+
+        elapsed.forEach(drop)
+        finishDropping()
+    }
+
+    /// Every reading the request asked for has been delivered, so there is
+    /// nothing left for it to observe. Enforced here rather than left to ingest
+    /// refusing: a refusal arrives after the device has already paid for the
+    /// capture, and a device that cannot reach ingest never hears one at all.
+    private func dropRequestsAtTheirCap() {
+        let full = Array(live.filter { requestId, request in
+            guard let cap = request.maxFrames else {
+                return false
+            }
+
+            return sent[requestId, default: 0] >= Int(cap)
+        }
+        .keys)
+        guard !full.isEmpty else {
+            return
+        }
+
+        full.forEach(drop)
+        finishDropping()
+    }
+
+    private func finishDropping() {
+        convergeInstruments()
+        atLaunchRequests.save(Array(live.values))
+        scheduleExpiry()
+    }
+
+    /// One wake-up, at the moment the earliest request runs out, rather than a
+    /// poll that keeps the process busy for the whole capture and beyond it.
+    private func scheduleExpiry() {
+        expiryTimer?.cancel()
+        expiryTimer = nil
+
+        guard let earliest = live.values.map(\.expiresAt).min() else {
+            return
+        }
+
+        let timer = DispatchSource.makeTimerSource(queue: flushPool)
+        timer.schedule(deadline: .now() + max(0, earliest.timeIntervalSinceNow))
+        timer.setEventHandler { [weak self] in
+            guard let self else {
+                return
+            }
+
+            self.queue.async { self.expireLocked(at: Date()) }
+        }
+        timer.activate()
+        expiryTimer = timer
+    }
+
+    private func convergeInstruments() {
+        var wanted = [InstrumentWireID: Registration]()
+        for request in live.values {
+            for name in request.instruments {
+                guard let registration = byName[name],
+                      registration.isAvailableHere
+                else {
+                    continue
+                }
+
+                wanted[registration.id] = registration
+            }
+        }
+
+        for id in active.subtracting(wanted.keys) {
+            deactivate(id)
+        }
+        for (id, registration) in wanted where !active.contains(id) {
+            activate(registration)
+        }
+        active = Set(wanted.keys).intersection(instances.keys)
+    }
+
+    private func activate(_ registration: Registration) {
+        let id = registration.id
+
+        let status = statuses[id] ?? AtomicStatus()
+        statuses[id] = status
+
+        let instrument = instances[id] ?? registration.build()
+        instances[id] = instrument
+
+        // Its own handle on the process-wide hook table, so deactivating this
+        // instrument releases this instrument's observers and nobody else's.
+        let context = contexts[id] ?? Context(
+            instrumentName: registration.name,
+            defaultEntity: registration.entity,
+            status: status,
+            swizzle: Swizzle(),
+            registries: registries,
+            timerQueue: DispatchQueue(
+                label: QueueLabel.flush(instrument: registration.name),
+                qos: .utility,
+                target: flushPool
+            ),
+            sink: { [weak self] entity in self?.emit(entity, from: registration) },
+            raise: { [weak self] kind in self?.fault(kind) }
+        )
+        contexts[id] = context
+
+        status.activate()
+
+        // On the registration rather than on a conformance. Asking the instance
+        // what it can do let a second conformance decide when readings arrive:
+        // `runtime.threadSnapshot` is registered `.fault` and also implemented
+        // `reading`, so activating it suspended every thread in the process
+        // before anything had gone wrong. Delivery is what the factory accepted,
+        // and nothing else gets a vote.
+        if registration.delivery == .reading,
+           let snapshot = instrument as? any SnapshotInstrument
+        {
+            var readings = context.readings()
+            snapshot.reading(&readings)
+            context.deliver(readings)
+        }
+        if let streaming = instrument as? any StreamingInstrument {
+            streaming.observe(context)
+        }
+    }
+
+    /// Every active instrument with something to add gets asked, including the
+    /// one that raised it if it also contributes. Synchronous, because the
+    /// state worth reading is the one the caller is standing in.
+    private func fault(_ kind: FaultKind) {
+        for (id, instrument) in instances where active.contains(id) {
+            guard let contributor = instrument as? any FaultInstrument,
+                  let context = contexts[id]
+            else {
+                continue
+            }
+
+            var readings = context.readings()
+            contributor.fault(kind, &readings)
+            context.deliver(readings)
+        }
+    }
+
+    private func deactivate(_ id: InstrumentWireID) {
+        statuses[id]?.deactivate()
+        contexts[id]?.teardown()
+        if let streaming = instances[id] as? any StreamingInstrument {
+            streaming.stopObserving()
+        }
+    }
+
+    private func emit(_ entity: Entity, from registration: Registration) {
+        var record = entity
+        record.add(.instrument(registration.id.rawValue))
+        // Which run of the app this came from. Rides on every reading rather
+        // than on one of them, because a capture spanning a relaunch is exactly
+        // the case where the boundary cannot be inferred from what is nearby.
+        record.add(.launchId(LaunchIdentity.current))
+        let frame = encoder.frame(encoder.encode(record))
+
+        queue.async { [self] in
+            for (requestId, request) in live
+                where request.instruments.contains(registration.name)
+            {
+                guard let transport = transport(for: requestId, request) else {
+                    hold(frame, for: requestId)
+                    continue
+                }
+
+                // Refused rather than lost: max_readings is a cap the request
+                // asked for, so what it turns away is not a fault to report as
+                // one. `refused` on the state says it happened.
+                guard transport.refused == nil else {
+                    continue
+                }
+
+                transport.send(frame)
+                sent[requestId, default: 0] += 1
+            }
+            dropRequestsAtTheirCap()
+        }
+    }
+
+    private func transport(for requestId: UInt64,
+                           _ request: BassetRequest) -> Transport?
+    {
+        if let existing = transports[requestId] {
+            return existing
+        }
+        guard let endpoint,
+              let opened = opener.open(request: request, ingestEndpoint: endpoint)
+        else {
+            return nil
+        }
+
+        transports[requestId] = opened
+        flushBuffer(for: requestId, over: opened)
+        return opened
+    }
+
+    private func hold(_ frame: Data, for requestId: UInt64) {
+        if buffered.count >= maxBuffered {
+            let evictedFrame = buffered.removeFirst()
+            evicted[evictedFrame.requestId, default: 0] += 1
+        }
+        buffered.append((requestId: requestId, frame: frame))
+    }
+
+    private func flushBuffer(for requestId: UInt64, over transport: Transport) {
+        let waiting = buffered.filter { $0.requestId == requestId }
+        buffered.removeAll { $0.requestId == requestId }
+        waiting.forEach { transport.send($0.frame) }
+        sent[requestId, default: 0] += waiting.count
+    }
+}

@@ -84,7 +84,7 @@ public final class Context: @unchecked Sendable {
     }
 
     /// Something went wrong that other instruments may have something to say
-    /// about. Whoever detected it does not know who those are — the runtime
+    /// about. Whoever detected it does not know who those are — the runner
     /// asks whatever the request left active, so a fault carries context only
     /// when the request asked for it.
     ///
