@@ -546,7 +546,18 @@ public enum Component: Equatable, Sendable {
         case secondaryAudioSilenced = 194
     }
 
-    public var wire: (id: ID, value: ComponentValue) {
+    public var id: ID {
+        wire.id
+    }
+
+    public var value: ComponentValue {
+        wire.value
+    }
+
+    /// The one place a case is paired with its id. Internal: callers ask for
+    /// `id` or `value`, and a tuple of both is an encoding detail rather than
+    /// something to hand out.
+    var wire: (id: ID, value: ComponentValue) {
         switch self {
         case .cpuUsageRatio(let v): (.cpuUsageRatio, v.componentValue)
         case .fps(let v): (.fps, v.componentValue)
@@ -770,13 +781,5 @@ public enum Component: Equatable, Sendable {
         case .otherAudioPlaying(let v): (.otherAudioPlaying, v.componentValue)
         case .secondaryAudioSilenced(let v): (.secondaryAudioSilenced, v.componentValue)
         }
-    }
-
-    public var id: ID {
-        wire.id
-    }
-
-    public var value: ComponentValue {
-        wire.value
     }
 }
