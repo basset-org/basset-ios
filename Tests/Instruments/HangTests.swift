@@ -205,7 +205,15 @@ struct MainRunLoopHeartbeatTests {
             CFRunLoopStop(target)
         }
 
-        let parked = await eventually { heartbeat.read().awake == false }
+        // Not merely `awake == false`: `start()` initialises it that way, so a
+        // bare read is satisfied before the loop has parked at all. Requiring
+        // the idle stretch to have lasted proves the observer saw it park, and
+        // gives the busy measurement below a real moment to grow from.
+        let parked = await eventually {
+            let reading = heartbeat.read()
+            return !reading.awake
+                && clock.now().nanoseconds - reading.idleAt.nanoseconds >= 50000000
+        }
         #expect(parked, "a loop waiting for work never read as parked")
 
         CFRunLoopPerformBlock(target, CFRunLoopMode.defaultMode.rawValue) {
