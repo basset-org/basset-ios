@@ -337,6 +337,17 @@ public enum Component: Equatable, Sendable {
     case tileLoadFailures(UInt64)
     case mapLoadsCompleted(UInt64)
     case callAction(String)
+    case audioOutputPort(String)
+    case audioOutputName(String)
+    case audioInputPort(String)
+    case audioCategory(String)
+    case audioMode(String)
+    case audioCategoryOptions(String)
+    case audioPreviousOutputPort(String)
+    case audioRouteVerdict(String)
+    case outputVolume(Float)
+    case otherAudioPlaying(Bool)
+    case secondaryAudioSilenced(Bool)
 
     public enum WireID: UInt16, Sendable, CaseIterable {
         case cpuUsageRatio = 1
@@ -522,6 +533,17 @@ public enum Component: Equatable, Sendable {
         case tileLoadFailures = 181
         case mapLoadsCompleted = 182
         case callAction = 183
+        case audioOutputPort = 184
+        case audioOutputName = 185
+        case audioInputPort = 186
+        case audioCategory = 187
+        case audioMode = 188
+        case audioCategoryOptions = 189
+        case audioPreviousOutputPort = 190
+        case audioRouteVerdict = 191
+        case outputVolume = 192
+        case otherAudioPlaying = 193
+        case secondaryAudioSilenced = 194
     }
 
     public var wire: (id: WireID, value: ComponentValue) {
@@ -733,6 +755,20 @@ public enum Component: Equatable, Sendable {
         case .tileLoadFailures(let v): (.tileLoadFailures, v.componentValue)
         case .mapLoadsCompleted(let v): (.mapLoadsCompleted, v.componentValue)
         case .callAction(let v): (.callAction, v.componentValue)
+        case .audioOutputPort(let v): (.audioOutputPort, v.componentValue)
+        case .audioOutputName(let v): (.audioOutputName, v.componentValue)
+        case .audioInputPort(let v): (.audioInputPort, v.componentValue)
+        case .audioCategory(let v): (.audioCategory, v.componentValue)
+        case .audioMode(let v): (.audioMode, v.componentValue)
+        case .audioCategoryOptions(let v): (.audioCategoryOptions, v.componentValue)
+        case .audioPreviousOutputPort(let v): (
+                .audioPreviousOutputPort,
+                v.componentValue
+            )
+        case .audioRouteVerdict(let v): (.audioRouteVerdict, v.componentValue)
+        case .outputVolume(let v): (.outputVolume, v.componentValue)
+        case .otherAudioPlaying(let v): (.otherAudioPlaying, v.componentValue)
+        case .secondaryAudioSilenced(let v): (.secondaryAudioSilenced, v.componentValue)
         }
     }
 

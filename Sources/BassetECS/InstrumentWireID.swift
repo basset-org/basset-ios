@@ -45,6 +45,7 @@ public enum InstrumentWireID: UInt16, Sendable, CaseIterable {
     case webContentTermination = 45
     case mapTileLoading = 46
     case callProviderActions = 47
+    case audioRoute = 48
 
     public var name: String {
         switch self {
@@ -94,6 +95,7 @@ public enum InstrumentWireID: UInt16, Sendable, CaseIterable {
         case .webContentTermination: "webkit.contentProcess.termination"
         case .mapTileLoading: "map.tile.loading"
         case .callProviderActions: "call.provider.actions"
+        case .audioRoute: "audio.route"
         }
     }
 
@@ -145,6 +147,7 @@ public enum InstrumentWireID: UInt16, Sendable, CaseIterable {
         case .webContentTermination: .webkit
         case .mapTileLoading: .map
         case .callProviderActions: .call
+        case .audioRoute: .audio
         }
     }
 
@@ -199,6 +202,7 @@ public enum InstrumentWireID: UInt16, Sendable, CaseIterable {
         case .webContentTermination: .stream
         case .mapTileLoading: .stream
         case .callProviderActions: .stream
+        case .audioRoute: .stream
         }
     }
 
@@ -210,6 +214,11 @@ public enum InstrumentWireID: UInt16, Sendable, CaseIterable {
              .cameraFrameDelivery,
              .cameraSessionConfiguration,
              .cameraSessionState:
+            .init(simulator: false)
+        // A simulator has no receiver and no speaker. It reports whatever output
+        // device the Mac is using, so every routing verdict reached there
+        // describes hardware the app under capture will never run on.
+        case .audioRoute:
             .init(simulator: false)
         case .framePacing:
             .init(minIOS: 18)

@@ -112,6 +112,40 @@ check placement after any refactor that moves code out from under one.
 - Ternaries select values: one line, both branches values rather than calls.
   Anything else is `if`/`else`, which is an expression here and costs nothing.
 
+## Entities and components are one shared vocabulary
+
+An instrument owns its mechanism and owns none of the words it reports in.
+`Entity.WireID` and `Component.WireID` are the whole catalog's vocabulary, and
+every reader decodes a stored capture against them — including readers built
+long after the capture was written.
+
+**Ids only grow.** A case is never removed, renumbered, or reissued. That makes
+a duplicate the expensive mistake: two names for one fact split every question
+asked about that fact, both spellings stay in the space forever, and neither
+can be retired.
+
+So the first move when a reading needs a value is to look for the component
+that already carries it. Several are deliberately general and already serve
+several domains — `changeReason`, `errorDomain`, `errorCode`,
+`callbackImplemented`, `occurrenceCount`. A near-match with the same meaning
+and the same unit is a match.
+
+A new component earns its place when no existing one names the fact, or when
+reusing one would have to stretch its meaning to fit. Reuse stops at units and
+at scalars: milliseconds do not go in a field named for nanoseconds, and a
+count does not go in a field holding a name.
+
+Entities follow the same rule and one more: an entity is the **subject** a
+reading is about, not the instrument that produced it. Two instruments
+describing the same subject share its entity, and an entity named after its
+instrument is a duplicate waiting to be added.
+
+Name both for what they are. A reader who has never seen the instrument has to
+be able to tell what a component means from its name alone.
+
+A review comment here is worth writing even when the addition is small: this is
+the one part of the library where a mistake cannot be taken back.
+
 ## A framework's documentation is not evidence
 
 Behaviour is established by running it. A constant's value is not its symbol's
