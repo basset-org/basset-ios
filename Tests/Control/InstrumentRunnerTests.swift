@@ -523,7 +523,7 @@ struct RuntimeConvergenceTests {
     // Nobody calls anything here. The runtime schedules its own wake-up when
     // the request arrives, which is the half of the promise a test driving
     // `expire(at:)` by hand cannot show.
-    @Test func theDeviceWakesItselfWhenTheRequestRunsOut() async throws {
+    @Test func theDeviceWakesItselfWhenTheRequestRunsOut() async {
         let (subject, _) = runtime()
 
         subject.converge(
@@ -533,10 +533,10 @@ struct RuntimeConvergenceTests {
         #expect(subject.activeInstruments == [.memoryFootprint])
         let memory = subject.memory
 
-        try await Task.sleep(for: .milliseconds(900))
+        let expired = await eventually { subject.liveRequestIds.isEmpty }
         subject.settle()
 
-        #expect(subject.liveRequestIds.isEmpty)
+        #expect(expired, "the request outlived an expiry set 0.3s out")
         #expect(subject.activeInstruments.isEmpty)
         #expect(memory?.stopCount == 1)
     }

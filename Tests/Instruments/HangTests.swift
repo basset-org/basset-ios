@@ -205,24 +205,23 @@ struct MainRunLoopHeartbeatTests {
             CFRunLoopStop(target)
         }
 
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(
-            heartbeat.read().awake == false,
-            "a loop waiting for work reads as parked"
-        )
+        let parked = await eventually { heartbeat.read().awake == false }
+        #expect(parked, "a loop waiting for work never read as parked")
 
         CFRunLoopPerformBlock(target, CFRunLoopMode.defaultMode.rawValue) {
             Thread.sleep(forTimeInterval: 0.8)
         }
         CFRunLoopWakeUp(target)
 
-        try await Task.sleep(for: .milliseconds(400))
-        let blocked = heartbeat.read()
-
-        #expect(blocked.awake == true)
-        #expect(
-            clock.now().nanoseconds - blocked.idleAt.nanoseconds >= 200000000,
-            "the loop has not parked since it entered the block, so the busy time grows"
-        )
+        // Both halves in one condition, and inside the block rather than after a
+        // sleep sized to land there: the loop parks again when the block
+        // returns, so a reading taken late reports idle and says nothing about
+        // what the busy time did while it was blocked.
+        let busy = await eventually {
+            let reading = heartbeat.read()
+            return reading.awake
+                && clock.now().nanoseconds - reading.idleAt.nanoseconds >= 200000000
+        }
+        #expect(busy, "the blocked loop never reported 200ms of unbroken busy time")
     }
 }
