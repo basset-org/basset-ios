@@ -57,7 +57,7 @@
 --mark-categories false
 --mark-extensions always
 --mark-types never
---max-width 90
+--max-width 100
 --modifier-order
 --never-trailing
 --nil-init remove
@@ -116,5 +116,9 @@
 --xctest-symbols
 --yoda-swap always
 
---disable redundantSelf
+# A factory that is one expression reads as one line. The rule wraps every
+# function body onto its own line regardless of width, which costs three lines
+# each across the component catalog and hides the id a factory claims below the
+# name that should sit beside it.
+--disable redundantSelf,wrapFunctionBodies
 --enable blankLinesAfterGuardStatements,blockComments,markTypes,organizeDeclarations,propertyTypes,sortSwitchCases,wrapEnumCases,wrapGuardStatementBodies,wrapIfStatementBodies,wrapMultilineConditionalAssignment,wrapMultilineFunctionChains,wrapSwitchCases
