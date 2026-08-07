@@ -43,6 +43,7 @@ public struct Entity: Equatable, Sendable {
         case webView = 38
         case mapView = 39
         case callProvider = 40
+        case audioRoute = 41
     }
 
     public let id: WireID

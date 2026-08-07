@@ -138,8 +138,8 @@ struct InstrumentShapeTests {
         // instrument, retired in favour of `lifecycle.lastRunEnded`. A retired id
         // is never reissued, so the gap is the record of that rather than a
         // mistake to tidy up.
-        #expect(instrumentIdSnapshot == Array(1...21) + Array(23...47))
-        #expect(componentIdSnapshot == Array(1...183))
-        #expect(entityIdSnapshot == Array(0...40))
+        #expect(instrumentIdSnapshot == Array(1...21) + Array(23...48))
+        #expect(componentIdSnapshot == Array(1...194))
+        #expect(entityIdSnapshot == Array(0...41))
     }
 }

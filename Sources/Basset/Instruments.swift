@@ -46,6 +46,7 @@ public enum Instruments {
         .stream(ContentProcessTermination.self),
         .stream(TileLoading.self),
         .stream(ProviderActions.self),
+        .stream(AudioRoute.self),
     ]
 
     public static func named(_ name: String) -> Registration? {

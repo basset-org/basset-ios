@@ -833,6 +833,25 @@ public extension InstrumentWireID {
                 mechanism: .swizzle,
                 cadence: .onChange
             )
+        case .audioRoute:
+            InstrumentMetadata(
+                summary: "Which output the app's audio is coming out of, and what put it there",
+                whenToUse: "sound comes from the earpiece instead of the speaker, is quiet or narrowband, disappears when a headset is unplugged, or plays somewhere the user did not choose",
+                reveals: [
+                    "the output port carrying audio right now, and whether that is the earpiece — the play-and-record category routes there by default, and an app that never asked for the speaker is audible only against the ear",
+                    "whether the speaker default is set, which survives route changes and interruptions, against a temporary override, which the next route change discards",
+                    "the category, mode and every category option in force, including the two that decide whether a Bluetooth accessory can take the route",
+                    "each route change with the reason the system gave and the port it moved from",
+                    "the output volume, and whether another app's audio is playing or asking for this app's to be silenced",
+                ],
+                related: [
+                    "call.provider.actions",
+                    "permissions.status",
+                    "bluetooth.central.state",
+                ],
+                mechanism: .notification,
+                cadence: .onChange
+            )
         }
     }
 }
