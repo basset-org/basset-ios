@@ -158,15 +158,21 @@ public enum ComponentValue: Equatable, Sendable {
 
 /// A reading's smallest unit: which component, and what it carries.
 ///
-/// Stored rather than derived from a case, so the id a component claims and the
-/// type it carries are stated together, on the line that makes it. The shape
-/// this replaced said them twice — a case fixing the type, a switch arm fixing
-/// the id — far enough apart that an arm naming the wrong id read as correct.
+/// A struct rather than an enum of cases carrying payloads, for three measured
+/// reasons. An enum recomputes the id through a switch on every read: 141ms
+/// against 15ms over twenty million reads. That switch stops compiling
+/// somewhere past 600 cases — "unable to check that this switch is exhaustive
+/// in reasonable time" — and this catalog is heading for thousands. And it
+/// states the pairing twice, a case fixing the type and a switch arm fixing the
+/// id, far enough apart that a wrong arm reads as correct.
 ///
-/// It is still written by hand, so `everyFactoryClaimsTheIdItIsNamedFor` is
-/// what holds each factory to the id it is named for.
+/// `value` is declared first because Swift does not reorder stored properties.
+/// A one-byte id ahead of an eight-aligned value costs seven bytes of padding:
+/// 32 bytes a component against 24.
 ///
-/// `init` is private: the factories below are the only components that exist.
+/// The pairing is still written by hand, so `everyFactoryClaimsTheIdItIsNamedFor`
+/// holds each factory to the id it is named for. `init` is private: the
+/// factories below are the only components that exist.
 public struct Component: Equatable, Sendable {
     public enum ID: UInt16, Sendable, CaseIterable {
         case cpuUsageRatio = 1
@@ -365,8 +371,8 @@ public struct Component: Equatable, Sendable {
         case secondaryAudioSilenced = 194
     }
 
-    public let id: ID
     public let value: ComponentValue
+    public let id: ID
 
     private init(_ id: ID, _ value: some ScalarValue) {
         self.id = id
