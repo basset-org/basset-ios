@@ -158,21 +158,9 @@ public enum ComponentValue: Equatable, Sendable {
 
 /// A reading's smallest unit: which component, and what it carries.
 ///
-/// A struct rather than an enum of cases carrying payloads, for three measured
-/// reasons. An enum recomputes the id through a switch on every read: 141ms
-/// against 15ms over twenty million reads. That switch stops compiling
-/// somewhere past 600 cases — "unable to check that this switch is exhaustive
-/// in reasonable time" — and this catalog is heading for thousands. And it
-/// states the pairing twice, a case fixing the type and a switch arm fixing the
-/// id, far enough apart that a wrong arm reads as correct.
-///
-/// `value` is declared first because Swift does not reorder stored properties.
-/// A one-byte id ahead of an eight-aligned value costs seven bytes of padding:
-/// 32 bytes a component against 24.
-///
-/// The pairing is still written by hand, so `everyFactoryClaimsTheIdItIsNamedFor`
-/// holds each factory to the id it is named for. `init` is private: the
-/// factories below are the only components that exist.
+/// Built only through the factories below, so the id and the type it carries
+/// are paired in one place; `everyFactoryClaimsTheIdItIsNamedFor` holds them
+/// there.
 public struct Component: Equatable, Sendable {
     public enum ID: UInt16, Sendable, CaseIterable {
         case cpuUsageRatio = 1
@@ -371,6 +359,9 @@ public struct Component: Equatable, Sendable {
         case secondaryAudioSilenced = 194
     }
 
+    // Order is load-bearing: Swift lays stored properties out as declared, and a
+    // one-byte id ahead of an eight-aligned value pads out to a 32-byte stride
+    // where this order costs 24. `aComponentCostsNoPadding` pins it.
     public let value: ComponentValue
     public let id: ID
 

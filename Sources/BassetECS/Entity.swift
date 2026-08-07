@@ -2,10 +2,6 @@ import Foundation
 
 /// One reading: what it is about, when it was taken, and the components that
 /// describe it.
-///
-/// A struct because it holds state rather than being a choice between
-/// alternatives — unlike `Component`, which is a list of possibilities and was
-/// an enum until the switch behind it proved slower and bounded.
 public struct Entity: Equatable, Sendable {
     public enum ID: UInt16, Sendable, CaseIterable {
         case unknown = 0
