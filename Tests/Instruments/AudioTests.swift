@@ -44,8 +44,21 @@ struct AudioRoutingTests {
         )
     }
 
-    /// A mode that sets the speaker default as a side effect must not be read as
-    /// an override, or every video-chat app reports a route about to be lost.
+    /// The mode asks for the speaker as much as the option does, and
+    /// `categoryOptions` does not report what a mode implied — a session set to
+    /// video chat reads back an option field of zero. Reading the option alone
+    /// therefore tells a video-chat app on the earpiece that nothing asked for
+    /// the speaker, which is the one thing it did do.
+    @Test func aModeThatImpliesTheSpeakerCountsAsHavingAskedForIt() {
+        #expect(
+            AudioRouting.verdict(facts(.receiver, modeImpliesSpeaker: true))
+                == .earpieceDespiteSpeakerDefault
+        )
+    }
+
+    /// The same fact on the other branch: a mode that implies the speaker must
+    /// not be read as an override, or every video-chat app reports a route about
+    /// to be lost.
     @Test func aModeThatImpliesTheSpeakerIsNotAnOverride() {
         #expect(
             AudioRouting.verdict(facts(.speaker, modeImpliesSpeaker: true)) == .speaker

@@ -24,10 +24,21 @@ struct AudioRouteFacts: Sendable {
     let output: AudioOutputKind
     /// The category is play-and-record, the only one that routes to the earpiece.
     let recordsAndPlays: Bool
-    /// The mode sets the speaker default as a side effect of being set at all,
-    /// so the speaker is where it belongs rather than somewhere it was put.
+    /// The mode sets the speaker default as a side effect of being set at all.
+    ///
+    /// Kept separate from `defaultToSpeaker` because **`categoryOptions` does
+    /// not report what a mode implied** — a session set to video chat reads back
+    /// an option field of zero while the mode reads back as video chat. Deriving
+    /// the request from the option field alone therefore reports that nothing
+    /// asked for the speaker on a session that did.
     let modeImpliesSpeaker: Bool
+    /// The option, which is what the caller passed, and nothing more.
     let defaultToSpeaker: Bool
+
+    /// The speaker was asked for, by either route.
+    var speakerRequested: Bool {
+        defaultToSpeaker || modeImpliesSpeaker
+    }
 }
 
 /// What a caller is told about the route. Every case is a state a user can hear.
@@ -58,12 +69,11 @@ enum AudioRouting {
         case .none:
             return .noOutputRoute
         case .receiver:
-            return facts.defaultToSpeaker
+            return facts.speakerRequested
                 ? .earpieceDespiteSpeakerDefault
                 : .earpieceAndSpeakerDefaultUnset
         case .speaker:
-            let placed = facts.recordsAndPlays && !facts.defaultToSpeaker
-                && !facts.modeImpliesSpeaker
+            let placed = facts.recordsAndPlays && !facts.speakerRequested
             return placed ? .speakerHeldByTemporaryOverride : .speaker
         case .handsFree:
             return .handsFreeProfile
