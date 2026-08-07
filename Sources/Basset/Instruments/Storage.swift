@@ -27,8 +27,8 @@ final class CoreDataChanges: StreamingInstrument {
         }
     }
 
-    static let id: InstrumentWireID = .coreDataChanges
-    static let entity = Entity.WireID.managedObjectContext
+    static let id: InstrumentID = .coreDataChanges
+    static let entity = Entity.ID.managedObjectContext
 
     private let lock: NSLock = .init()
     private var tally: Tallied = .init()
@@ -230,8 +230,8 @@ struct ManagedObjectContextFacts {
 /// are posted on the thread doing the work, so the duration is the save's own and
 /// the thread the pair arrives on is the thread the app used.
 final class CoreDataSave: StreamingInstrument {
-    static let id: InstrumentWireID = .coreDataSave
-    static let entity = Entity.WireID.managedObjectContext
+    static let id: InstrumentID = .coreDataSave
+    static let entity = Entity.ID.managedObjectContext
 
     private let clock: Clock = .init()
     private let lock: NSLock = .init()

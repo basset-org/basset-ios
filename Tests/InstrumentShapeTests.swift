@@ -7,21 +7,21 @@ import Testing
 /// on the host: no simulator, so they land in `bazel test //...`.
 struct InstrumentShapeTests {
     private var instrumentIdSnapshot: [UInt16] {
-        InstrumentWireID.allCases.map(\.rawValue).sorted()
+        InstrumentID.allCases.map(\.rawValue).sorted()
     }
 
     private var componentIdSnapshot: [UInt16] {
-        Component.WireID.allCases.map(\.rawValue).sorted()
+        Component.ID.allCases.map(\.rawValue).sorted()
     }
 
     private var entityIdSnapshot: [UInt16] {
-        Entity.WireID.allCases.map(\.rawValue).sorted()
+        Entity.ID.allCases.map(\.rawValue).sorted()
     }
 
     /// Over every id rather than every registration, so an instrument that does
     /// not compile on this platform is still held to the rule.
     @Test func domainMatchesTheFirstSegmentOfEveryName() {
-        for id in InstrumentWireID.allCases {
+        for id in InstrumentID.allCases {
             let prefix = id.name.split(separator: ".").first.map(String.init)
             #expect(
                 prefix == id.domain.rawValue,
@@ -31,7 +31,7 @@ struct InstrumentShapeTests {
     }
 
     @Test func everyNameIsAtLeastDomainAndSubject() {
-        for id in InstrumentWireID.allCases {
+        for id in InstrumentID.allCases {
             #expect(
                 id.name.split(separator: ".").count >= 2,
                 "\(id.name) needs a subject after its domain"
@@ -40,7 +40,7 @@ struct InstrumentShapeTests {
     }
 
     @Test func namesAreUniqueAcrossTheIdSpace() {
-        let names = InstrumentWireID.allCases.map(\.name)
+        let names = InstrumentID.allCases.map(\.name)
         #expect(Set(names).count == names.count)
     }
 
@@ -49,7 +49,7 @@ struct InstrumentShapeTests {
     /// conditional — so the emitted menu is the same wherever it is generated,
     /// and `Constraints` rather than compilation decides what can run.
     @Test func everyIdInTheSpaceIsRegistered() {
-        #expect(Set(Instruments.all.map(\.id)) == Set(InstrumentWireID.allCases))
+        #expect(Set(Instruments.all.map(\.id)) == Set(InstrumentID.allCases))
     }
 
     /// The catalog and the id space are one list read twice: the enum in

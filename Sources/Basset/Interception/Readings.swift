@@ -2,22 +2,22 @@ import BassetECS
 import Foundation
 
 public struct Readings {
-    public let entity: Entity.WireID
+    public let entity: Entity.ID
 
     private let instrumentName: String
     private var record: Entity
-    private var written: Set<Component.WireID> = []
+    private var written: Set<Component.ID> = []
     private var siblings: [Entity] = []
 
     public var isEmpty: Bool {
         record.components.isEmpty
     }
 
-    public var componentsWritten: Set<Component.WireID> {
+    public var componentsWritten: Set<Component.ID> {
         written
     }
 
-    init(entity: Entity.WireID, instrumentName: String) {
+    init(entity: Entity.ID, instrumentName: String) {
         self.entity = entity
         self.instrumentName = instrumentName
         self.record = Entity(entity)
@@ -32,7 +32,7 @@ public struct Readings {
     /// stacks and the images they land in; splitting them lets a reader take
     /// one thread without decoding the rest, and costs the instrument nothing
     /// but this call.
-    public mutating func also(_ entity: Entity.WireID,
+    public mutating func also(_ entity: Entity.ID,
                               _ build: (inout Readings) -> Void)
     {
         var sibling = Readings(entity: entity, instrumentName: instrumentName)

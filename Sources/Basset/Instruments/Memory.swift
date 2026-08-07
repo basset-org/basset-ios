@@ -6,8 +6,8 @@ import UIKit
 #endif
 
 final class MemoryFootprint: SnapshotInstrument {
-    static let id: InstrumentWireID = .memoryFootprint
-    static let entity = Entity.WireID.process
+    static let id: InstrumentID = .memoryFootprint
+    static let entity = Entity.ID.process
 
     init() {}
 
@@ -30,8 +30,8 @@ final class MemoryFootprint: SnapshotInstrument {
 /// is the footprint at the moment iOS complained, and a sample taken a second
 /// later is a different app.
 final class MemoryPressure: StreamingInstrument {
-    static let id: InstrumentWireID = .memoryPressure
-    static let entity = Entity.WireID.memoryPressure
+    static let id: InstrumentID = .memoryPressure
+    static let entity = Entity.ID.memoryPressure
 
     private var source: DispatchSourceMemoryPressure?
     private var observer: NSObjectProtocol?

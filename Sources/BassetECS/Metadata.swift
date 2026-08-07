@@ -124,7 +124,7 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
     }
 }
 
-public extension InstrumentWireID {
+public extension InstrumentID {
     /// The prose half of the catalog, and the only place it is written.
     /// A switch rather than a table so an id added without a description is a
     /// build error rather than a menu entry that renders blank.

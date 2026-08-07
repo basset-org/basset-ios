@@ -62,7 +62,7 @@ struct DecoderTests {
         withUnsafeBytes(of: Float(59.9).bitPattern.littleEndian) {
             manual.append(contentsOf: $0)
         }
-        manual.append(componentTag(Component.WireID.fps.rawValue, .float32))
+        manual.append(componentTag(Component.ID.fps.rawValue, .float32))
         withUnsafeBytes(of: Float(28.4).bitPattern.littleEndian) {
             manual.append(contentsOf: $0)
         }
@@ -140,7 +140,7 @@ struct DecoderTests {
     /// reader of a downloaded capture is made to reserve memory nobody sent.
     @Test func acomponentCountLargerThanTheFrameIsRefusedRatherThanReserved() {
         var manual = Data([PayloadKind.entity.rawValue])
-        withUnsafeBytes(of: Entity.WireID.device.rawValue.littleEndian) {
+        withUnsafeBytes(of: Entity.ID.device.rawValue.littleEndian) {
             manual.append(contentsOf: $0)
         }
         withUnsafeBytes(of: UInt64(1).littleEndian) { manual.append(contentsOf: $0) }
@@ -190,7 +190,7 @@ struct DecoderTests {
         return out
     }
 
-    private func entityHeader(_ id: Entity.WireID, capturedAt: UInt64,
+    private func entityHeader(_ id: Entity.ID, capturedAt: UInt64,
                               count: UInt8) -> Data
     {
         var out = Data([PayloadKind.entity.rawValue])

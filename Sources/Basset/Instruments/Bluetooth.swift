@@ -22,8 +22,8 @@ import ObjectiveC
 /// routinely a person's own words. This stays on the central's own state, where
 /// none of that exists.
 final class CentralState: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .bluetoothCentralState
-    static let entity = Entity.WireID.bluetoothCentral
+    static let id: InstrumentID = .bluetoothCentralState
+    static let entity = Entity.ID.bluetoothCentral
 
     static let managerClassName = "CBCentralManager"
     static let setDelegate: Selector = .init("setDelegate:")

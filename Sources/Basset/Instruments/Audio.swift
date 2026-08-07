@@ -131,8 +131,8 @@ struct AudioCategoryOptionNames {
 }
 
 final class AudioRoute: StreamingInstrument {
-    static let id: InstrumentWireID = .audioRoute
-    static let entity = Entity.WireID.audioRoute
+    static let id: InstrumentID = .audioRoute
+    static let entity = Entity.ID.audioRoute
 
     private var observer: NSObjectProtocol?
 

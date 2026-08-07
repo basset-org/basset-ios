@@ -44,9 +44,9 @@ struct ComponentTests {
     /// A retired id stays a reservation rather than being deleted: the wire is
     /// grow-only, and a reused number decodes every stored artifact wrong.
     @Test func retiredIdsStayReserved() {
-        #expect(Component.WireID.retiredInstrumentVersion.rawValue == 16)
-        #expect(Component.WireID.retiredLayoutTotalDuration.rawValue == 21)
-        #expect(Component.WireID.retiredLayoutMaxDuration.rawValue == 22)
+        #expect(Component.ID.retiredInstrumentVersion.rawValue == 16)
+        #expect(Component.ID.retiredLayoutTotalDuration.rawValue == 21)
+        #expect(Component.ID.retiredLayoutMaxDuration.rawValue == 22)
     }
 
     /// The unit lives in the component's name, not in a table beside it. A
@@ -54,7 +54,7 @@ struct ComponentTests {
     /// the only place it could go — and names are off-wire, so this costs nothing
     /// on the frame.
     @Test func everyMeasuredComponentNamesItsUnit() {
-        let measured: [Component.WireID] = [
+        let measured: [Component.ID] = [
             .memoryUsedBytes, .methodDurationMilliseconds, .totalNanoseconds,
             .peakNanoseconds, .passCount, .cpuUsageRatio, .hardwareCostRatio,
             .systemPressureCostRatio, .formatWidthPixels, .formatHeightPixels,

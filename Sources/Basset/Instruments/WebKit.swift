@@ -22,8 +22,8 @@ import ObjectiveC
 /// `didReceiveAuthenticationChallenge` take completion handlers, and calling one
 /// twice terminates the app. Neither is touched here.
 final class ContentProcessTermination: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .webContentTermination
-    static let entity = Entity.WireID.webView
+    static let id: InstrumentID = .webContentTermination
+    static let entity = Entity.ID.webView
 
     static let webViewClassName = "WKWebView"
     static let setNavigationDelegate: Selector = .init("setNavigationDelegate:")

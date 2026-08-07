@@ -46,7 +46,7 @@ public final class Context: @unchecked Sendable {
     let status: AtomicStatus
 
     private let instrumentName: String
-    private let defaultEntity: Entity.WireID
+    private let defaultEntity: Entity.ID
     private let sink: @Sendable (Entity) -> Void
     /// Takes the raising activation's status as well as the kind. A fault can
     /// wait on the runner's lock while the request that raised it ends, and
@@ -69,7 +69,7 @@ public final class Context: @unchecked Sendable {
 
     init(
         instrumentName: String,
-        defaultEntity: Entity.WireID,
+        defaultEntity: Entity.ID,
         status: AtomicStatus,
         swizzle: Swizzle,
         registries: Registries,
@@ -122,7 +122,7 @@ public final class Context: @unchecked Sendable {
         lock.unlock()
     }
 
-    public func readings(_ entity: Entity.WireID? = nil) -> Readings {
+    public func readings(_ entity: Entity.ID? = nil) -> Readings {
         Readings(
             entity: entity ?? defaultEntity,
             instrumentName: instrumentName
@@ -138,7 +138,7 @@ public final class Context: @unchecked Sendable {
         readings.sealedSiblings().forEach(sink)
     }
 
-    public func emit(_ entity: Entity.WireID? = nil, _ build: (inout Readings) -> Void) {
+    public func emit(_ entity: Entity.ID? = nil, _ build: (inout Readings) -> Void) {
         guard status.isActive else {
             return
         }
@@ -163,7 +163,7 @@ public final class Context: @unchecked Sendable {
     /// facts, and the reading that shows a rate held steady is exactly the one
     /// worth having when asking why frames stopped.
     public func emitIfChanged(
-        _ entity: Entity.WireID? = nil,
+        _ entity: Entity.ID? = nil,
         of subject: String = "",
         _ build: (inout Readings) -> Void
     ) {
@@ -196,7 +196,7 @@ public final class Context: @unchecked Sendable {
 
     public func flush(
         every interval: Duration,
-        into entity: Entity.WireID? = nil,
+        into entity: Entity.ID? = nil,
         _ body: @escaping (inout Readings, FlushWindow) -> Void
     ) {
         let timer = DispatchSource.makeTimerSource(queue: timerQueue)

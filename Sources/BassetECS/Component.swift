@@ -349,7 +349,7 @@ public enum Component: Equatable, Sendable {
     case otherAudioPlaying(Bool)
     case secondaryAudioSilenced(Bool)
 
-    public enum WireID: UInt16, Sendable, CaseIterable {
+    public enum ID: UInt16, Sendable, CaseIterable {
         case cpuUsageRatio = 1
         case fps = 2
         case deviceId = 3
@@ -546,7 +546,7 @@ public enum Component: Equatable, Sendable {
         case secondaryAudioSilenced = 194
     }
 
-    public var wire: (id: WireID, value: ComponentValue) {
+    public var wire: (id: ID, value: ComponentValue) {
         switch self {
         case .cpuUsageRatio(let v): (.cpuUsageRatio, v.componentValue)
         case .fps(let v): (.fps, v.componentValue)
@@ -772,7 +772,7 @@ public enum Component: Equatable, Sendable {
         }
     }
 
-    public var id: WireID {
+    public var id: ID {
         wire.id
     }
 

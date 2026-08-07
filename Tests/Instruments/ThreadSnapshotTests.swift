@@ -140,7 +140,7 @@ struct ReadingsSiblingTests {
         )
     }
 
-    private func readings(_ entity: Entity.WireID = .thread) -> Readings {
+    private func readings(_ entity: Entity.ID = .thread) -> Readings {
         Readings(
             entity: entity,
             instrumentName: "runtime.threadSnapshot"

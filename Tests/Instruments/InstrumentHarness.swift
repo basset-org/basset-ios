@@ -77,7 +77,7 @@ final class InstrumentHarness<Instrument: StreamingInstrument>: @unchecked Senda
         return readings.first
     }
 
-    func value(_ id: Component.WireID, in entity: Entity?) -> String? {
+    func value(_ id: Component.ID, in entity: Entity?) -> String? {
         entity?.components.first { $0.id == id }?.value.rendered
     }
 }

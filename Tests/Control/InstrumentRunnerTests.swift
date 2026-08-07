@@ -130,10 +130,10 @@ extension FakeInstrument {
 }
 
 private final class FakeMemory: FakeInstrument {
-    static let id: InstrumentWireID = .memoryFootprint
+    static let id: InstrumentID = .memoryFootprint
     static let name = "memory.footprint"
     static let domain: Domain = .memory
-    static let entity = Entity.WireID.process
+    static let entity = Entity.ID.process
 
     let recorder: Recorder = .init()
 
@@ -141,10 +141,10 @@ private final class FakeMemory: FakeInstrument {
 }
 
 private final class FakeThermal: FakeInstrument {
-    static let id: InstrumentWireID = .thermalState
+    static let id: InstrumentID = .thermalState
     static let name = "power.thermalState"
     static let domain: Domain = .power
-    static let entity = Entity.WireID.thermal
+    static let entity = Entity.ID.thermal
 
     let recorder: Recorder = .init()
 
@@ -160,10 +160,10 @@ private final class FakeThermal: FakeInstrument {
 }
 
 private final class FakeHooked: StreamingInstrument {
-    static let id: InstrumentWireID = .viewLayoutPass
+    static let id: InstrumentID = .viewLayoutPass
     static let name = "uikit.view.layoutPass"
     static let domain: Domain = .uikit
-    static let entity = Entity.WireID.process
+    static let entity = Entity.ID.process
 
     init() {}
 
@@ -180,10 +180,10 @@ private final class FakeHooked: StreamingInstrument {
 /// The fault path: one instrument detects, the runtime asks whoever else is
 /// active, and neither instrument names the other.
 private final class FakeDetector: StreamingInstrument, @unchecked Sendable {
-    static let id: InstrumentWireID = .mainThreadHang
+    static let id: InstrumentID = .mainThreadHang
     static let name = "concurrency.mainThreadHang"
     static let domain: Domain = .concurrency
-    static let entity = Entity.WireID.mainThread
+    static let entity = Entity.ID.mainThread
 
     private let lock: NSLock = .init()
     private var context: Context?
@@ -215,10 +215,10 @@ private final class FakeDetector: StreamingInstrument, @unchecked Sendable {
 }
 
 private final class FakeContributor: FaultInstrument, @unchecked Sendable {
-    static let id: InstrumentWireID = .threadSnapshot
+    static let id: InstrumentID = .threadSnapshot
     static let name = "runtime.threadSnapshot"
     static let domain: Domain = .runtime
-    static let entity = Entity.WireID.thread
+    static let entity = Entity.ID.thread
 
     private(set) var asked: [FaultKind] = []
 
@@ -649,7 +649,7 @@ struct RuntimeConvergenceTests {
         // component reached the wire at all.
         var stamp = Data()
         stamp
-            .append(contentsOf: withUnsafeBytes(of: Component.WireID.launchId.rawValue
+            .append(contentsOf: withUnsafeBytes(of: Component.ID.launchId.rawValue
                     .littleEndian)
             {
                 Array($0)

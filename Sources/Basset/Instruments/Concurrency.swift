@@ -104,8 +104,8 @@ enum Debugger {
 /// own, because the one surface that cannot be asked how blocked it is, is the
 /// blocked one.
 final class MainThreadHang: StreamingInstrument {
-    static let id: InstrumentWireID = .mainThreadHang
-    static let entity = Entity.WireID.mainThread
+    static let id: InstrumentID = .mainThreadHang
+    static let entity = Entity.ID.mainThread
 
     /// Two seconds to report, checked five times within it. Two seconds is what
     /// Apple's own tooling counts as a hang; the divisor bounds how late the
@@ -205,8 +205,8 @@ final class MainThreadHang: StreamingInstrument {
 /// has stopped answering accumulates one probe rather than a backlog that becomes
 /// its own problem.
 final class QueueLatency: StreamingInstrument, @unchecked Sendable {
-    static let id: InstrumentWireID = .queueLatency
-    static let entity = Entity.WireID.dispatchQueue
+    static let id: InstrumentID = .queueLatency
+    static let entity = Entity.ID.dispatchQueue
 
     private let clock: Clock = .init()
     private let lock: NSLock = .init()
@@ -304,8 +304,8 @@ final class QueueLatency: StreamingInstrument, @unchecked Sendable {
 /// threads make that legible in a way a stack trace does not — the name is the
 /// team that created them.
 final class ThreadInventoryReading: SnapshotInstrument {
-    static let id: InstrumentWireID = .threadInventory
-    static let entity = Entity.WireID.thread
+    static let id: InstrumentID = .threadInventory
+    static let entity = Entity.ID.thread
 
     /// A process with more threads than this has a finding of its own, and it is
     /// the count rather than the list. Emitting hundreds of rows would spend a

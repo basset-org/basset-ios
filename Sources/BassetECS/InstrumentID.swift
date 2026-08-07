@@ -1,4 +1,4 @@
-public enum InstrumentWireID: UInt16, Sendable, CaseIterable {
+public enum InstrumentID: UInt16, Sendable, CaseIterable {
     case memoryFootprint = 1
     case deviceInfo = 2
     case thermalState = 3

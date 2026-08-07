@@ -7,8 +7,8 @@ final class ThreadCPUUsage: StreamingInstrument {
         let nanoseconds: UInt64
     }
 
-    static let id: InstrumentWireID = .cpuThreadUsage
-    static let entity = Entity.WireID.thread
+    static let id: InstrumentID = .cpuThreadUsage
+    static let entity = Entity.ID.thread
 
     /// Threads that used no measurable CPU are not emitted, so a busy handful
     /// does not arrive buried in fifty idle rows. The count of what was left out
@@ -100,8 +100,8 @@ final class ThreadCPUUsage: StreamingInstrument {
 }
 
 final class Wakeups: StreamingInstrument {
-    static let id: InstrumentWireID = .cpuWakeups
-    static let entity = Entity.WireID.process
+    static let id: InstrumentID = .cpuWakeups
+    static let entity = Entity.ID.process
 
     private let lock: NSLock = .init()
     private var previous: ProcessWakeups?

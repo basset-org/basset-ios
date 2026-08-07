@@ -22,8 +22,8 @@ import ObjectiveC
 /// handler through the runtime is the only awkward part — a Swift closure bridges
 /// to an ObjC block when the signature says `@convention(block)`.
 final class NotificationSettings: StreamingInstrument {
-    static let id: InstrumentWireID = .notificationSettings
-    static let entity = Entity.WireID.notificationSetting
+    static let id: InstrumentID = .notificationSettings
+    static let entity = Entity.ID.notificationSetting
 
     /// The settings a reader wants, in the order a reader wants them: whether
     /// the app may notify at all, then each way it may be seen.

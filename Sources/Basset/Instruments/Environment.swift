@@ -25,8 +25,8 @@ import UIKit
 /// test. Module-qualifying is no escape — the module is `Basset` and it contains a
 /// type called `Basset`, so `Basset.AccessibilitySettings` resolves to the type.
 final class AccessibilityFlags: StreamingInstrument {
-    static let id: InstrumentWireID = .accessibilitySettings
-    static let entity = Entity.WireID.deviceSetting
+    static let id: InstrumentID = .accessibilitySettings
+    static let entity = Entity.ID.deviceSetting
 
     #if canImport(UIKit)
     /// Nineteen of the twenty post a change notification Swift can name.
@@ -168,8 +168,8 @@ final class AccessibilityFlags: StreamingInstrument {
 /// the reader to derive: the boundary is where behaviour changes, and knowing the
 /// category name means nothing without knowing which side of it the user is on.
 final class DynamicType: StreamingInstrument {
-    static let id: InstrumentWireID = .dynamicType
-    static let entity = Entity.WireID.deviceSetting
+    static let id: InstrumentID = .dynamicType
+    static let entity = Entity.ID.deviceSetting
 
     private var observer: NSObjectProtocol?
 
@@ -247,8 +247,8 @@ final class DynamicType: StreamingInstrument {
 /// describing itself in Japanese and two captures of the same locale would not
 /// match.
 final class LocaleSettings: SnapshotInstrument {
-    static let id: InstrumentWireID = .localeSettings
-    static let entity = Entity.WireID.deviceSetting
+    static let id: InstrumentID = .localeSettings
+    static let entity = Entity.ID.deviceSetting
 
     init() {}
 
