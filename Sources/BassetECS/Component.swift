@@ -372,1134 +372,330 @@ public struct Component: Equatable, Sendable {
 }
 
 public extension Component {
-    static func cpuUsageRatio(_ value: Float) -> Component {
-        .init(.cpuUsageRatio, value)
-    }
-
-    static func fps(_ value: Float) -> Component {
-        .init(.fps, value)
-    }
-
-    static func deviceId(_ value: String) -> Component {
-        .init(.deviceId, value)
-    }
-
-    static func source(_ value: String) -> Component {
-        .init(.source, value)
-    }
-
-    static func methodName(_ value: String) -> Component {
-        .init(.methodName, value)
-    }
-
-    static func methodDurationMilliseconds(_ value: Float) -> Component {
-        .init(
-            .methodDurationMilliseconds,
-            value
-        )
-    }
-
-    static func deviceModel(_ value: String) -> Component {
-        .init(.deviceModel, value)
-    }
-
-    static func osVersion(_ value: String) -> Component {
-        .init(.osVersion, value)
-    }
-
-    static func appVersion(_ value: String) -> Component {
-        .init(.appVersion, value)
-    }
-
-    static func userId(_ value: String) -> Component {
-        .init(.userId, value)
-    }
-
-    static func serverVersion(_ value: String)
-        -> Component
-    {
-        .init(.serverVersion, value)
-    }
-
-    static func memoryUsedBytes(_ value: UInt64) -> Component {
-        .init(
-            .memoryUsedBytes,
-            value
-        )
-    }
-
-    static func thermalState(_ value: String) -> Component {
-        .init(.thermalState, value)
-    }
-
-    static func detail(_ value: String) -> Component {
-        .init(.detail, value)
-    }
-
-    static func instrument(_ value: UInt16) -> Component {
-        .init(.instrument, value)
-    }
-
-    static func bundleId(_ value: String) -> Component {
-        .init(.bundleId, value)
-    }
-
-    static func buildConfiguration(_ value: String) -> Component {
-        .init(
-            .buildConfiguration,
-            value
-        )
-    }
-
-    static func deviceKind(_ value: String) -> Component {
-        .init(.deviceKind, value)
-    }
-
-    static func passCount(_ value: UInt64) -> Component {
-        .init(.passCount, value)
-    }
-
-    static func totalNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .totalNanoseconds,
-            value
-        )
-    }
-
-    static func peakNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .peakNanoseconds,
-            value
-        )
-    }
-
-    static func sessionRunning(_ value: Bool)
-        -> Component
-    {
-        .init(.sessionRunning, value)
-    }
-
-    static func sessionInterrupted(_ value: Bool) -> Component {
-        .init(
-            .sessionInterrupted,
-            value
-        )
-    }
-
-    static func viewControllerClass(_ value: String) -> Component {
-        .init(
-            .viewControllerClass,
-            value
-        )
-    }
-
-    static func instanceId(_ value: UInt32) -> Component {
-        .init(.instanceId, value)
-    }
-
-    static func httpStatusCode(_ value: Int32)
-        -> Component
-    {
-        .init(.httpStatusCode, value)
-    }
-
-    static func negotiatedProtocol(_ value: String) -> Component {
-        .init(
-            .negotiatedProtocol,
-            value
-        )
-    }
-
-    static func bytesSentCount(_ value: UInt64) -> Component {
-        .init(
-            .bytesSentCount,
-            value
-        )
-    }
-
-    static func bytesReceivedCount(_ value: UInt64) -> Component {
-        .init(
-            .bytesReceivedCount,
-            value
-        )
-    }
-
-    static func requestURL(_ value: String) -> Component {
-        .init(.requestURL, value)
-    }
-
-    static func connectionReused(_ value: Bool) -> Component {
-        .init(
-            .connectionReused,
-            value
-        )
-    }
-
-    static func interfaceKind(_ value: String)
-        -> Component
-    {
-        .init(.interfaceKind, value)
-    }
-
-    static func pathSatisfied(_ value: Bool) -> Component {
-        .init(.pathSatisfied, value)
-    }
-
-    static func expensiveInterface(_ value: Bool) -> Component {
-        .init(
-            .expensiveInterface,
-            value
-        )
-    }
-
-    static func constrainedInterface(_ value: Bool) -> Component {
-        .init(
-            .constrainedInterface,
-            value
-        )
-    }
-
-    static func unsatisfiedReason(_ value: String) -> Component {
-        .init(
-            .unsatisfiedReason,
-            value
-        )
-    }
-
-    static func errorDomain(_ value: String) -> Component {
-        .init(.errorDomain, value)
-    }
-
-    static func errorCode(_ value: Int32) -> Component {
-        .init(.errorCode, value)
-    }
-
-    static func appState(_ value: String) -> Component {
-        .init(.appState, value)
-    }
-
-    static func sessionClass(_ value: String) -> Component {
-        .init(.sessionClass, value)
-    }
-
-    static func sessionPreset(_ value: String)
-        -> Component
-    {
-        .init(.sessionPreset, value)
-    }
-
-    static func inputCount(_ value: UInt32) -> Component {
-        .init(.inputCount, value)
-    }
-
-    static func outputCount(_ value: UInt32) -> Component {
-        .init(.outputCount, value)
-    }
-
-    static func connectionCount(_ value: UInt32) -> Component {
-        .init(
-            .connectionCount,
-            value
-        )
-    }
-
-    static func activeConnectionCount(_ value: UInt32) -> Component {
-        .init(
-            .activeConnectionCount,
-            value
-        )
-    }
-
-    static func hardwareCostRatio(_ value: Float) -> Component {
-        .init(
-            .hardwareCostRatio,
-            value
-        )
-    }
-
-    static func systemPressureCostRatio(_ value: Float) -> Component {
-        .init(
-            .systemPressureCostRatio,
-            value
-        )
-    }
-
-    static func systemPressureLevel(_ value: String) -> Component {
-        .init(
-            .systemPressureLevel,
-            value
-        )
-    }
-
-    static func deviceType(_ value: String) -> Component {
-        .init(.deviceType, value)
-    }
-
-    static func devicePosition(_ value: String) -> Component {
-        .init(
-            .devicePosition,
-            value
-        )
-    }
-
-    static func deviceUniqueId(_ value: String) -> Component {
-        .init(
-            .deviceUniqueId,
-            value
-        )
-    }
-
-    static func formatWidthPixels(_ value: Int32) -> Component {
-        .init(
-            .formatWidthPixels,
-            value
-        )
-    }
-
-    static func formatHeightPixels(_ value: Int32) -> Component {
-        .init(
-            .formatHeightPixels,
-            value
-        )
-    }
-
-    static func formatPixelFormat(_ value: String) -> Component {
-        .init(
-            .formatPixelFormat,
-            value
-        )
-    }
-
-    static func formatMinFramesPerSecond(_ value: Float) -> Component {
-        .init(
-            .formatMinFramesPerSecond,
-            value
-        )
-    }
-
-    static func formatMaxFramesPerSecond(_ value: Float) -> Component {
-        .init(
-            .formatMaxFramesPerSecond,
-            value
-        )
-    }
-
-    static func formatMultiCamSupported(_ value: Bool) -> Component {
-        .init(
-            .formatMultiCamSupported,
-            value
-        )
-    }
-
-    static func formatCount(_ value: UInt32) -> Component {
-        .init(.formatCount, value)
-    }
-
-    static func activeColorSpace(_ value: String) -> Component {
-        .init(
-            .activeColorSpace,
-            value
-        )
-    }
-
-    static func videoRotationDegrees(_ value: Float) -> Component {
-        .init(
-            .videoRotationDegrees,
-            value
-        )
-    }
-
-    static func videoMirrored(_ value: Bool) -> Component {
-        .init(.videoMirrored, value)
-    }
-
-    static func multiCamSetIndex(_ value: UInt32) -> Component {
-        .init(
-            .multiCamSetIndex,
-            value
-        )
-    }
-
-    static func multiCamSetMembers(_ value: String) -> Component {
-        .init(
-            .multiCamSetMembers,
-            value
-        )
-    }
-
-    static func outputPixelFormat(_ value: String) -> Component {
-        .init(
-            .outputPixelFormat,
-            value
-        )
-    }
-
-    static func outputPixelFormatSupported(_ value: Bool) -> Component {
-        .init(
-            .outputPixelFormatSupported,
-            value
-        )
-    }
-
-    static func framesDeliveredCount(_ value: UInt64) -> Component {
-        .init(
-            .framesDeliveredCount,
-            value
-        )
-    }
-
-    static func framesDroppedCount(_ value: UInt64) -> Component {
-        .init(
-            .framesDroppedCount,
-            value
-        )
-    }
-
-    static func dropReason(_ value: String) -> Component {
-        .init(.dropReason, value)
-    }
-
-    static func hangNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .hangNanoseconds,
-            value
-        )
-    }
-
-    static func hangResolved(_ value: Bool) -> Component {
-        .init(.hangResolved, value)
-    }
-
-    static func runLoopTurnCount(_ value: UInt64) -> Component {
-        .init(
-            .runLoopTurnCount,
-            value
-        )
-    }
-
-    static func threadIndex(_ value: UInt32) -> Component {
-        .init(.threadIndex, value)
-    }
-
-    static func threadName(_ value: String) -> Component {
-        .init(.threadName, value)
-    }
-
-    static func threadIsMain(_ value: Bool) -> Component {
-        .init(.threadIsMain, value)
-    }
-
-    static func frameAddress(_ value: UInt64) -> Component {
-        .init(.frameAddress, value)
-    }
-
-    static func imageName(_ value: String) -> Component {
-        .init(.imageName, value)
-    }
-
-    static func imageLoadAddress(_ value: UInt64) -> Component {
-        .init(
-            .imageLoadAddress,
-            value
-        )
-    }
-
-    static func imageUUID(_ value: String) -> Component {
-        .init(.imageUUID, value)
-    }
-
-    static func buildUUID(_ value: String) -> Component {
-        .init(.buildUUID, value)
-    }
-
-    static func launchId(_ value: UInt64) -> Component {
-        .init(.launchId, value)
-    }
-
-    static func logSubsystem(_ value: String) -> Component {
-        .init(.logSubsystem, value)
-    }
-
-    static func logCategory(_ value: String) -> Component {
-        .init(.logCategory, value)
-    }
-
-    static func logMessage(_ value: String) -> Component {
-        .init(.logMessage, value)
-    }
-
-    static func occurrenceCount(_ value: UInt64) -> Component {
-        .init(
-            .occurrenceCount,
-            value
-        )
-    }
-
-    static func hostRootViewType(_ value: String) -> Component {
-        .init(
-            .hostRootViewType,
-            value
-        )
-    }
-
-    static func hostRootViewOpaque(_ value: Bool) -> Component {
-        .init(
-            .hostRootViewOpaque,
-            value
-        )
-    }
-
-    static func hostNavigationTitle(_ value: String) -> Component {
-        .init(
-            .hostNavigationTitle,
-            value
-        )
-    }
-
-    static func hostAppearNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .hostAppearNanoseconds,
-            value
-        )
-    }
-
-    static func hostKind(_ value: String) -> Component {
-        .init(.hostKind, value)
-    }
-
-    static func hostCount(_ value: UInt32) -> Component {
-        .init(.hostCount, value)
-    }
-
-    static func hostViewClass(_ value: String)
-        -> Component
-    {
-        .init(.hostViewClass, value)
-    }
-
-    static func mechanismStatus(_ value: String) -> Component {
-        .init(
-            .mechanismStatus,
-            value
-        )
-    }
-
-    static func displayListSeed(_ value: UInt32) -> Component {
-        .init(
-            .displayListSeed,
-            value
-        )
-    }
-
-    static func displayListItemCount(_ value: UInt32) -> Component {
-        .init(
-            .displayListItemCount,
-            value
-        )
-    }
-
-    static func displayListChangeCount(_ value: UInt64) -> Component {
-        .init(
-            .displayListChangeCount,
-            value
-        )
-    }
-
-    static func ivarPathGeneration(_ value: String) -> Component {
-        .init(
-            .ivarPathGeneration,
-            value
-        )
-    }
-
-    static func presentationKind(_ value: String) -> Component {
-        .init(
-            .presentationKind,
-            value
-        )
-    }
-
-    static func presentedRootViewType(_ value: String) -> Component {
-        .init(
-            .presentedRootViewType,
-            value
-        )
-    }
-
-    static func windowNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .windowNanoseconds,
-            value
-        )
-    }
-
-    static func memoryLimitBytes(_ value: UInt64) -> Component {
-        .init(
-            .memoryLimitBytes,
-            value
-        )
-    }
-
-    static func memoryAvailableBytes(_ value: UInt64) -> Component {
-        .init(
-            .memoryAvailableBytes,
-            value
-        )
-    }
-
-    static func memoryPressureLevel(_ value: String) -> Component {
-        .init(
-            .memoryPressureLevel,
-            value
-        )
-    }
-
-    static func memoryPressureScope(_ value: String) -> Component {
-        .init(
-            .memoryPressureScope,
-            value
-        )
-    }
-
-    static func exitReason(_ value: String) -> Component {
-        .init(.exitReason, value)
-    }
-
-    static func intervalEndMicroseconds(_ value: UInt64) -> Component {
-        .init(
-            .intervalEndMicroseconds,
-            value
-        )
-    }
-
-    static func permissionSubject(_ value: String) -> Component {
-        .init(
-            .permissionSubject,
-            value
-        )
-    }
-
-    static func authorizationStatus(_ value: String) -> Component {
-        .init(
-            .authorizationStatus,
-            value
-        )
-    }
-
-    static func usageDescriptionDeclared(_ value: Bool) -> Component {
-        .init(
-            .usageDescriptionDeclared,
-            value
-        )
-    }
-
-    static func threadIdentifier(_ value: UInt64) -> Component {
-        .init(
-            .threadIdentifier,
-            value
-        )
-    }
-
-    static func threadRunState(_ value: String) -> Component {
-        .init(
-            .threadRunState,
-            value
-        )
-    }
-
-    static func threadIdle(_ value: Bool) -> Component {
-        .init(.threadIdle, value)
-    }
-
-    static func threadPriority(_ value: Int32)
-        -> Component
-    {
-        .init(.threadPriority, value)
-    }
-
-    static func threadBasePriority(_ value: Int32) -> Component {
-        .init(
-            .threadBasePriority,
-            value
-        )
-    }
-
-    static func cpuNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .cpuNanoseconds,
-            value
-        )
-    }
-
-    static func wakeupCount(_ value: UInt64) -> Component {
-        .init(.wakeupCount, value)
-    }
-
-    static func idleWakeupCount(_ value: UInt64) -> Component {
-        .init(
-            .idleWakeupCount,
-            value
-        )
-    }
-
-    static func queueLatencyNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .queueLatencyNanoseconds,
-            value
-        )
-    }
-
-    static func queueLabel(_ value: String) -> Component {
-        .init(.queueLabel, value)
-    }
-
-    static func insertedCount(_ value: UInt32)
-        -> Component
-    {
-        .init(.insertedCount, value)
-    }
-
-    static func updatedCount(_ value: UInt32) -> Component {
-        .init(.updatedCount, value)
-    }
-
-    static func deletedCount(_ value: UInt32) -> Component {
-        .init(.deletedCount, value)
-    }
-
-    static func refreshedCount(_ value: UInt32) -> Component {
-        .init(
-            .refreshedCount,
-            value
-        )
-    }
-
-    static func contextConcurrency(_ value: String) -> Component {
-        .init(
-            .contextConcurrency,
-            value
-        )
-    }
-
-    static func confinementViolation(_ value: Bool) -> Component {
-        .init(
-            .confinementViolation,
-            value
-        )
-    }
-
-    static func logLevel(_ value: String) -> Component {
-        .init(.logLevel, value)
-    }
-
-    static func dnsNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .dnsNanoseconds,
-            value
-        )
-    }
-
-    static func connectNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .connectNanoseconds,
-            value
-        )
-    }
-
-    static func tlsNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .tlsNanoseconds,
-            value
-        )
-    }
-
-    static func serverNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .serverNanoseconds,
-            value
-        )
-    }
-
-    static func responseNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .responseNanoseconds,
-            value
-        )
-    }
-
-    static func tlsVersion(_ value: String) -> Component {
-        .init(.tlsVersion, value)
-    }
-
-    static func tlsCipherSuite(_ value: String) -> Component {
-        .init(
-            .tlsCipherSuite,
-            value
-        )
-    }
-
-    static func transactionCount(_ value: UInt32) -> Component {
-        .init(
-            .transactionCount,
-            value
-        )
-    }
-
-    static func requestTimeoutSeconds(_ value: Float) -> Component {
-        .init(
-            .requestTimeoutSeconds,
-            value
-        )
-    }
-
-    static func resourceTimeoutSeconds(_ value: Float) -> Component {
-        .init(
-            .resourceTimeoutSeconds,
-            value
-        )
-    }
-
-    static func allowsCellular(_ value: Bool)
-        -> Component
-    {
-        .init(.allowsCellular, value)
-    }
-
-    static func allowsExpensive(_ value: Bool) -> Component {
-        .init(
-            .allowsExpensive,
-            value
-        )
-    }
-
-    static func allowsConstrained(_ value: Bool) -> Component {
-        .init(
-            .allowsConstrained,
-            value
-        )
-    }
-
-    static func waitsForConnectivity(_ value: Bool) -> Component {
-        .init(
-            .waitsForConnectivity,
-            value
-        )
-    }
-
-    static func maximumConnectionsPerHost(_ value: UInt32) -> Component {
-        .init(
-            .maximumConnectionsPerHost,
-            value
-        )
-    }
-
-    static func cachePolicy(_ value: String) -> Component {
-        .init(.cachePolicy, value)
-    }
-
-    static func dnsProtocol(_ value: String) -> Component {
-        .init(.dnsProtocol, value)
-    }
-
-    static func remoteAddress(_ value: String)
-        -> Component
-    {
-        .init(.remoteAddress, value)
-    }
-
-    static func proxyConnection(_ value: Bool) -> Component {
-        .init(
-            .proxyConnection,
-            value
-        )
-    }
-
-    static func multipath(_ value: Bool) -> Component {
-        .init(.multipath, value)
-    }
-
-    static func arbitraryLoadsAllowed(_ value: Bool) -> Component {
-        .init(
-            .arbitraryLoadsAllowed,
-            value
-        )
-    }
-
-    static func exceptionDomain(_ value: String) -> Component {
-        .init(
-            .exceptionDomain,
-            value
-        )
-    }
-
-    static func insecureLoadsAllowed(_ value: Bool) -> Component {
-        .init(
-            .insecureLoadsAllowed,
-            value
-        )
-    }
-
-    static func minimumTLSVersion(_ value: String) -> Component {
-        .init(
-            .minimumTLSVersion,
-            value
-        )
-    }
-
-    static func deadlineMissCount(_ value: UInt32) -> Component {
-        .init(
-            .deadlineMissCount,
-            value
-        )
-    }
-
-    static func deadlineOverrunNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .deadlineOverrunNanoseconds,
-            value
-        )
-    }
-
-    static func presentationLatencyNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .presentationLatencyNanoseconds,
-            value
-        )
-    }
-
-    static func settingName(_ value: String) -> Component {
-        .init(.settingName, value)
-    }
-
-    static func settingEnabled(_ value: Bool)
-        -> Component
-    {
-        .init(.settingEnabled, value)
-    }
-
-    static func textSizeCategory(_ value: String) -> Component {
-        .init(
-            .textSizeCategory,
-            value
-        )
-    }
-
-    static func accessibilityTextSize(_ value: Bool) -> Component {
-        .init(
-            .accessibilityTextSize,
-            value
-        )
-    }
-
-    static func languageCode(_ value: String) -> Component {
-        .init(.languageCode, value)
-    }
-
-    static func regionCode(_ value: String) -> Component {
-        .init(.regionCode, value)
-    }
-
-    static func calendarIdentifier(_ value: String) -> Component {
-        .init(
-            .calendarIdentifier,
-            value
-        )
-    }
-
-    static func usesMetricSystem(_ value: Bool) -> Component {
-        .init(
-            .usesMetricSystem,
-            value
-        )
-    }
-
-    static func uses24HourTime(_ value: Bool)
-        -> Component
-    {
-        .init(.uses24HourTime, value)
-    }
-
-    static func layoutDirection(_ value: String) -> Component {
-        .init(
-            .layoutDirection,
-            value
-        )
-    }
-
-    static func syncEventType(_ value: String)
-        -> Component
-    {
-        .init(.syncEventType, value)
-    }
-
-    static func syncSucceeded(_ value: Bool) -> Component {
-        .init(.syncSucceeded, value)
-    }
-
-    static func changeReason(_ value: String) -> Component {
-        .init(.changeReason, value)
-    }
-
-    static func changedKeyCount(_ value: UInt32) -> Component {
-        .init(
-            .changedKeyCount,
-            value
-        )
-    }
-
-    static func notificationSetting(_ value: String) -> Component {
-        .init(
-            .notificationSetting,
-            value
-        )
-    }
-
-    static func settingState(_ value: String) -> Component {
-        .init(.settingState, value)
-    }
-
-    static func alertStyle(_ value: String) -> Component {
-        .init(.alertStyle, value)
-    }
-
-    static func previewVisibility(_ value: String) -> Component {
-        .init(
-            .previewVisibility,
-            value
-        )
-    }
-
-    static func callbackImplemented(_ value: Bool) -> Component {
-        .init(
-            .callbackImplemented,
-            value
-        )
-    }
-
-    static func silenceNanoseconds(_ value: UInt64) -> Component {
-        .init(
-            .silenceNanoseconds,
-            value
-        )
-    }
-
-    static func accuracyClass(_ value: String)
-        -> Component
-    {
-        .init(.accuracyClass, value)
-    }
-
-    static func callbackCount(_ value: UInt64)
-        -> Component
-    {
-        .init(.callbackCount, value)
-    }
-
-    static func delegateClass(_ value: String)
-        -> Component
-    {
-        .init(.delegateClass, value)
-    }
-
-    static func bluetoothState(_ value: String) -> Component {
-        .init(
-            .bluetoothState,
-            value
-        )
-    }
-
-    static func contentProcessTerminations(_ value: UInt64) -> Component {
-        .init(
-            .contentProcessTerminations,
-            value
-        )
-    }
-
-    static func tileLoadFailures(_ value: UInt64) -> Component {
-        .init(
-            .tileLoadFailures,
-            value
-        )
-    }
-
-    static func mapLoadsCompleted(_ value: UInt64) -> Component {
-        .init(
-            .mapLoadsCompleted,
-            value
-        )
-    }
-
-    static func callAction(_ value: String) -> Component {
-        .init(.callAction, value)
-    }
-
-    static func audioOutputPort(_ value: String) -> Component {
-        .init(
-            .audioOutputPort,
-            value
-        )
-    }
-
-    static func audioOutputName(_ value: String) -> Component {
-        .init(
-            .audioOutputName,
-            value
-        )
-    }
-
-    static func audioInputPort(_ value: String) -> Component {
-        .init(
-            .audioInputPort,
-            value
-        )
-    }
-
-    static func audioCategory(_ value: String)
-        -> Component
-    {
-        .init(.audioCategory, value)
-    }
-
-    static func audioMode(_ value: String) -> Component {
-        .init(.audioMode, value)
-    }
-
-    static func audioCategoryOptions(_ value: String) -> Component {
-        .init(
-            .audioCategoryOptions,
-            value
-        )
-    }
-
-    static func audioPreviousOutputPort(_ value: String) -> Component {
-        .init(
-            .audioPreviousOutputPort,
-            value
-        )
-    }
-
-    static func audioRouteVerdict(_ value: String) -> Component {
-        .init(
-            .audioRouteVerdict,
-            value
-        )
-    }
-
-    static func outputVolume(_ value: Float) -> Component {
-        .init(.outputVolume, value)
-    }
-
-    static func otherAudioPlaying(_ value: Bool) -> Component {
-        .init(
-            .otherAudioPlaying,
-            value
-        )
-    }
-
-    static func secondaryAudioSilenced(_ value: Bool) -> Component {
-        .init(
-            .secondaryAudioSilenced,
-            value
-        )
-    }
+    static func cpuUsageRatio(_ value: Float) -> Component { .init(.cpuUsageRatio, value) }
+    static func fps(_ value: Float) -> Component { .init(.fps, value) }
+    static func deviceId(_ value: String) -> Component { .init(.deviceId, value) }
+    static func source(_ value: String) -> Component { .init(.source, value) }
+    static func methodName(_ value: String) -> Component { .init(.methodName, value) }
+    static func methodDurationMilliseconds(_ value: Float) -> Component { .init(
+        .methodDurationMilliseconds,
+        value
+    ) }
+    static func deviceModel(_ value: String) -> Component { .init(.deviceModel, value) }
+    static func osVersion(_ value: String) -> Component { .init(.osVersion, value) }
+    static func appVersion(_ value: String) -> Component { .init(.appVersion, value) }
+    static func userId(_ value: String) -> Component { .init(.userId, value) }
+    static func serverVersion(_ value: String) -> Component { .init(.serverVersion, value) }
+    static func memoryUsedBytes(_ value: UInt64) -> Component { .init(.memoryUsedBytes, value) }
+    static func thermalState(_ value: String) -> Component { .init(.thermalState, value) }
+    static func detail(_ value: String) -> Component { .init(.detail, value) }
+    static func instrument(_ value: UInt16) -> Component { .init(.instrument, value) }
+    static func bundleId(_ value: String) -> Component { .init(.bundleId, value) }
+    static func buildConfiguration(_ value: String)
+        -> Component { .init(.buildConfiguration, value) }
+    static func deviceKind(_ value: String) -> Component { .init(.deviceKind, value) }
+    static func passCount(_ value: UInt64) -> Component { .init(.passCount, value) }
+    static func totalNanoseconds(_ value: UInt64) -> Component { .init(.totalNanoseconds, value) }
+    static func peakNanoseconds(_ value: UInt64) -> Component { .init(.peakNanoseconds, value) }
+    static func sessionRunning(_ value: Bool) -> Component { .init(.sessionRunning, value) }
+    static func sessionInterrupted(_ value: Bool) -> Component { .init(.sessionInterrupted, value) }
+    static func viewControllerClass(_ value: String) -> Component { .init(
+        .viewControllerClass,
+        value
+    ) }
+    static func instanceId(_ value: UInt32) -> Component { .init(.instanceId, value) }
+    static func httpStatusCode(_ value: Int32) -> Component { .init(.httpStatusCode, value) }
+    static func negotiatedProtocol(_ value: String)
+        -> Component { .init(.negotiatedProtocol, value) }
+    static func bytesSentCount(_ value: UInt64) -> Component { .init(.bytesSentCount, value) }
+    static func bytesReceivedCount(_ value: UInt64)
+        -> Component { .init(.bytesReceivedCount, value) }
+    static func requestURL(_ value: String) -> Component { .init(.requestURL, value) }
+    static func connectionReused(_ value: Bool) -> Component { .init(.connectionReused, value) }
+    static func interfaceKind(_ value: String) -> Component { .init(.interfaceKind, value) }
+    static func pathSatisfied(_ value: Bool) -> Component { .init(.pathSatisfied, value) }
+    static func expensiveInterface(_ value: Bool) -> Component { .init(.expensiveInterface, value) }
+    static func constrainedInterface(_ value: Bool) -> Component { .init(
+        .constrainedInterface,
+        value
+    ) }
+    static func unsatisfiedReason(_ value: String) -> Component { .init(.unsatisfiedReason, value) }
+    static func errorDomain(_ value: String) -> Component { .init(.errorDomain, value) }
+    static func errorCode(_ value: Int32) -> Component { .init(.errorCode, value) }
+    static func appState(_ value: String) -> Component { .init(.appState, value) }
+    static func sessionClass(_ value: String) -> Component { .init(.sessionClass, value) }
+    static func sessionPreset(_ value: String) -> Component { .init(.sessionPreset, value) }
+    static func inputCount(_ value: UInt32) -> Component { .init(.inputCount, value) }
+    static func outputCount(_ value: UInt32) -> Component { .init(.outputCount, value) }
+    static func connectionCount(_ value: UInt32) -> Component { .init(.connectionCount, value) }
+    static func activeConnectionCount(_ value: UInt32) -> Component { .init(
+        .activeConnectionCount,
+        value
+    ) }
+    static func hardwareCostRatio(_ value: Float) -> Component { .init(.hardwareCostRatio, value) }
+    static func systemPressureCostRatio(_ value: Float) -> Component { .init(
+        .systemPressureCostRatio,
+        value
+    ) }
+    static func systemPressureLevel(_ value: String) -> Component { .init(
+        .systemPressureLevel,
+        value
+    ) }
+    static func deviceType(_ value: String) -> Component { .init(.deviceType, value) }
+    static func devicePosition(_ value: String) -> Component { .init(.devicePosition, value) }
+    static func deviceUniqueId(_ value: String) -> Component { .init(.deviceUniqueId, value) }
+    static func formatWidthPixels(_ value: Int32) -> Component { .init(.formatWidthPixels, value) }
+    static func formatHeightPixels(_ value: Int32) -> Component { .init(.formatHeightPixels, value)
+    }
+
+    static func formatPixelFormat(_ value: String) -> Component { .init(.formatPixelFormat, value) }
+    static func formatMinFramesPerSecond(_ value: Float) -> Component { .init(
+        .formatMinFramesPerSecond,
+        value
+    ) }
+    static func formatMaxFramesPerSecond(_ value: Float) -> Component { .init(
+        .formatMaxFramesPerSecond,
+        value
+    ) }
+    static func formatMultiCamSupported(_ value: Bool) -> Component { .init(
+        .formatMultiCamSupported,
+        value
+    ) }
+    static func formatCount(_ value: UInt32) -> Component { .init(.formatCount, value) }
+    static func activeColorSpace(_ value: String) -> Component { .init(.activeColorSpace, value) }
+    static func videoRotationDegrees(_ value: Float) -> Component { .init(
+        .videoRotationDegrees,
+        value
+    ) }
+    static func videoMirrored(_ value: Bool) -> Component { .init(.videoMirrored, value) }
+    static func multiCamSetIndex(_ value: UInt32) -> Component { .init(.multiCamSetIndex, value) }
+    static func multiCamSetMembers(_ value: String)
+        -> Component { .init(.multiCamSetMembers, value) }
+    static func outputPixelFormat(_ value: String) -> Component { .init(.outputPixelFormat, value) }
+    static func outputPixelFormatSupported(_ value: Bool) -> Component { .init(
+        .outputPixelFormatSupported,
+        value
+    ) }
+    static func framesDeliveredCount(_ value: UInt64) -> Component { .init(
+        .framesDeliveredCount,
+        value
+    ) }
+    static func framesDroppedCount(_ value: UInt64)
+        -> Component { .init(.framesDroppedCount, value) }
+    static func dropReason(_ value: String) -> Component { .init(.dropReason, value) }
+    static func hangNanoseconds(_ value: UInt64) -> Component { .init(.hangNanoseconds, value) }
+    static func hangResolved(_ value: Bool) -> Component { .init(.hangResolved, value) }
+    static func runLoopTurnCount(_ value: UInt64) -> Component { .init(.runLoopTurnCount, value) }
+    static func threadIndex(_ value: UInt32) -> Component { .init(.threadIndex, value) }
+    static func threadName(_ value: String) -> Component { .init(.threadName, value) }
+    static func threadIsMain(_ value: Bool) -> Component { .init(.threadIsMain, value) }
+    static func frameAddress(_ value: UInt64) -> Component { .init(.frameAddress, value) }
+    static func imageName(_ value: String) -> Component { .init(.imageName, value) }
+    static func imageLoadAddress(_ value: UInt64) -> Component { .init(.imageLoadAddress, value) }
+    static func imageUUID(_ value: String) -> Component { .init(.imageUUID, value) }
+    static func buildUUID(_ value: String) -> Component { .init(.buildUUID, value) }
+    static func launchId(_ value: UInt64) -> Component { .init(.launchId, value) }
+    static func logSubsystem(_ value: String) -> Component { .init(.logSubsystem, value) }
+    static func logCategory(_ value: String) -> Component { .init(.logCategory, value) }
+    static func logMessage(_ value: String) -> Component { .init(.logMessage, value) }
+    static func occurrenceCount(_ value: UInt64) -> Component { .init(.occurrenceCount, value) }
+    static func hostRootViewType(_ value: String) -> Component { .init(.hostRootViewType, value) }
+    static func hostRootViewOpaque(_ value: Bool) -> Component { .init(.hostRootViewOpaque, value) }
+    static func hostNavigationTitle(_ value: String) -> Component { .init(
+        .hostNavigationTitle,
+        value
+    ) }
+    static func hostAppearNanoseconds(_ value: UInt64) -> Component { .init(
+        .hostAppearNanoseconds,
+        value
+    ) }
+    static func hostKind(_ value: String) -> Component { .init(.hostKind, value) }
+    static func hostCount(_ value: UInt32) -> Component { .init(.hostCount, value) }
+    static func hostViewClass(_ value: String) -> Component { .init(.hostViewClass, value) }
+    static func mechanismStatus(_ value: String) -> Component { .init(.mechanismStatus, value) }
+    static func displayListSeed(_ value: UInt32) -> Component { .init(.displayListSeed, value) }
+    static func displayListItemCount(_ value: UInt32) -> Component { .init(
+        .displayListItemCount,
+        value
+    ) }
+    static func displayListChangeCount(_ value: UInt64) -> Component { .init(
+        .displayListChangeCount,
+        value
+    ) }
+    static func ivarPathGeneration(_ value: String)
+        -> Component { .init(.ivarPathGeneration, value) }
+    static func presentationKind(_ value: String) -> Component { .init(.presentationKind, value) }
+    static func presentedRootViewType(_ value: String) -> Component { .init(
+        .presentedRootViewType,
+        value
+    ) }
+    static func windowNanoseconds(_ value: UInt64) -> Component { .init(.windowNanoseconds, value) }
+    static func memoryLimitBytes(_ value: UInt64) -> Component { .init(.memoryLimitBytes, value) }
+    static func memoryAvailableBytes(_ value: UInt64) -> Component { .init(
+        .memoryAvailableBytes,
+        value
+    ) }
+    static func memoryPressureLevel(_ value: String) -> Component { .init(
+        .memoryPressureLevel,
+        value
+    ) }
+    static func memoryPressureScope(_ value: String) -> Component { .init(
+        .memoryPressureScope,
+        value
+    ) }
+    static func exitReason(_ value: String) -> Component { .init(.exitReason, value) }
+    static func intervalEndMicroseconds(_ value: UInt64) -> Component { .init(
+        .intervalEndMicroseconds,
+        value
+    ) }
+    static func permissionSubject(_ value: String) -> Component { .init(.permissionSubject, value) }
+    static func authorizationStatus(_ value: String) -> Component { .init(
+        .authorizationStatus,
+        value
+    ) }
+    static func usageDescriptionDeclared(_ value: Bool) -> Component { .init(
+        .usageDescriptionDeclared,
+        value
+    ) }
+    static func threadIdentifier(_ value: UInt64) -> Component { .init(.threadIdentifier, value) }
+    static func threadRunState(_ value: String) -> Component { .init(.threadRunState, value) }
+    static func threadIdle(_ value: Bool) -> Component { .init(.threadIdle, value) }
+    static func threadPriority(_ value: Int32) -> Component { .init(.threadPriority, value) }
+    static func threadBasePriority(_ value: Int32) -> Component { .init(.threadBasePriority, value)
+    }
+
+    static func cpuNanoseconds(_ value: UInt64) -> Component { .init(.cpuNanoseconds, value) }
+    static func wakeupCount(_ value: UInt64) -> Component { .init(.wakeupCount, value) }
+    static func idleWakeupCount(_ value: UInt64) -> Component { .init(.idleWakeupCount, value) }
+    static func queueLatencyNanoseconds(_ value: UInt64) -> Component { .init(
+        .queueLatencyNanoseconds,
+        value
+    ) }
+    static func queueLabel(_ value: String) -> Component { .init(.queueLabel, value) }
+    static func insertedCount(_ value: UInt32) -> Component { .init(.insertedCount, value) }
+    static func updatedCount(_ value: UInt32) -> Component { .init(.updatedCount, value) }
+    static func deletedCount(_ value: UInt32) -> Component { .init(.deletedCount, value) }
+    static func refreshedCount(_ value: UInt32) -> Component { .init(.refreshedCount, value) }
+    static func contextConcurrency(_ value: String)
+        -> Component { .init(.contextConcurrency, value) }
+    static func confinementViolation(_ value: Bool) -> Component { .init(
+        .confinementViolation,
+        value
+    ) }
+    static func logLevel(_ value: String) -> Component { .init(.logLevel, value) }
+    static func dnsNanoseconds(_ value: UInt64) -> Component { .init(.dnsNanoseconds, value) }
+    static func connectNanoseconds(_ value: UInt64)
+        -> Component { .init(.connectNanoseconds, value) }
+    static func tlsNanoseconds(_ value: UInt64) -> Component { .init(.tlsNanoseconds, value) }
+    static func serverNanoseconds(_ value: UInt64) -> Component { .init(.serverNanoseconds, value) }
+    static func responseNanoseconds(_ value: UInt64) -> Component { .init(
+        .responseNanoseconds,
+        value
+    ) }
+    static func tlsVersion(_ value: String) -> Component { .init(.tlsVersion, value) }
+    static func tlsCipherSuite(_ value: String) -> Component { .init(.tlsCipherSuite, value) }
+    static func transactionCount(_ value: UInt32) -> Component { .init(.transactionCount, value) }
+    static func requestTimeoutSeconds(_ value: Float) -> Component { .init(
+        .requestTimeoutSeconds,
+        value
+    ) }
+    static func resourceTimeoutSeconds(_ value: Float) -> Component { .init(
+        .resourceTimeoutSeconds,
+        value
+    ) }
+    static func allowsCellular(_ value: Bool) -> Component { .init(.allowsCellular, value) }
+    static func allowsExpensive(_ value: Bool) -> Component { .init(.allowsExpensive, value) }
+    static func allowsConstrained(_ value: Bool) -> Component { .init(.allowsConstrained, value) }
+    static func waitsForConnectivity(_ value: Bool) -> Component { .init(
+        .waitsForConnectivity,
+        value
+    ) }
+    static func maximumConnectionsPerHost(_ value: UInt32) -> Component { .init(
+        .maximumConnectionsPerHost,
+        value
+    ) }
+    static func cachePolicy(_ value: String) -> Component { .init(.cachePolicy, value) }
+    static func dnsProtocol(_ value: String) -> Component { .init(.dnsProtocol, value) }
+    static func remoteAddress(_ value: String) -> Component { .init(.remoteAddress, value) }
+    static func proxyConnection(_ value: Bool) -> Component { .init(.proxyConnection, value) }
+    static func multipath(_ value: Bool) -> Component { .init(.multipath, value) }
+    static func arbitraryLoadsAllowed(_ value: Bool) -> Component { .init(
+        .arbitraryLoadsAllowed,
+        value
+    ) }
+    static func exceptionDomain(_ value: String) -> Component { .init(.exceptionDomain, value) }
+    static func insecureLoadsAllowed(_ value: Bool) -> Component { .init(
+        .insecureLoadsAllowed,
+        value
+    ) }
+    static func minimumTLSVersion(_ value: String) -> Component { .init(.minimumTLSVersion, value) }
+    static func deadlineMissCount(_ value: UInt32) -> Component { .init(.deadlineMissCount, value) }
+    static func deadlineOverrunNanoseconds(_ value: UInt64) -> Component { .init(
+        .deadlineOverrunNanoseconds,
+        value
+    ) }
+    static func presentationLatencyNanoseconds(_ value: UInt64) -> Component { .init(
+        .presentationLatencyNanoseconds,
+        value
+    ) }
+    static func settingName(_ value: String) -> Component { .init(.settingName, value) }
+    static func settingEnabled(_ value: Bool) -> Component { .init(.settingEnabled, value) }
+    static func textSizeCategory(_ value: String) -> Component { .init(.textSizeCategory, value) }
+    static func accessibilityTextSize(_ value: Bool) -> Component { .init(
+        .accessibilityTextSize,
+        value
+    ) }
+    static func languageCode(_ value: String) -> Component { .init(.languageCode, value) }
+    static func regionCode(_ value: String) -> Component { .init(.regionCode, value) }
+    static func calendarIdentifier(_ value: String)
+        -> Component { .init(.calendarIdentifier, value) }
+    static func usesMetricSystem(_ value: Bool) -> Component { .init(.usesMetricSystem, value) }
+    static func uses24HourTime(_ value: Bool) -> Component { .init(.uses24HourTime, value) }
+    static func layoutDirection(_ value: String) -> Component { .init(.layoutDirection, value) }
+    static func syncEventType(_ value: String) -> Component { .init(.syncEventType, value) }
+    static func syncSucceeded(_ value: Bool) -> Component { .init(.syncSucceeded, value) }
+    static func changeReason(_ value: String) -> Component { .init(.changeReason, value) }
+    static func changedKeyCount(_ value: UInt32) -> Component { .init(.changedKeyCount, value) }
+    static func notificationSetting(_ value: String) -> Component { .init(
+        .notificationSetting,
+        value
+    ) }
+    static func settingState(_ value: String) -> Component { .init(.settingState, value) }
+    static func alertStyle(_ value: String) -> Component { .init(.alertStyle, value) }
+    static func previewVisibility(_ value: String) -> Component { .init(.previewVisibility, value) }
+    static func callbackImplemented(_ value: Bool)
+        -> Component { .init(.callbackImplemented, value) }
+    static func silenceNanoseconds(_ value: UInt64)
+        -> Component { .init(.silenceNanoseconds, value) }
+    static func accuracyClass(_ value: String) -> Component { .init(.accuracyClass, value) }
+    static func callbackCount(_ value: UInt64) -> Component { .init(.callbackCount, value) }
+    static func delegateClass(_ value: String) -> Component { .init(.delegateClass, value) }
+    static func bluetoothState(_ value: String) -> Component { .init(.bluetoothState, value) }
+    static func contentProcessTerminations(_ value: UInt64) -> Component { .init(
+        .contentProcessTerminations,
+        value
+    ) }
+    static func tileLoadFailures(_ value: UInt64) -> Component { .init(.tileLoadFailures, value) }
+    static func mapLoadsCompleted(_ value: UInt64) -> Component { .init(.mapLoadsCompleted, value) }
+    static func callAction(_ value: String) -> Component { .init(.callAction, value) }
+    static func audioOutputPort(_ value: String) -> Component { .init(.audioOutputPort, value) }
+    static func audioOutputName(_ value: String) -> Component { .init(.audioOutputName, value) }
+    static func audioInputPort(_ value: String) -> Component { .init(.audioInputPort, value) }
+    static func audioCategory(_ value: String) -> Component { .init(.audioCategory, value) }
+    static func audioMode(_ value: String) -> Component { .init(.audioMode, value) }
+    static func audioCategoryOptions(_ value: String) -> Component { .init(
+        .audioCategoryOptions,
+        value
+    ) }
+    static func audioPreviousOutputPort(_ value: String) -> Component { .init(
+        .audioPreviousOutputPort,
+        value
+    ) }
+    static func audioRouteVerdict(_ value: String) -> Component { .init(.audioRouteVerdict, value) }
+    static func outputVolume(_ value: Float) -> Component { .init(.outputVolume, value) }
+    static func otherAudioPlaying(_ value: Bool) -> Component { .init(.otherAudioPlaying, value) }
+    static func secondaryAudioSilenced(_ value: Bool) -> Component { .init(
+        .secondaryAudioSilenced,
+        value
+    ) }
 }
