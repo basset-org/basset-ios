@@ -541,6 +541,28 @@ struct RuntimeConvergenceTests {
         #expect(memory?.stopCount == 1)
     }
 
+    /// The bound, not the mechanism that enforced it: the timer and the send
+    /// path both end an expired request, and a test cannot silence one to watch
+    /// the other. What it can hold is the property either way — nothing the
+    /// request no longer authorises reaches the wire.
+    @Test func aReadingProducedAfterTheRequestRanOutIsNotSent() async throws {
+        let (subject, opener) = runtime()
+
+        subject.converge(
+            to: [request(1, instruments: ["memory.footprint"], expiresIn: 0.05)],
+            ingestEndpoint: "in"
+        )
+        let memory = try #require(subject.memory)
+        let before = opener.stream(1)?.count ?? 0
+
+        try await Task.sleep(for: .milliseconds(150))
+        memory.take()
+        subject.settle()
+
+        #expect(opener.stream(1)?.count ?? 0 == before)
+        #expect(subject.liveRequestIds.isEmpty)
+    }
+
     @Test func aRequestStillWithinItsTimeIsLeftRunning() {
         let (subject, _) = runtime()
 

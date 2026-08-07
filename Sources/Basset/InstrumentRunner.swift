@@ -71,6 +71,17 @@ final class InstrumentRunner: @unchecked Sendable {
         attributes: .concurrent
     )
 
+    /// Expiry does not share the flush pool. `.utility` is right for flushes —
+    /// a slow instrument should wait rather than starve the others — but it is
+    /// the class the system defers first when a process is backgrounded,
+    /// throttled, or saving power, which is most of a capture's life on a
+    /// phone. A deferred flush costs freshness; a deferred expiry keeps
+    /// instruments running after the request that authorised them ran out.
+    private let expiryQueue: DispatchQueue = .init(
+        label: QueueLabel.instrumentRunnerExpiry,
+        qos: .userInitiated
+    )
+
     /// The load-time handle. Its observers are the ones that must outlive every
     /// activation — a chokepoint that stops registering births cannot be caught
     /// up later — so nothing ever releases them.
@@ -309,7 +320,7 @@ final class InstrumentRunner: @unchecked Sendable {
             return
         }
 
-        let timer = DispatchSource.makeTimerSource(queue: flushPool)
+        let timer = DispatchSource.makeTimerSource(queue: expiryQueue)
         timer.schedule(deadline: .now() + max(0, earliest.timeIntervalSinceNow))
         timer.setEventHandler { [weak self] in
             guard let self else {
@@ -462,6 +473,12 @@ final class InstrumentRunner: @unchecked Sendable {
         let frame = encoder.frame(encoder.encode(record))
 
         queue.async { [self] in
+            // The bound is enforced here as well as by the timer, so a wake
+            // that the system defers costs one reading's latency rather than an
+            // unbounded capture. Before the send loop: a reading produced after
+            // its request ran out is one the request no longer authorises.
+            expireLocked(at: Date())
+
             guard activation.isActive else {
                 return
             }
