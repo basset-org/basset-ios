@@ -15,8 +15,8 @@ import UIKit
 /// against readings that arrive by the second, so it goes on the wire at the
 /// highest scope where it is constant.
 final class AppState: StreamingInstrument {
-    static let id: InstrumentWireID = .appStateChanges
-    static let entity = Entity.WireID.appLifecycle
+    static let id: InstrumentID = .appStateChanges
+    static let entity = Entity.ID.appLifecycle
 
     private var observers: [NSObjectProtocol] = []
     private let lock: NSLock = .init()
@@ -111,8 +111,8 @@ final class AppState: StreamingInstrument {
 /// into a verdict about the instant of death, and the whole reading turns on how
 /// fresh those numbers are.
 final class LastRunEnded: StreamingInstrument {
-    static let id: InstrumentWireID = .lastRunEnded
-    static let entity = Entity.WireID.appExit
+    static let id: InstrumentID = .lastRunEnded
+    static let entity = Entity.ID.appExit
 
     private static let stampInterval: TimeInterval = 1
 

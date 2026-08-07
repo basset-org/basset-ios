@@ -6,8 +6,8 @@ import UIKit
 #endif
 
 final class ViewControllerAppear: StreamingInstrument {
-    static let id: InstrumentWireID = .viewControllerAppear
-    static let entity = Entity.WireID.screen
+    static let id: InstrumentID = .viewControllerAppear
+    static let entity = Entity.ID.screen
 
     init() {}
 
@@ -32,8 +32,8 @@ final class ViewControllerAppear: StreamingInstrument {
 }
 
 final class ViewLayoutPass: StreamingInstrument {
-    static let id: InstrumentWireID = .viewLayoutPass
-    static let entity = Entity.WireID.viewLayout
+    static let id: InstrumentID = .viewLayoutPass
+    static let entity = Entity.ID.viewLayout
 
     private static let passes: TallySlot = .first
     private static let totalNanoseconds: TallySlot = .second

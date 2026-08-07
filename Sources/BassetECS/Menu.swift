@@ -1,7 +1,7 @@
 import Foundation
 
 /// What a caller reads to choose an instrument. Every field is derived from
-/// `InstrumentWireID` rather than hand-authored, so nothing here can disagree
+/// `InstrumentID` rather than hand-authored, so nothing here can disagree
 /// with the code that captures.
 public struct MenuEntry: Codable, Sendable, Equatable {
     public let id: UInt16
@@ -143,13 +143,13 @@ private extension String {
 /// space already holds, so a reader needs no build step and no device.
 public extension Menu {
     static var current: Menu {
-        Menu(instruments: InstrumentWireID.allCases
+        Menu(instruments: InstrumentID.allCases
             .sorted { $0.rawValue < $1.rawValue }
             .map(\.menuEntry))
     }
 }
 
-public extension InstrumentWireID {
+public extension InstrumentID {
     var menuEntry: MenuEntry {
         MenuEntry(
             id: rawValue,

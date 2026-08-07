@@ -19,8 +19,8 @@ import UIKit
 /// selection changed, a toggle that does not force a restart, a prompt answered
 /// by a sheet the app itself raised.
 final class PermissionChanges: StreamingInstrument {
-    static let id: InstrumentWireID = .permissionChanges
-    static let entity = Entity.WireID.permission
+    static let id: InstrumentID = .permissionChanges
+    static let entity = Entity.ID.permission
 
     private let lock: NSLock = .init()
     private var lastSeen: [String: String] = [:]
@@ -438,8 +438,8 @@ extension PermissionFinding {
 /// **terminates** the moment it asks, and no amount of reading the app's own code
 /// shows that.
 final class PermissionStatus: SnapshotInstrument {
-    static let id: InstrumentWireID = .permissionStatus
-    static let entity = Entity.WireID.permission
+    static let id: InstrumentID = .permissionStatus
+    static let entity = Entity.ID.permission
 
     init() {}
 

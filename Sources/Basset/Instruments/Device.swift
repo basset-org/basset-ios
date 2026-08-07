@@ -2,8 +2,8 @@ import BassetECS
 import Foundation
 
 final class DeviceInfo: SnapshotInstrument {
-    static let id: InstrumentWireID = .deviceInfo
-    static let entity = Entity.WireID.device
+    static let id: InstrumentID = .deviceInfo
+    static let entity = Entity.ID.device
 
     init() {}
 

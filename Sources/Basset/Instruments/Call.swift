@@ -17,8 +17,8 @@ import ObjectiveC
 /// the call if nobody does. The obligation rides in the argument, not the
 /// signature — so a callback may be defined only when it carries no obligation.
 final class ProviderActions: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .callProviderActions
-    static let entity = Entity.WireID.callProvider
+    static let id: InstrumentID = .callProviderActions
+    static let entity = Entity.ID.callProvider
 
     static let providerClassName = "CXProvider"
     static let setDelegate: Selector = .init("setDelegate:queue:")

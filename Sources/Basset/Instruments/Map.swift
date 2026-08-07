@@ -17,8 +17,8 @@ import ObjectiveC
 /// read — a tile failure is a count and an error code, and where the user was
 /// looking is not part of the finding.
 final class TileLoading: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .mapTileLoading
-    static let entity = Entity.WireID.mapView
+    static let id: InstrumentID = .mapTileLoading
+    static let entity = Entity.ID.mapView
 
     static let mapViewClassName = "MKMapView"
     static let setDelegate: Selector = .init("setDelegate:")

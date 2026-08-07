@@ -13,8 +13,8 @@ import Foundation
 /// would put CoreData in every app's binary and destroy the finding that an app
 /// posting none of these does not sync at all.
 final class CloudKitEvents: StreamingInstrument {
-    static let id: InstrumentWireID = .cloudKitEvents
-    static let entity = Entity.WireID.cloudSync
+    static let id: InstrumentID = .cloudKitEvents
+    static let entity = Entity.ID.cloudSync
 
     static let notification = Notification
         .Name("NSPersistentCloudKitContainerEventChangedNotification")
@@ -164,8 +164,8 @@ struct SyncEvent {
 /// the store's contents from the app's point of view, and an app that reads a
 /// setting back as nil concludes the user never set it.
 final class KeyValueStoreSync: StreamingInstrument {
-    static let id: InstrumentWireID = .keyValueStoreSync
-    static let entity = Entity.WireID.keyValueStore
+    static let id: InstrumentID = .keyValueStoreSync
+    static let entity = Entity.ID.keyValueStore
 
     static let notification =
         Notification.Name("NSUbiquitousKeyValueStoreDidChangeExternallyNotification")

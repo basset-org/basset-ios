@@ -17,8 +17,8 @@ struct EncoderTests {
 
         #expect(Array(payload.prefix(headerWidth)) == [
             PayloadKind.entity.rawValue,
-            Entity.WireID.device.rawValue.littleBytes.0,
-            Entity.WireID.device.rawValue.littleBytes.1,
+            Entity.ID.device.rawValue.littleBytes.0,
+            Entity.ID.device.rawValue.littleBytes.1,
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
         ])
         #expect(payload[headerWidth] == 1)
@@ -32,12 +32,12 @@ struct EncoderTests {
         let components = encoder.encode(device).dropFirst(headerWidth + 1)
 
         #expect(Array(components) == [
-            Component.WireID.memoryUsedBytes.rawValue.littleBytes.0,
-            Component.WireID.memoryUsedBytes.rawValue.littleBytes.1,
+            Component.ID.memoryUsedBytes.rawValue.littleBytes.0,
+            Component.ID.memoryUsedBytes.rawValue.littleBytes.1,
             Scalar.uint64.rawValue,
             0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            Component.WireID.deviceModel.rawValue.littleBytes.0,
-            Component.WireID.deviceModel.rawValue.littleBytes.1,
+            Component.ID.deviceModel.rawValue.littleBytes.0,
+            Component.ID.deviceModel.rawValue.littleBytes.1,
             Scalar.string.rawValue,
             10,
         ] + Array("iPhone17,2".utf8))

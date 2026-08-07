@@ -156,200 +156,19 @@ public enum ComponentValue: Equatable, Sendable {
     }
 }
 
-public enum Component: Equatable, Sendable {
-    case cpuUsageRatio(Float)
-    case fps(Float)
-    case deviceId(String)
-    case source(String)
-    case methodName(String)
-    case methodDurationMilliseconds(Float)
-    case deviceModel(String)
-    case osVersion(String)
-    case appVersion(String)
-    case userId(String)
-    case serverVersion(String)
-    case memoryUsedBytes(UInt64)
-    case thermalState(String)
-    case detail(String)
-    case instrument(UInt16)
-    case bundleId(String)
-    case buildConfiguration(String)
-    case deviceKind(String)
-    case passCount(UInt64)
-    case totalNanoseconds(UInt64)
-    case peakNanoseconds(UInt64)
-    case sessionRunning(Bool)
-    case sessionInterrupted(Bool)
-    case viewControllerClass(String)
-    case instanceId(UInt32)
-    case httpStatusCode(Int32)
-    case negotiatedProtocol(String)
-    case bytesSentCount(UInt64)
-    case bytesReceivedCount(UInt64)
-    case requestURL(String)
-    case connectionReused(Bool)
-    case interfaceKind(String)
-    case pathSatisfied(Bool)
-    case expensiveInterface(Bool)
-    case constrainedInterface(Bool)
-    case unsatisfiedReason(String)
-    case errorDomain(String)
-    case errorCode(Int32)
-    case appState(String)
-    case sessionClass(String)
-    case sessionPreset(String)
-    case inputCount(UInt32)
-    case outputCount(UInt32)
-    case connectionCount(UInt32)
-    case activeConnectionCount(UInt32)
-    case hardwareCostRatio(Float)
-    case systemPressureCostRatio(Float)
-    case systemPressureLevel(String)
-    case deviceType(String)
-    case devicePosition(String)
-    case deviceUniqueId(String)
-    case formatWidthPixels(Int32)
-    case formatHeightPixels(Int32)
-    case formatPixelFormat(String)
-    case formatMinFramesPerSecond(Float)
-    case formatMaxFramesPerSecond(Float)
-    case formatMultiCamSupported(Bool)
-    case formatCount(UInt32)
-    case activeColorSpace(String)
-    case videoRotationDegrees(Float)
-    case videoMirrored(Bool)
-    case multiCamSetIndex(UInt32)
-    case multiCamSetMembers(String)
-    case outputPixelFormat(String)
-    case outputPixelFormatSupported(Bool)
-    case framesDeliveredCount(UInt64)
-    case framesDroppedCount(UInt64)
-    case dropReason(String)
-    case hangNanoseconds(UInt64)
-    case hangResolved(Bool)
-    case runLoopTurnCount(UInt64)
-    case threadIndex(UInt32)
-    case threadName(String)
-    case threadIsMain(Bool)
-    case frameAddress(UInt64)
-    case imageName(String)
-    case imageLoadAddress(UInt64)
-    case imageUUID(String)
-    case buildUUID(String)
-    case launchId(UInt64)
-    case logSubsystem(String)
-    case logCategory(String)
-    case logMessage(String)
-    case occurrenceCount(UInt64)
-    case hostRootViewType(String)
-    case hostRootViewOpaque(Bool)
-    case hostNavigationTitle(String)
-    case hostAppearNanoseconds(UInt64)
-    case hostKind(String)
-    case hostCount(UInt32)
-    case hostViewClass(String)
-    case mechanismStatus(String)
-    case displayListSeed(UInt32)
-    case displayListItemCount(UInt32)
-    case displayListChangeCount(UInt64)
-    case ivarPathGeneration(String)
-    case presentationKind(String)
-    case presentedRootViewType(String)
-    case windowNanoseconds(UInt64)
-    case memoryLimitBytes(UInt64)
-    case memoryAvailableBytes(UInt64)
-    case memoryPressureLevel(String)
-    case memoryPressureScope(String)
-    case exitReason(String)
-    case intervalEndMicroseconds(UInt64)
-    case permissionSubject(String)
-    case authorizationStatus(String)
-    case usageDescriptionDeclared(Bool)
-    case threadIdentifier(UInt64)
-    case threadRunState(String)
-    case threadIdle(Bool)
-    case threadPriority(Int32)
-    case threadBasePriority(Int32)
-    case cpuNanoseconds(UInt64)
-    case wakeupCount(UInt64)
-    case idleWakeupCount(UInt64)
-    case queueLatencyNanoseconds(UInt64)
-    case queueLabel(String)
-    case insertedCount(UInt32)
-    case updatedCount(UInt32)
-    case deletedCount(UInt32)
-    case refreshedCount(UInt32)
-    case contextConcurrency(String)
-    case confinementViolation(Bool)
-    case logLevel(String)
-    case dnsNanoseconds(UInt64)
-    case connectNanoseconds(UInt64)
-    case tlsNanoseconds(UInt64)
-    case serverNanoseconds(UInt64)
-    case responseNanoseconds(UInt64)
-    case tlsVersion(String)
-    case tlsCipherSuite(String)
-    case transactionCount(UInt32)
-    case requestTimeoutSeconds(Float)
-    case resourceTimeoutSeconds(Float)
-    case allowsCellular(Bool)
-    case allowsExpensive(Bool)
-    case allowsConstrained(Bool)
-    case waitsForConnectivity(Bool)
-    case maximumConnectionsPerHost(UInt32)
-    case cachePolicy(String)
-    case dnsProtocol(String)
-    case remoteAddress(String)
-    case proxyConnection(Bool)
-    case multipath(Bool)
-    case arbitraryLoadsAllowed(Bool)
-    case exceptionDomain(String)
-    case insecureLoadsAllowed(Bool)
-    case minimumTLSVersion(String)
-    case deadlineMissCount(UInt32)
-    case deadlineOverrunNanoseconds(UInt64)
-    case presentationLatencyNanoseconds(UInt64)
-    case settingName(String)
-    case settingEnabled(Bool)
-    case textSizeCategory(String)
-    case accessibilityTextSize(Bool)
-    case languageCode(String)
-    case regionCode(String)
-    case calendarIdentifier(String)
-    case usesMetricSystem(Bool)
-    case uses24HourTime(Bool)
-    case layoutDirection(String)
-    case syncEventType(String)
-    case syncSucceeded(Bool)
-    case changeReason(String)
-    case changedKeyCount(UInt32)
-    case notificationSetting(String)
-    case settingState(String)
-    case alertStyle(String)
-    case previewVisibility(String)
-    case callbackImplemented(Bool)
-    case silenceNanoseconds(UInt64)
-    case accuracyClass(String)
-    case callbackCount(UInt64)
-    case delegateClass(String)
-    case bluetoothState(String)
-    case contentProcessTerminations(UInt64)
-    case tileLoadFailures(UInt64)
-    case mapLoadsCompleted(UInt64)
-    case callAction(String)
-    case audioOutputPort(String)
-    case audioOutputName(String)
-    case audioInputPort(String)
-    case audioCategory(String)
-    case audioMode(String)
-    case audioCategoryOptions(String)
-    case audioPreviousOutputPort(String)
-    case audioRouteVerdict(String)
-    case outputVolume(Float)
-    case otherAudioPlaying(Bool)
-    case secondaryAudioSilenced(Bool)
-
-    public enum WireID: UInt16, Sendable, CaseIterable {
+/// A reading's smallest unit: which component, and what it carries.
+///
+/// Stored rather than derived from a case, so the id a component claims and the
+/// type it carries are stated together, on the line that makes it. The shape
+/// this replaced said them twice — a case fixing the type, a switch arm fixing
+/// the id — far enough apart that an arm naming the wrong id read as correct.
+///
+/// It is still written by hand, so `everyFactoryClaimsTheIdItIsNamedFor` is
+/// what holds each factory to the id it is named for.
+///
+/// `init` is private: the factories below are the only components that exist.
+public struct Component: Equatable, Sendable {
+    public enum ID: UInt16, Sendable, CaseIterable {
         case cpuUsageRatio = 1
         case fps = 2
         case deviceId = 3
@@ -546,237 +365,1144 @@ public enum Component: Equatable, Sendable {
         case secondaryAudioSilenced = 194
     }
 
-    public var wire: (id: WireID, value: ComponentValue) {
-        switch self {
-        case .cpuUsageRatio(let v): (.cpuUsageRatio, v.componentValue)
-        case .fps(let v): (.fps, v.componentValue)
-        case .deviceId(let v): (.deviceId, v.componentValue)
-        case .source(let v): (.source, v.componentValue)
-        case .methodName(let v): (.methodName, v.componentValue)
-        case .methodDurationMilliseconds(let v): (
-                .methodDurationMilliseconds,
-                v.componentValue
-            )
-        case .deviceModel(let v): (.deviceModel, v.componentValue)
-        case .osVersion(let v): (.osVersion, v.componentValue)
-        case .appVersion(let v): (.appVersion, v.componentValue)
-        case .userId(let v): (.userId, v.componentValue)
-        case .serverVersion(let v): (.serverVersion, v.componentValue)
-        case .memoryUsedBytes(let v): (.memoryUsedBytes, v.componentValue)
-        case .thermalState(let v): (.thermalState, v.componentValue)
-        case .detail(let v): (.detail, v.componentValue)
-        case .instrument(let v): (.instrument, v.componentValue)
-        case .bundleId(let v): (.bundleId, v.componentValue)
-        case .buildConfiguration(let v): (.buildConfiguration, v.componentValue)
-        case .deviceKind(let v): (.deviceKind, v.componentValue)
-        case .passCount(let v): (.passCount, v.componentValue)
-        case .totalNanoseconds(let v): (.totalNanoseconds, v.componentValue)
-        case .peakNanoseconds(let v): (.peakNanoseconds, v.componentValue)
-        case .sessionRunning(let v): (.sessionRunning, v.componentValue)
-        case .sessionInterrupted(let v): (.sessionInterrupted, v.componentValue)
-        case .viewControllerClass(let v): (.viewControllerClass, v.componentValue)
-        case .instanceId(let v): (.instanceId, v.componentValue)
-        case .httpStatusCode(let v): (.httpStatusCode, v.componentValue)
-        case .negotiatedProtocol(let v): (.negotiatedProtocol, v.componentValue)
-        case .bytesSentCount(let v): (.bytesSentCount, v.componentValue)
-        case .bytesReceivedCount(let v): (.bytesReceivedCount, v.componentValue)
-        case .requestURL(let v): (.requestURL, v.componentValue)
-        case .connectionReused(let v): (.connectionReused, v.componentValue)
-        case .interfaceKind(let v): (.interfaceKind, v.componentValue)
-        case .pathSatisfied(let v): (.pathSatisfied, v.componentValue)
-        case .expensiveInterface(let v): (.expensiveInterface, v.componentValue)
-        case .constrainedInterface(let v): (.constrainedInterface, v.componentValue)
-        case .unsatisfiedReason(let v): (.unsatisfiedReason, v.componentValue)
-        case .errorDomain(let v): (.errorDomain, v.componentValue)
-        case .errorCode(let v): (.errorCode, v.componentValue)
-        case .appState(let v): (.appState, v.componentValue)
-        case .sessionClass(let v): (.sessionClass, v.componentValue)
-        case .sessionPreset(let v): (.sessionPreset, v.componentValue)
-        case .inputCount(let v): (.inputCount, v.componentValue)
-        case .outputCount(let v): (.outputCount, v.componentValue)
-        case .connectionCount(let v): (.connectionCount, v.componentValue)
-        case .activeConnectionCount(let v): (.activeConnectionCount, v.componentValue)
-        case .hardwareCostRatio(let v): (.hardwareCostRatio, v.componentValue)
-        case .systemPressureCostRatio(let v): (.systemPressureCostRatio, v.componentValue)
-        case .systemPressureLevel(let v): (.systemPressureLevel, v.componentValue)
-        case .deviceType(let v): (.deviceType, v.componentValue)
-        case .devicePosition(let v): (.devicePosition, v.componentValue)
-        case .deviceUniqueId(let v): (.deviceUniqueId, v.componentValue)
-        case .formatWidthPixels(let v): (.formatWidthPixels, v.componentValue)
-        case .formatHeightPixels(let v): (.formatHeightPixels, v.componentValue)
-        case .formatPixelFormat(let v): (.formatPixelFormat, v.componentValue)
-        case .formatMinFramesPerSecond(let v): (
-                .formatMinFramesPerSecond,
-                v.componentValue
-            )
-        case .formatMaxFramesPerSecond(let v): (
-                .formatMaxFramesPerSecond,
-                v.componentValue
-            )
-        case .formatMultiCamSupported(let v): (.formatMultiCamSupported, v.componentValue)
-        case .formatCount(let v): (.formatCount, v.componentValue)
-        case .activeColorSpace(let v): (.activeColorSpace, v.componentValue)
-        case .videoRotationDegrees(let v): (.videoRotationDegrees, v.componentValue)
-        case .videoMirrored(let v): (.videoMirrored, v.componentValue)
-        case .multiCamSetIndex(let v): (.multiCamSetIndex, v.componentValue)
-        case .multiCamSetMembers(let v): (.multiCamSetMembers, v.componentValue)
-        case .outputPixelFormat(let v): (.outputPixelFormat, v.componentValue)
-        case .outputPixelFormatSupported(let v): (
-                .outputPixelFormatSupported,
-                v.componentValue
-            )
-        case .framesDeliveredCount(let v): (.framesDeliveredCount, v.componentValue)
-        case .framesDroppedCount(let v): (.framesDroppedCount, v.componentValue)
-        case .dropReason(let v): (.dropReason, v.componentValue)
-        case .hangNanoseconds(let v): (.hangNanoseconds, v.componentValue)
-        case .hangResolved(let v): (.hangResolved, v.componentValue)
-        case .runLoopTurnCount(let v): (.runLoopTurnCount, v.componentValue)
-        case .threadIndex(let v): (.threadIndex, v.componentValue)
-        case .threadName(let v): (.threadName, v.componentValue)
-        case .threadIsMain(let v): (.threadIsMain, v.componentValue)
-        case .frameAddress(let v): (.frameAddress, v.componentValue)
-        case .imageName(let v): (.imageName, v.componentValue)
-        case .imageLoadAddress(let v): (.imageLoadAddress, v.componentValue)
-        case .imageUUID(let v): (.imageUUID, v.componentValue)
-        case .buildUUID(let v): (.buildUUID, v.componentValue)
-        case .launchId(let v): (.launchId, v.componentValue)
-        case .logSubsystem(let v): (.logSubsystem, v.componentValue)
-        case .logCategory(let v): (.logCategory, v.componentValue)
-        case .logMessage(let v): (.logMessage, v.componentValue)
-        case .occurrenceCount(let v): (.occurrenceCount, v.componentValue)
-        case .hostRootViewType(let v): (.hostRootViewType, v.componentValue)
-        case .hostRootViewOpaque(let v): (.hostRootViewOpaque, v.componentValue)
-        case .hostNavigationTitle(let v): (.hostNavigationTitle, v.componentValue)
-        case .hostAppearNanoseconds(let v): (.hostAppearNanoseconds, v.componentValue)
-        case .hostKind(let v): (.hostKind, v.componentValue)
-        case .hostCount(let v): (.hostCount, v.componentValue)
-        case .hostViewClass(let v): (.hostViewClass, v.componentValue)
-        case .mechanismStatus(let v): (.mechanismStatus, v.componentValue)
-        case .displayListSeed(let v): (.displayListSeed, v.componentValue)
-        case .displayListItemCount(let v): (.displayListItemCount, v.componentValue)
-        case .displayListChangeCount(let v): (.displayListChangeCount, v.componentValue)
-        case .ivarPathGeneration(let v): (.ivarPathGeneration, v.componentValue)
-        case .presentationKind(let v): (.presentationKind, v.componentValue)
-        case .presentedRootViewType(let v): (.presentedRootViewType, v.componentValue)
-        case .windowNanoseconds(let v): (.windowNanoseconds, v.componentValue)
-        case .memoryLimitBytes(let v): (.memoryLimitBytes, v.componentValue)
-        case .memoryAvailableBytes(let v): (.memoryAvailableBytes, v.componentValue)
-        case .memoryPressureLevel(let v): (.memoryPressureLevel, v.componentValue)
-        case .memoryPressureScope(let v): (.memoryPressureScope, v.componentValue)
-        case .exitReason(let v): (.exitReason, v.componentValue)
-        case .intervalEndMicroseconds(let v): (.intervalEndMicroseconds, v.componentValue)
-        case .permissionSubject(let v): (.permissionSubject, v.componentValue)
-        case .authorizationStatus(let v): (.authorizationStatus, v.componentValue)
-        case .usageDescriptionDeclared(let v): (
-                .usageDescriptionDeclared,
-                v.componentValue
-            )
-        case .threadIdentifier(let v): (.threadIdentifier, v.componentValue)
-        case .threadRunState(let v): (.threadRunState, v.componentValue)
-        case .threadIdle(let v): (.threadIdle, v.componentValue)
-        case .threadPriority(let v): (.threadPriority, v.componentValue)
-        case .threadBasePriority(let v): (.threadBasePriority, v.componentValue)
-        case .cpuNanoseconds(let v): (.cpuNanoseconds, v.componentValue)
-        case .wakeupCount(let v): (.wakeupCount, v.componentValue)
-        case .idleWakeupCount(let v): (.idleWakeupCount, v.componentValue)
-        case .queueLatencyNanoseconds(let v): (.queueLatencyNanoseconds, v.componentValue)
-        case .queueLabel(let v): (.queueLabel, v.componentValue)
-        case .insertedCount(let v): (.insertedCount, v.componentValue)
-        case .updatedCount(let v): (.updatedCount, v.componentValue)
-        case .deletedCount(let v): (.deletedCount, v.componentValue)
-        case .refreshedCount(let v): (.refreshedCount, v.componentValue)
-        case .contextConcurrency(let v): (.contextConcurrency, v.componentValue)
-        case .confinementViolation(let v): (.confinementViolation, v.componentValue)
-        case .logLevel(let v): (.logLevel, v.componentValue)
-        case .dnsNanoseconds(let v): (.dnsNanoseconds, v.componentValue)
-        case .connectNanoseconds(let v): (.connectNanoseconds, v.componentValue)
-        case .tlsNanoseconds(let v): (.tlsNanoseconds, v.componentValue)
-        case .serverNanoseconds(let v): (.serverNanoseconds, v.componentValue)
-        case .responseNanoseconds(let v): (.responseNanoseconds, v.componentValue)
-        case .tlsVersion(let v): (.tlsVersion, v.componentValue)
-        case .tlsCipherSuite(let v): (.tlsCipherSuite, v.componentValue)
-        case .transactionCount(let v): (.transactionCount, v.componentValue)
-        case .requestTimeoutSeconds(let v): (.requestTimeoutSeconds, v.componentValue)
-        case .resourceTimeoutSeconds(let v): (.resourceTimeoutSeconds, v.componentValue)
-        case .allowsCellular(let v): (.allowsCellular, v.componentValue)
-        case .allowsExpensive(let v): (.allowsExpensive, v.componentValue)
-        case .allowsConstrained(let v): (.allowsConstrained, v.componentValue)
-        case .waitsForConnectivity(let v): (.waitsForConnectivity, v.componentValue)
-        case .maximumConnectionsPerHost(let v): (
-                .maximumConnectionsPerHost,
-                v.componentValue
-            )
-        case .cachePolicy(let v): (.cachePolicy, v.componentValue)
-        case .dnsProtocol(let v): (.dnsProtocol, v.componentValue)
-        case .remoteAddress(let v): (.remoteAddress, v.componentValue)
-        case .proxyConnection(let v): (.proxyConnection, v.componentValue)
-        case .multipath(let v): (.multipath, v.componentValue)
-        case .arbitraryLoadsAllowed(let v): (.arbitraryLoadsAllowed, v.componentValue)
-        case .exceptionDomain(let v): (.exceptionDomain, v.componentValue)
-        case .insecureLoadsAllowed(let v): (.insecureLoadsAllowed, v.componentValue)
-        case .minimumTLSVersion(let v): (.minimumTLSVersion, v.componentValue)
-        case .deadlineMissCount(let v): (.deadlineMissCount, v.componentValue)
-        case .deadlineOverrunNanoseconds(let v): (
-                .deadlineOverrunNanoseconds,
-                v.componentValue
-            )
-        case .presentationLatencyNanoseconds(let v): (
-                .presentationLatencyNanoseconds,
-                v.componentValue
-            )
-        case .settingName(let v): (.settingName, v.componentValue)
-        case .settingEnabled(let v): (.settingEnabled, v.componentValue)
-        case .textSizeCategory(let v): (.textSizeCategory, v.componentValue)
-        case .accessibilityTextSize(let v): (.accessibilityTextSize, v.componentValue)
-        case .languageCode(let v): (.languageCode, v.componentValue)
-        case .regionCode(let v): (.regionCode, v.componentValue)
-        case .calendarIdentifier(let v): (.calendarIdentifier, v.componentValue)
-        case .usesMetricSystem(let v): (.usesMetricSystem, v.componentValue)
-        case .uses24HourTime(let v): (.uses24HourTime, v.componentValue)
-        case .layoutDirection(let v): (.layoutDirection, v.componentValue)
-        case .syncEventType(let v): (.syncEventType, v.componentValue)
-        case .syncSucceeded(let v): (.syncSucceeded, v.componentValue)
-        case .changeReason(let v): (.changeReason, v.componentValue)
-        case .changedKeyCount(let v): (.changedKeyCount, v.componentValue)
-        case .notificationSetting(let v): (.notificationSetting, v.componentValue)
-        case .settingState(let v): (.settingState, v.componentValue)
-        case .alertStyle(let v): (.alertStyle, v.componentValue)
-        case .previewVisibility(let v): (.previewVisibility, v.componentValue)
-        case .callbackImplemented(let v): (.callbackImplemented, v.componentValue)
-        case .silenceNanoseconds(let v): (.silenceNanoseconds, v.componentValue)
-        case .accuracyClass(let v): (.accuracyClass, v.componentValue)
-        case .callbackCount(let v): (.callbackCount, v.componentValue)
-        case .delegateClass(let v): (.delegateClass, v.componentValue)
-        case .bluetoothState(let v): (.bluetoothState, v.componentValue)
-        case .contentProcessTerminations(let v): (
-                .contentProcessTerminations,
-                v.componentValue
-            )
-        case .tileLoadFailures(let v): (.tileLoadFailures, v.componentValue)
-        case .mapLoadsCompleted(let v): (.mapLoadsCompleted, v.componentValue)
-        case .callAction(let v): (.callAction, v.componentValue)
-        case .audioOutputPort(let v): (.audioOutputPort, v.componentValue)
-        case .audioOutputName(let v): (.audioOutputName, v.componentValue)
-        case .audioInputPort(let v): (.audioInputPort, v.componentValue)
-        case .audioCategory(let v): (.audioCategory, v.componentValue)
-        case .audioMode(let v): (.audioMode, v.componentValue)
-        case .audioCategoryOptions(let v): (.audioCategoryOptions, v.componentValue)
-        case .audioPreviousOutputPort(let v): (
-                .audioPreviousOutputPort,
-                v.componentValue
-            )
-        case .audioRouteVerdict(let v): (.audioRouteVerdict, v.componentValue)
-        case .outputVolume(let v): (.outputVolume, v.componentValue)
-        case .otherAudioPlaying(let v): (.otherAudioPlaying, v.componentValue)
-        case .secondaryAudioSilenced(let v): (.secondaryAudioSilenced, v.componentValue)
-        }
+    public let id: ID
+    public let value: ComponentValue
+
+    private init(_ id: ID, _ value: some ScalarValue) {
+        self.id = id
+        self.value = value.componentValue
+    }
+}
+
+public extension Component {
+    static func cpuUsageRatio(_ value: Float) -> Component {
+        .init(.cpuUsageRatio, value)
     }
 
-    public var id: WireID {
-        wire.id
+    static func fps(_ value: Float) -> Component {
+        .init(.fps, value)
     }
 
-    public var value: ComponentValue {
-        wire.value
+    static func deviceId(_ value: String) -> Component {
+        .init(.deviceId, value)
+    }
+
+    static func source(_ value: String) -> Component {
+        .init(.source, value)
+    }
+
+    static func methodName(_ value: String) -> Component {
+        .init(.methodName, value)
+    }
+
+    static func methodDurationMilliseconds(_ value: Float) -> Component {
+        .init(
+            .methodDurationMilliseconds,
+            value
+        )
+    }
+
+    static func deviceModel(_ value: String) -> Component {
+        .init(.deviceModel, value)
+    }
+
+    static func osVersion(_ value: String) -> Component {
+        .init(.osVersion, value)
+    }
+
+    static func appVersion(_ value: String) -> Component {
+        .init(.appVersion, value)
+    }
+
+    static func userId(_ value: String) -> Component {
+        .init(.userId, value)
+    }
+
+    static func serverVersion(_ value: String)
+        -> Component
+    {
+        .init(.serverVersion, value)
+    }
+
+    static func memoryUsedBytes(_ value: UInt64) -> Component {
+        .init(
+            .memoryUsedBytes,
+            value
+        )
+    }
+
+    static func thermalState(_ value: String) -> Component {
+        .init(.thermalState, value)
+    }
+
+    static func detail(_ value: String) -> Component {
+        .init(.detail, value)
+    }
+
+    static func instrument(_ value: UInt16) -> Component {
+        .init(.instrument, value)
+    }
+
+    static func bundleId(_ value: String) -> Component {
+        .init(.bundleId, value)
+    }
+
+    static func buildConfiguration(_ value: String) -> Component {
+        .init(
+            .buildConfiguration,
+            value
+        )
+    }
+
+    static func deviceKind(_ value: String) -> Component {
+        .init(.deviceKind, value)
+    }
+
+    static func passCount(_ value: UInt64) -> Component {
+        .init(.passCount, value)
+    }
+
+    static func totalNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .totalNanoseconds,
+            value
+        )
+    }
+
+    static func peakNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .peakNanoseconds,
+            value
+        )
+    }
+
+    static func sessionRunning(_ value: Bool)
+        -> Component
+    {
+        .init(.sessionRunning, value)
+    }
+
+    static func sessionInterrupted(_ value: Bool) -> Component {
+        .init(
+            .sessionInterrupted,
+            value
+        )
+    }
+
+    static func viewControllerClass(_ value: String) -> Component {
+        .init(
+            .viewControllerClass,
+            value
+        )
+    }
+
+    static func instanceId(_ value: UInt32) -> Component {
+        .init(.instanceId, value)
+    }
+
+    static func httpStatusCode(_ value: Int32)
+        -> Component
+    {
+        .init(.httpStatusCode, value)
+    }
+
+    static func negotiatedProtocol(_ value: String) -> Component {
+        .init(
+            .negotiatedProtocol,
+            value
+        )
+    }
+
+    static func bytesSentCount(_ value: UInt64) -> Component {
+        .init(
+            .bytesSentCount,
+            value
+        )
+    }
+
+    static func bytesReceivedCount(_ value: UInt64) -> Component {
+        .init(
+            .bytesReceivedCount,
+            value
+        )
+    }
+
+    static func requestURL(_ value: String) -> Component {
+        .init(.requestURL, value)
+    }
+
+    static func connectionReused(_ value: Bool) -> Component {
+        .init(
+            .connectionReused,
+            value
+        )
+    }
+
+    static func interfaceKind(_ value: String)
+        -> Component
+    {
+        .init(.interfaceKind, value)
+    }
+
+    static func pathSatisfied(_ value: Bool) -> Component {
+        .init(.pathSatisfied, value)
+    }
+
+    static func expensiveInterface(_ value: Bool) -> Component {
+        .init(
+            .expensiveInterface,
+            value
+        )
+    }
+
+    static func constrainedInterface(_ value: Bool) -> Component {
+        .init(
+            .constrainedInterface,
+            value
+        )
+    }
+
+    static func unsatisfiedReason(_ value: String) -> Component {
+        .init(
+            .unsatisfiedReason,
+            value
+        )
+    }
+
+    static func errorDomain(_ value: String) -> Component {
+        .init(.errorDomain, value)
+    }
+
+    static func errorCode(_ value: Int32) -> Component {
+        .init(.errorCode, value)
+    }
+
+    static func appState(_ value: String) -> Component {
+        .init(.appState, value)
+    }
+
+    static func sessionClass(_ value: String) -> Component {
+        .init(.sessionClass, value)
+    }
+
+    static func sessionPreset(_ value: String)
+        -> Component
+    {
+        .init(.sessionPreset, value)
+    }
+
+    static func inputCount(_ value: UInt32) -> Component {
+        .init(.inputCount, value)
+    }
+
+    static func outputCount(_ value: UInt32) -> Component {
+        .init(.outputCount, value)
+    }
+
+    static func connectionCount(_ value: UInt32) -> Component {
+        .init(
+            .connectionCount,
+            value
+        )
+    }
+
+    static func activeConnectionCount(_ value: UInt32) -> Component {
+        .init(
+            .activeConnectionCount,
+            value
+        )
+    }
+
+    static func hardwareCostRatio(_ value: Float) -> Component {
+        .init(
+            .hardwareCostRatio,
+            value
+        )
+    }
+
+    static func systemPressureCostRatio(_ value: Float) -> Component {
+        .init(
+            .systemPressureCostRatio,
+            value
+        )
+    }
+
+    static func systemPressureLevel(_ value: String) -> Component {
+        .init(
+            .systemPressureLevel,
+            value
+        )
+    }
+
+    static func deviceType(_ value: String) -> Component {
+        .init(.deviceType, value)
+    }
+
+    static func devicePosition(_ value: String) -> Component {
+        .init(
+            .devicePosition,
+            value
+        )
+    }
+
+    static func deviceUniqueId(_ value: String) -> Component {
+        .init(
+            .deviceUniqueId,
+            value
+        )
+    }
+
+    static func formatWidthPixels(_ value: Int32) -> Component {
+        .init(
+            .formatWidthPixels,
+            value
+        )
+    }
+
+    static func formatHeightPixels(_ value: Int32) -> Component {
+        .init(
+            .formatHeightPixels,
+            value
+        )
+    }
+
+    static func formatPixelFormat(_ value: String) -> Component {
+        .init(
+            .formatPixelFormat,
+            value
+        )
+    }
+
+    static func formatMinFramesPerSecond(_ value: Float) -> Component {
+        .init(
+            .formatMinFramesPerSecond,
+            value
+        )
+    }
+
+    static func formatMaxFramesPerSecond(_ value: Float) -> Component {
+        .init(
+            .formatMaxFramesPerSecond,
+            value
+        )
+    }
+
+    static func formatMultiCamSupported(_ value: Bool) -> Component {
+        .init(
+            .formatMultiCamSupported,
+            value
+        )
+    }
+
+    static func formatCount(_ value: UInt32) -> Component {
+        .init(.formatCount, value)
+    }
+
+    static func activeColorSpace(_ value: String) -> Component {
+        .init(
+            .activeColorSpace,
+            value
+        )
+    }
+
+    static func videoRotationDegrees(_ value: Float) -> Component {
+        .init(
+            .videoRotationDegrees,
+            value
+        )
+    }
+
+    static func videoMirrored(_ value: Bool) -> Component {
+        .init(.videoMirrored, value)
+    }
+
+    static func multiCamSetIndex(_ value: UInt32) -> Component {
+        .init(
+            .multiCamSetIndex,
+            value
+        )
+    }
+
+    static func multiCamSetMembers(_ value: String) -> Component {
+        .init(
+            .multiCamSetMembers,
+            value
+        )
+    }
+
+    static func outputPixelFormat(_ value: String) -> Component {
+        .init(
+            .outputPixelFormat,
+            value
+        )
+    }
+
+    static func outputPixelFormatSupported(_ value: Bool) -> Component {
+        .init(
+            .outputPixelFormatSupported,
+            value
+        )
+    }
+
+    static func framesDeliveredCount(_ value: UInt64) -> Component {
+        .init(
+            .framesDeliveredCount,
+            value
+        )
+    }
+
+    static func framesDroppedCount(_ value: UInt64) -> Component {
+        .init(
+            .framesDroppedCount,
+            value
+        )
+    }
+
+    static func dropReason(_ value: String) -> Component {
+        .init(.dropReason, value)
+    }
+
+    static func hangNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .hangNanoseconds,
+            value
+        )
+    }
+
+    static func hangResolved(_ value: Bool) -> Component {
+        .init(.hangResolved, value)
+    }
+
+    static func runLoopTurnCount(_ value: UInt64) -> Component {
+        .init(
+            .runLoopTurnCount,
+            value
+        )
+    }
+
+    static func threadIndex(_ value: UInt32) -> Component {
+        .init(.threadIndex, value)
+    }
+
+    static func threadName(_ value: String) -> Component {
+        .init(.threadName, value)
+    }
+
+    static func threadIsMain(_ value: Bool) -> Component {
+        .init(.threadIsMain, value)
+    }
+
+    static func frameAddress(_ value: UInt64) -> Component {
+        .init(.frameAddress, value)
+    }
+
+    static func imageName(_ value: String) -> Component {
+        .init(.imageName, value)
+    }
+
+    static func imageLoadAddress(_ value: UInt64) -> Component {
+        .init(
+            .imageLoadAddress,
+            value
+        )
+    }
+
+    static func imageUUID(_ value: String) -> Component {
+        .init(.imageUUID, value)
+    }
+
+    static func buildUUID(_ value: String) -> Component {
+        .init(.buildUUID, value)
+    }
+
+    static func launchId(_ value: UInt64) -> Component {
+        .init(.launchId, value)
+    }
+
+    static func logSubsystem(_ value: String) -> Component {
+        .init(.logSubsystem, value)
+    }
+
+    static func logCategory(_ value: String) -> Component {
+        .init(.logCategory, value)
+    }
+
+    static func logMessage(_ value: String) -> Component {
+        .init(.logMessage, value)
+    }
+
+    static func occurrenceCount(_ value: UInt64) -> Component {
+        .init(
+            .occurrenceCount,
+            value
+        )
+    }
+
+    static func hostRootViewType(_ value: String) -> Component {
+        .init(
+            .hostRootViewType,
+            value
+        )
+    }
+
+    static func hostRootViewOpaque(_ value: Bool) -> Component {
+        .init(
+            .hostRootViewOpaque,
+            value
+        )
+    }
+
+    static func hostNavigationTitle(_ value: String) -> Component {
+        .init(
+            .hostNavigationTitle,
+            value
+        )
+    }
+
+    static func hostAppearNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .hostAppearNanoseconds,
+            value
+        )
+    }
+
+    static func hostKind(_ value: String) -> Component {
+        .init(.hostKind, value)
+    }
+
+    static func hostCount(_ value: UInt32) -> Component {
+        .init(.hostCount, value)
+    }
+
+    static func hostViewClass(_ value: String)
+        -> Component
+    {
+        .init(.hostViewClass, value)
+    }
+
+    static func mechanismStatus(_ value: String) -> Component {
+        .init(
+            .mechanismStatus,
+            value
+        )
+    }
+
+    static func displayListSeed(_ value: UInt32) -> Component {
+        .init(
+            .displayListSeed,
+            value
+        )
+    }
+
+    static func displayListItemCount(_ value: UInt32) -> Component {
+        .init(
+            .displayListItemCount,
+            value
+        )
+    }
+
+    static func displayListChangeCount(_ value: UInt64) -> Component {
+        .init(
+            .displayListChangeCount,
+            value
+        )
+    }
+
+    static func ivarPathGeneration(_ value: String) -> Component {
+        .init(
+            .ivarPathGeneration,
+            value
+        )
+    }
+
+    static func presentationKind(_ value: String) -> Component {
+        .init(
+            .presentationKind,
+            value
+        )
+    }
+
+    static func presentedRootViewType(_ value: String) -> Component {
+        .init(
+            .presentedRootViewType,
+            value
+        )
+    }
+
+    static func windowNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .windowNanoseconds,
+            value
+        )
+    }
+
+    static func memoryLimitBytes(_ value: UInt64) -> Component {
+        .init(
+            .memoryLimitBytes,
+            value
+        )
+    }
+
+    static func memoryAvailableBytes(_ value: UInt64) -> Component {
+        .init(
+            .memoryAvailableBytes,
+            value
+        )
+    }
+
+    static func memoryPressureLevel(_ value: String) -> Component {
+        .init(
+            .memoryPressureLevel,
+            value
+        )
+    }
+
+    static func memoryPressureScope(_ value: String) -> Component {
+        .init(
+            .memoryPressureScope,
+            value
+        )
+    }
+
+    static func exitReason(_ value: String) -> Component {
+        .init(.exitReason, value)
+    }
+
+    static func intervalEndMicroseconds(_ value: UInt64) -> Component {
+        .init(
+            .intervalEndMicroseconds,
+            value
+        )
+    }
+
+    static func permissionSubject(_ value: String) -> Component {
+        .init(
+            .permissionSubject,
+            value
+        )
+    }
+
+    static func authorizationStatus(_ value: String) -> Component {
+        .init(
+            .authorizationStatus,
+            value
+        )
+    }
+
+    static func usageDescriptionDeclared(_ value: Bool) -> Component {
+        .init(
+            .usageDescriptionDeclared,
+            value
+        )
+    }
+
+    static func threadIdentifier(_ value: UInt64) -> Component {
+        .init(
+            .threadIdentifier,
+            value
+        )
+    }
+
+    static func threadRunState(_ value: String) -> Component {
+        .init(
+            .threadRunState,
+            value
+        )
+    }
+
+    static func threadIdle(_ value: Bool) -> Component {
+        .init(.threadIdle, value)
+    }
+
+    static func threadPriority(_ value: Int32)
+        -> Component
+    {
+        .init(.threadPriority, value)
+    }
+
+    static func threadBasePriority(_ value: Int32) -> Component {
+        .init(
+            .threadBasePriority,
+            value
+        )
+    }
+
+    static func cpuNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .cpuNanoseconds,
+            value
+        )
+    }
+
+    static func wakeupCount(_ value: UInt64) -> Component {
+        .init(.wakeupCount, value)
+    }
+
+    static func idleWakeupCount(_ value: UInt64) -> Component {
+        .init(
+            .idleWakeupCount,
+            value
+        )
+    }
+
+    static func queueLatencyNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .queueLatencyNanoseconds,
+            value
+        )
+    }
+
+    static func queueLabel(_ value: String) -> Component {
+        .init(.queueLabel, value)
+    }
+
+    static func insertedCount(_ value: UInt32)
+        -> Component
+    {
+        .init(.insertedCount, value)
+    }
+
+    static func updatedCount(_ value: UInt32) -> Component {
+        .init(.updatedCount, value)
+    }
+
+    static func deletedCount(_ value: UInt32) -> Component {
+        .init(.deletedCount, value)
+    }
+
+    static func refreshedCount(_ value: UInt32) -> Component {
+        .init(
+            .refreshedCount,
+            value
+        )
+    }
+
+    static func contextConcurrency(_ value: String) -> Component {
+        .init(
+            .contextConcurrency,
+            value
+        )
+    }
+
+    static func confinementViolation(_ value: Bool) -> Component {
+        .init(
+            .confinementViolation,
+            value
+        )
+    }
+
+    static func logLevel(_ value: String) -> Component {
+        .init(.logLevel, value)
+    }
+
+    static func dnsNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .dnsNanoseconds,
+            value
+        )
+    }
+
+    static func connectNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .connectNanoseconds,
+            value
+        )
+    }
+
+    static func tlsNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .tlsNanoseconds,
+            value
+        )
+    }
+
+    static func serverNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .serverNanoseconds,
+            value
+        )
+    }
+
+    static func responseNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .responseNanoseconds,
+            value
+        )
+    }
+
+    static func tlsVersion(_ value: String) -> Component {
+        .init(.tlsVersion, value)
+    }
+
+    static func tlsCipherSuite(_ value: String) -> Component {
+        .init(
+            .tlsCipherSuite,
+            value
+        )
+    }
+
+    static func transactionCount(_ value: UInt32) -> Component {
+        .init(
+            .transactionCount,
+            value
+        )
+    }
+
+    static func requestTimeoutSeconds(_ value: Float) -> Component {
+        .init(
+            .requestTimeoutSeconds,
+            value
+        )
+    }
+
+    static func resourceTimeoutSeconds(_ value: Float) -> Component {
+        .init(
+            .resourceTimeoutSeconds,
+            value
+        )
+    }
+
+    static func allowsCellular(_ value: Bool)
+        -> Component
+    {
+        .init(.allowsCellular, value)
+    }
+
+    static func allowsExpensive(_ value: Bool) -> Component {
+        .init(
+            .allowsExpensive,
+            value
+        )
+    }
+
+    static func allowsConstrained(_ value: Bool) -> Component {
+        .init(
+            .allowsConstrained,
+            value
+        )
+    }
+
+    static func waitsForConnectivity(_ value: Bool) -> Component {
+        .init(
+            .waitsForConnectivity,
+            value
+        )
+    }
+
+    static func maximumConnectionsPerHost(_ value: UInt32) -> Component {
+        .init(
+            .maximumConnectionsPerHost,
+            value
+        )
+    }
+
+    static func cachePolicy(_ value: String) -> Component {
+        .init(.cachePolicy, value)
+    }
+
+    static func dnsProtocol(_ value: String) -> Component {
+        .init(.dnsProtocol, value)
+    }
+
+    static func remoteAddress(_ value: String)
+        -> Component
+    {
+        .init(.remoteAddress, value)
+    }
+
+    static func proxyConnection(_ value: Bool) -> Component {
+        .init(
+            .proxyConnection,
+            value
+        )
+    }
+
+    static func multipath(_ value: Bool) -> Component {
+        .init(.multipath, value)
+    }
+
+    static func arbitraryLoadsAllowed(_ value: Bool) -> Component {
+        .init(
+            .arbitraryLoadsAllowed,
+            value
+        )
+    }
+
+    static func exceptionDomain(_ value: String) -> Component {
+        .init(
+            .exceptionDomain,
+            value
+        )
+    }
+
+    static func insecureLoadsAllowed(_ value: Bool) -> Component {
+        .init(
+            .insecureLoadsAllowed,
+            value
+        )
+    }
+
+    static func minimumTLSVersion(_ value: String) -> Component {
+        .init(
+            .minimumTLSVersion,
+            value
+        )
+    }
+
+    static func deadlineMissCount(_ value: UInt32) -> Component {
+        .init(
+            .deadlineMissCount,
+            value
+        )
+    }
+
+    static func deadlineOverrunNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .deadlineOverrunNanoseconds,
+            value
+        )
+    }
+
+    static func presentationLatencyNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .presentationLatencyNanoseconds,
+            value
+        )
+    }
+
+    static func settingName(_ value: String) -> Component {
+        .init(.settingName, value)
+    }
+
+    static func settingEnabled(_ value: Bool)
+        -> Component
+    {
+        .init(.settingEnabled, value)
+    }
+
+    static func textSizeCategory(_ value: String) -> Component {
+        .init(
+            .textSizeCategory,
+            value
+        )
+    }
+
+    static func accessibilityTextSize(_ value: Bool) -> Component {
+        .init(
+            .accessibilityTextSize,
+            value
+        )
+    }
+
+    static func languageCode(_ value: String) -> Component {
+        .init(.languageCode, value)
+    }
+
+    static func regionCode(_ value: String) -> Component {
+        .init(.regionCode, value)
+    }
+
+    static func calendarIdentifier(_ value: String) -> Component {
+        .init(
+            .calendarIdentifier,
+            value
+        )
+    }
+
+    static func usesMetricSystem(_ value: Bool) -> Component {
+        .init(
+            .usesMetricSystem,
+            value
+        )
+    }
+
+    static func uses24HourTime(_ value: Bool)
+        -> Component
+    {
+        .init(.uses24HourTime, value)
+    }
+
+    static func layoutDirection(_ value: String) -> Component {
+        .init(
+            .layoutDirection,
+            value
+        )
+    }
+
+    static func syncEventType(_ value: String)
+        -> Component
+    {
+        .init(.syncEventType, value)
+    }
+
+    static func syncSucceeded(_ value: Bool) -> Component {
+        .init(.syncSucceeded, value)
+    }
+
+    static func changeReason(_ value: String) -> Component {
+        .init(.changeReason, value)
+    }
+
+    static func changedKeyCount(_ value: UInt32) -> Component {
+        .init(
+            .changedKeyCount,
+            value
+        )
+    }
+
+    static func notificationSetting(_ value: String) -> Component {
+        .init(
+            .notificationSetting,
+            value
+        )
+    }
+
+    static func settingState(_ value: String) -> Component {
+        .init(.settingState, value)
+    }
+
+    static func alertStyle(_ value: String) -> Component {
+        .init(.alertStyle, value)
+    }
+
+    static func previewVisibility(_ value: String) -> Component {
+        .init(
+            .previewVisibility,
+            value
+        )
+    }
+
+    static func callbackImplemented(_ value: Bool) -> Component {
+        .init(
+            .callbackImplemented,
+            value
+        )
+    }
+
+    static func silenceNanoseconds(_ value: UInt64) -> Component {
+        .init(
+            .silenceNanoseconds,
+            value
+        )
+    }
+
+    static func accuracyClass(_ value: String)
+        -> Component
+    {
+        .init(.accuracyClass, value)
+    }
+
+    static func callbackCount(_ value: UInt64)
+        -> Component
+    {
+        .init(.callbackCount, value)
+    }
+
+    static func delegateClass(_ value: String)
+        -> Component
+    {
+        .init(.delegateClass, value)
+    }
+
+    static func bluetoothState(_ value: String) -> Component {
+        .init(
+            .bluetoothState,
+            value
+        )
+    }
+
+    static func contentProcessTerminations(_ value: UInt64) -> Component {
+        .init(
+            .contentProcessTerminations,
+            value
+        )
+    }
+
+    static func tileLoadFailures(_ value: UInt64) -> Component {
+        .init(
+            .tileLoadFailures,
+            value
+        )
+    }
+
+    static func mapLoadsCompleted(_ value: UInt64) -> Component {
+        .init(
+            .mapLoadsCompleted,
+            value
+        )
+    }
+
+    static func callAction(_ value: String) -> Component {
+        .init(.callAction, value)
+    }
+
+    static func audioOutputPort(_ value: String) -> Component {
+        .init(
+            .audioOutputPort,
+            value
+        )
+    }
+
+    static func audioOutputName(_ value: String) -> Component {
+        .init(
+            .audioOutputName,
+            value
+        )
+    }
+
+    static func audioInputPort(_ value: String) -> Component {
+        .init(
+            .audioInputPort,
+            value
+        )
+    }
+
+    static func audioCategory(_ value: String)
+        -> Component
+    {
+        .init(.audioCategory, value)
+    }
+
+    static func audioMode(_ value: String) -> Component {
+        .init(.audioMode, value)
+    }
+
+    static func audioCategoryOptions(_ value: String) -> Component {
+        .init(
+            .audioCategoryOptions,
+            value
+        )
+    }
+
+    static func audioPreviousOutputPort(_ value: String) -> Component {
+        .init(
+            .audioPreviousOutputPort,
+            value
+        )
+    }
+
+    static func audioRouteVerdict(_ value: String) -> Component {
+        .init(
+            .audioRouteVerdict,
+            value
+        )
+    }
+
+    static func outputVolume(_ value: Float) -> Component {
+        .init(.outputVolume, value)
+    }
+
+    static func otherAudioPlaying(_ value: Bool) -> Component {
+        .init(
+            .otherAudioPlaying,
+            value
+        )
+    }
+
+    static func secondaryAudioSilenced(_ value: Bool) -> Component {
+        .init(
+            .secondaryAudioSilenced,
+            value
+        )
     }
 }

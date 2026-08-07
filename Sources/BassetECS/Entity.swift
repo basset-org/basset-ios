@@ -1,7 +1,7 @@
 import Foundation
 
 public struct Entity: Equatable, Sendable {
-    public enum WireID: UInt16, Sendable, CaseIterable {
+    public enum ID: UInt16, Sendable, CaseIterable {
         case unknown = 0
         case device = 1
         case methodCall = 2
@@ -46,7 +46,7 @@ public struct Entity: Equatable, Sendable {
         case audioRoute = 41
     }
 
-    public let id: WireID
+    public let id: ID
     public let capturedAt: UInt64
     public private(set) var components: [Component] = []
 
@@ -58,14 +58,13 @@ public struct Entity: Equatable, Sendable {
         var hasher = Hasher()
         hasher.combine(id)
         for component in components {
-            let (componentId, value) = component.wire
-            hasher.combine(componentId)
-            hasher.combine(value.rendered)
+            hasher.combine(component.id)
+            hasher.combine(component.value.rendered)
         }
         return hasher.finalize()
     }
 
-    public init(_ id: WireID, capturedAt: UInt64 = Entity.microsecondsSinceEpoch()) {
+    public init(_ id: ID, capturedAt: UInt64 = Entity.microsecondsSinceEpoch()) {
         self.id = id
         self.capturedAt = capturedAt
     }

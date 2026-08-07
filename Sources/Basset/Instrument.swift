@@ -6,8 +6,8 @@ import Foundation
 /// device reads them, so they live in `InstrumentMetadata` rather than here,
 /// where a reader cannot tell which fields decide anything.
 public protocol Instrument: AnyObject {
-    static var id: InstrumentWireID { get }
-    static var entity: Entity.WireID { get }
+    static var id: InstrumentID { get }
+    static var entity: Entity.ID { get }
     init()
 }
 
@@ -45,10 +45,10 @@ public enum FaultKind: String, Sendable {
 }
 
 public struct Registration: @unchecked Sendable {
-    public let id: InstrumentWireID
+    public let id: InstrumentID
     public let name: String
     public let domain: Domain
-    public let entity: Entity.WireID
+    public let entity: Entity.ID
     public let availability: Availability
     public let delivery: Delivery
 

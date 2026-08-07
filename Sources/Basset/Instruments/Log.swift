@@ -172,8 +172,8 @@ struct LogTraffic {
 /// an emitter marked private, so what ships is what somebody chose to log
 /// publicly — an app that logged an address or a token as public sends it here.
 final class LogFaults: StreamingInstrument {
-    static let id: InstrumentWireID = .logFaults
-    static let entity = Entity.WireID.logRecord
+    static let id: InstrumentID = .logFaults
+    static let entity = Entity.ID.logRecord
 
     /// Enough to describe what is wrong without letting one storm spend the
     /// request's budget. What is left out is reported as a count.
@@ -263,8 +263,8 @@ final class LogFaults: StreamingInstrument {
 /// Deliberately says nothing about *what* was logged. Volume and severity per
 /// subsystem is a map; `log.faults` is what to do with it.
 final class LogSubsystems: StreamingInstrument {
-    static let id: InstrumentWireID = .logSubsystems
-    static let entity = Entity.WireID.logRecord
+    static let id: InstrumentID = .logSubsystems
+    static let entity = Entity.ID.logRecord
 
     private static let sourcesPerFlush = 32
 

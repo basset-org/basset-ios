@@ -5,8 +5,8 @@ public struct DecodedComponent: Equatable, Sendable {
     public let scalar: Scalar
     public let value: ComponentValue
 
-    public var known: Component.WireID? {
-        Component.WireID(rawValue: id)
+    public var known: Component.ID? {
+        Component.ID(rawValue: id)
     }
 }
 
@@ -15,8 +15,8 @@ public struct DecodedEntity: Equatable, Sendable {
     public let capturedAt: UInt64
     public let components: [DecodedComponent]
 
-    public var known: Entity.WireID? {
-        Entity.WireID(rawValue: id)
+    public var known: Entity.ID? {
+        Entity.ID(rawValue: id)
     }
 }
 

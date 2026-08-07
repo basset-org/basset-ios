@@ -90,12 +90,12 @@ final class InstrumentRunner: @unchecked Sendable {
 
     private var live: [UInt64: BassetRequest] = [:]
     private var transports: [UInt64: Transport] = [:]
-    private var active: Set<InstrumentWireID> = []
-    private var instances: [InstrumentWireID: any Instrument] = [:]
+    private var active: Set<InstrumentID> = []
+    private var instances: [InstrumentID: any Instrument] = [:]
     private let faultLock: NSLock = .init()
     private var faultContributors: [FaultContributor] = []
-    private var contexts: [InstrumentWireID: Context] = [:]
-    private var statuses: [InstrumentWireID: AtomicStatus] = [:]
+    private var contexts: [InstrumentID: Context] = [:]
+    private var statuses: [InstrumentID: AtomicStatus] = [:]
     private var sent: [UInt64: Int] = [:]
     private var evicted: [UInt64: Int] = [:]
     private var endpoint: String?
@@ -108,7 +108,7 @@ final class InstrumentRunner: @unchecked Sendable {
         queue.sync { Set(live.keys) }
     }
 
-    var activeInstruments: Set<InstrumentWireID> {
+    var activeInstruments: Set<InstrumentID> {
         queue.sync { active }
     }
 
@@ -342,7 +342,7 @@ final class InstrumentRunner: @unchecked Sendable {
     }
 
     private func convergeInstruments() {
-        var wanted = [InstrumentWireID: Registration]()
+        var wanted = [InstrumentID: Registration]()
         for request in live.values {
             for name in request.instruments {
                 guard let registration = byName[name],
@@ -447,7 +447,7 @@ final class InstrumentRunner: @unchecked Sendable {
     /// a callback belonging to a finished request landed in the next request's
     /// capture. Dropped, that callback holds a status that stays deactivated for
     /// as long as it lives, and lands nowhere.
-    private func deactivate(_ id: InstrumentWireID) {
+    private func deactivate(_ id: InstrumentID) {
         // Ordered against fault delivery rather than racing it: a fault already
         // being captured finishes against the instrument that was live when it
         // started, and one arriving after this returns finds the instrument

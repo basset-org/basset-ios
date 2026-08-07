@@ -41,8 +41,8 @@ final class FramePacing: StreamingInstrument {
         static let worstLatency: TallySlot = .init(5)
     }
 
-    static let id: InstrumentWireID = .framePacing
-    static let entity = Entity.WireID.displayUpdate
+    static let id: InstrumentID = .framePacing
+    static let entity = Entity.ID.displayUpdate
 
     // `UIUpdateLink` is iOS 18. Below that the only mechanism available changes
     // the app's behaviour, so the instrument reports nothing rather than

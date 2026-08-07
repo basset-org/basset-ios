@@ -938,9 +938,9 @@ struct AvailabilityTests {
     /// a registration reports what the instrument declares whether or not this
     /// device satisfies it.
     @Test func aRegistrationReportsWhatTheInstrumentDeclares() {
-        #expect(InstrumentWireID.framePacing.availability.minIOS == 18)
-        #expect(InstrumentWireID.cameraFrameDelivery.availability.simulator == false)
-        #expect(InstrumentWireID.memoryFootprint.availability == Availability())
+        #expect(InstrumentID.framePacing.availability.minIOS == 18)
+        #expect(InstrumentID.cameraFrameDelivery.availability.simulator == false)
+        #expect(InstrumentID.memoryFootprint.availability == Availability())
     }
 }
 

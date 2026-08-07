@@ -2,8 +2,8 @@ import BassetECS
 import Foundation
 
 final class ThermalState: StreamingInstrument {
-    static let id: InstrumentWireID = .thermalState
-    static let entity = Entity.WireID.thermal
+    static let id: InstrumentID = .thermalState
+    static let entity = Entity.ID.thermal
 
     private var observer: NSObjectProtocol?
 

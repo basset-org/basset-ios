@@ -94,7 +94,7 @@ struct TransportSecurityTests {
         )
     }
 
-    private func rendered(_ entity: Entity, _ id: Component.WireID) -> String? {
+    private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {
         entity.components.first { $0.id == id }?.value.rendered
     }
 }

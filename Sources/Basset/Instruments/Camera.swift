@@ -8,8 +8,8 @@ import ObjectiveC
 #endif
 
 final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .cameraDeviceFormat
-    static let entity = Entity.WireID.captureDevice
+    static let id: InstrumentID = .cameraDeviceFormat
+    static let entity = Entity.ID.captureDevice
 
     private var observations: [Observation] = []
 
@@ -172,8 +172,8 @@ final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
 }
 
 final class CameraDeviceInventory: StreamingInstrument {
-    static let id: InstrumentWireID = .cameraDeviceInventory
-    static let entity = Entity.WireID.captureDevice
+    static let id: InstrumentID = .cameraDeviceInventory
+    static let entity = Entity.ID.captureDevice
 
     #if os(iOS)
     // Named rather than derived from `allCases`, which AVFoundation does not
@@ -252,8 +252,8 @@ final class CameraDeviceInventory: StreamingInstrument {
 }
 
 final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .cameraFrameDelivery
-    static let entity = Entity.WireID.videoFrames
+    static let id: InstrumentID = .cameraFrameDelivery
+    static let entity = Entity.ID.videoFrames
 
     private static let delivered: TallySlot = .first
     private static let dropped: TallySlot = .second
@@ -492,8 +492,8 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
 }
 
 final class CameraSessionConfiguration: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .cameraSessionConfiguration
-    static let entity = Entity.WireID.captureSession
+    static let id: InstrumentID = .cameraSessionConfiguration
+    static let entity = Entity.ID.captureSession
 
     private var observations: [Observation] = []
 
@@ -572,8 +572,8 @@ final class CameraSessionConfiguration: StreamingInstrument, LoadTimeInstall {
 }
 
 final class CameraSessionState: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .cameraSessionState
-    static let entity = Entity.WireID.captureSession
+    static let id: InstrumentID = .cameraSessionState
+    static let entity = Entity.ID.captureSession
 
     private static let observed = ["running", "interrupted"]
 

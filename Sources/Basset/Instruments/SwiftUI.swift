@@ -33,8 +33,8 @@ final class DisplayListChurn: StreamingInstrument {
         let fingerprint: Int
     }
 
-    static let id: InstrumentWireID = .swiftUIDisplayListChurn
-    static let entity = Entity.WireID.swiftUIDisplayList
+    static let id: InstrumentID = .swiftUIDisplayListChurn
+    static let entity = Entity.ID.swiftUIDisplayList
 
     /// Four times a second, over at most four hosts. `Mirror` is not free and
     /// this runs on the main queue; a sample rate that competed with the render
@@ -236,8 +236,8 @@ final class DisplayListChurn: StreamingInstrument {
 /// reading is marked when the type erased itself. Either one can be the useless
 /// one.
 final class HostAppear: StreamingInstrument {
-    static let id: InstrumentWireID = .swiftUIHostAppear
-    static let entity = Entity.WireID.swiftUIHost
+    static let id: InstrumentID = .swiftUIHostAppear
+    static let entity = Entity.ID.swiftUIHost
 
     /// A screen that loaded and never appeared leaves an entry behind. The cap
     /// bounds that at a size no real app reaches, so a leak cannot grow with
@@ -365,8 +365,8 @@ final class HostAppear: StreamingInstrument {
 /// AttributeGraph cycles in the app. Reading a view tree or reflecting a display
 /// list from here reproduces that.
 final class HostUpdates: StreamingInstrument, @unchecked Sendable {
-    static let id: InstrumentWireID = .swiftUIHostUpdates
-    static let entity = Entity.WireID.swiftUIHost
+    static let id: InstrumentID = .swiftUIHostUpdates
+    static let entity = Entity.ID.swiftUIHost
 
     private static let passes: TallySlot = .first
     private static let totalNanoseconds: TallySlot = .second
@@ -514,8 +514,8 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
 /// presenting underneath, which answers the question that matters first: did the
 /// presentation happen at all.
 final class Presentation: StreamingInstrument {
-    static let id: InstrumentWireID = .swiftUIPresentation
-    static let entity = Entity.WireID.swiftUIPresentation
+    static let id: InstrumentID = .swiftUIPresentation
+    static let entity = Entity.ID.swiftUIPresentation
 
     init() {}
 
@@ -688,8 +688,8 @@ struct RuntimeIssueDigest {
 /// a view update at 14:22:11" and never "in `CartView`". Pair it with
 /// `swiftui.host.appear` to bound which screen was on.
 final class RuntimeIssues: StreamingInstrument {
-    static let id: InstrumentWireID = .swiftUIRuntimeIssues
-    static let entity = Entity.WireID.swiftUIRuntimeIssue
+    static let id: InstrumentID = .swiftUIRuntimeIssues
+    static let entity = Entity.ID.swiftUIRuntimeIssue
 
     /// `runtime-issues` carries SwiftUI's own violations. `attributegraph`
     /// carries the non-fatal precondition failures, which are the survivable half
@@ -724,7 +724,7 @@ final class RuntimeIssues: StreamingInstrument {
                 put(subject, over: window, into: &out)
                 continue
             }
-            out.also(Entity.WireID.swiftUIRuntimeIssue) { sibling in
+            out.also(Entity.ID.swiftUIRuntimeIssue) { sibling in
                 put(subject, over: window, into: &sibling)
             }
         }
@@ -732,7 +732,7 @@ final class RuntimeIssues: StreamingInstrument {
             return
         }
 
-        out.also(Entity.WireID.swiftUIRuntimeIssue) { sibling in
+        out.also(Entity.ID.swiftUIRuntimeIssue) { sibling in
             sibling.put(.windowNanoseconds(window.nanoseconds))
             sibling.put(.mechanismStatus("truncated: \(digest.omitted) more"))
         }

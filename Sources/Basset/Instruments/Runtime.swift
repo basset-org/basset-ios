@@ -17,8 +17,8 @@ import Foundation
 /// `thread_info` without suspending anything. Same subject, different price, and
 /// the two stay separate so a request can name the one it wants.
 final class ThreadSnapshot: FaultInstrument {
-    static let id: InstrumentWireID = .threadSnapshot
-    static let entity = Entity.WireID.thread
+    static let id: InstrumentID = .threadSnapshot
+    static let entity = Entity.ID.thread
 
     private let walker: ThreadWalker = .init()
 

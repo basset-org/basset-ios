@@ -24,8 +24,8 @@ final class PathTransitions: StreamingInstrument, @unchecked Sendable {
     private var last: Snapshot?
     #endif
 
-    static let id: InstrumentWireID = .networkPathTransitions
-    static let entity = Entity.WireID.networkPath
+    static let id: InstrumentID = .networkPathTransitions
+    static let entity = Entity.ID.networkPath
 
     init() {}
 
@@ -137,8 +137,8 @@ final class PathTransitions: StreamingInstrument, @unchecked Sendable {
 /// configuration is described the first time a session makes a task rather than
 /// on a timer.
 final class SessionConfiguration: StreamingInstrument {
-    static let id: InstrumentWireID = .sessionConfiguration
-    static let entity = Entity.WireID.networkSession
+    static let id: InstrumentID = .sessionConfiguration
+    static let entity = Entity.ID.networkSession
 
     private let lock: NSLock = .init()
     private var described: Set<UInt32> = []
@@ -223,8 +223,8 @@ final class SessionConfiguration: StreamingInstrument {
 }
 
 final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .urlSessionTaskMetrics
-    static let entity = Entity.WireID.networkTask
+    static let id: InstrumentID = .urlSessionTaskMetrics
+    static let entity = Entity.ID.networkTask
 
     #if os(iOS)
     /// Every HTTP and WebSocket task-producing call on `URLSession`, by argument
@@ -719,8 +719,8 @@ final class TransportSecurity: SnapshotInstrument {
         }
     }
 
-    static let id: InstrumentWireID = .transportSecurity
-    static let entity = Entity.WireID.transportSecurity
+    static let id: InstrumentID = .transportSecurity
+    static let entity = Entity.ID.transportSecurity
 
     private static let key = "NSAppTransportSecurity"
 

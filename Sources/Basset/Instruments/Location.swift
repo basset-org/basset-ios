@@ -31,8 +31,8 @@ import ObjectiveC
 /// longitude, no course, no speed — none of it is read. The accuracy *class* the
 /// app asked for is a configuration value, not a position.
 final class DelegateSilence: StreamingInstrument, LoadTimeInstall {
-    static let id: InstrumentWireID = .locationSilence
-    static let entity = Entity.WireID.locationDelegate
+    static let id: InstrumentID = .locationSilence
+    static let entity = Entity.ID.locationDelegate
 
     static let managerClassName = "CLLocationManager"
     static let setDelegate: Selector = .init("setDelegate:")
