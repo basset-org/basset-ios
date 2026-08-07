@@ -28,9 +28,10 @@ struct AudioRouteFacts: Sendable {
     ///
     /// Kept separate from `defaultToSpeaker` because **`categoryOptions` does
     /// not report what a mode implied** — a session set to video chat reads back
-    /// an option field of zero while the mode reads back as video chat. Deriving
-    /// the request from the option field alone therefore reports that nothing
-    /// asked for the speaker on a session that did.
+    /// an option field of zero while the mode reads back as video chat, which
+    /// `aModesSideEffectsDoNotAppearInTheOptionField` runs against the framework
+    /// to establish. Deriving the request from the option field alone therefore
+    /// reports that nothing asked for the speaker on a session that did.
     let modeImpliesSpeaker: Bool
     /// The option, which is what the caller passed, and nothing more.
     let defaultToSpeaker: Bool

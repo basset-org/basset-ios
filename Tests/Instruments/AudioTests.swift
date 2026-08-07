@@ -216,6 +216,34 @@ struct AudioRouteWiringTests {
         #expect(harness.waitForReading(timeout: 0.5) == nil)
     }
 
+    /// The framework behaviour the verdict rules are built on, run rather than
+    /// asserted in prose: **a mode's side effects do not appear in
+    /// `categoryOptions`.** Video chat sets the speaker default by being set at
+    /// all, and the option field still reads back empty, so a verdict derived
+    /// from the option alone reports that nothing asked for the speaker on a
+    /// session that did.
+    ///
+    /// A failure here is information rather than a defect: it means the field
+    /// began reporting what a mode implied, and the mode half of
+    /// `speakerRequested` became redundant rather than wrong.
+    ///
+    /// The category is set and put back. Nothing is activated — this changes
+    /// what the session is configured as, never what it is doing.
+    @Test func aModesSideEffectsDoNotAppearInTheOptionField() throws {
+        let session = AVAudioSession.sharedInstance()
+        let category = session.category
+        let mode = session.mode
+        let options = session.categoryOptions
+        defer {
+            try? session.setCategory(category, mode: mode, options: options)
+        }
+
+        try session.setCategory(.playAndRecord, mode: .videoChat, options: [])
+
+        #expect(session.mode == .videoChat)
+        #expect(session.categoryOptions.contains(.defaultToSpeaker) == false)
+    }
+
     /// A paired accessory is named by whoever owns it, so the reported name is
     /// limited to ports iOS names itself.
     @Test func onlyPortsTheSystemNamesCarryANameIntoAReading() {
