@@ -192,8 +192,7 @@ struct MainRunLoopHeartbeatTests {
     ///
     /// Left failing it trains a reader to ignore a red suite, which costs more
     /// than the coverage it holds.
-    @Test(.disabled("the reading 400ms into a blocked loop is unexplained"))
-    func aParkedLoopReadsIdleAndABlockedOneReadsBusy() async throws {
+    @Test func aParkedLoopReadsIdleAndABlockedOneReadsBusy() async throws {
         nonisolated(unsafe) var loop: CFRunLoop?
 
         // One long run rather than a poll loop: between two turns of a polling
@@ -204,7 +203,7 @@ struct MainRunLoopHeartbeatTests {
                 loop = CFRunLoopGetCurrent()
                 RunLoop.current.add(NSMachPort(), forMode: .default)
                 started.resume()
-                CFRunLoopRunInMode(.defaultMode, 5, false)
+                CFRunLoopRunInMode(.defaultMode, 30, false)
             }
             thread.start()
         }
@@ -218,24 +217,24 @@ struct MainRunLoopHeartbeatTests {
             CFRunLoopStop(target)
         }
 
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(
-            heartbeat.read().awake == false,
-            "a loop waiting for work reads as parked"
-        )
+        let parked = await eventually { heartbeat.read().awake == false }
+        #expect(parked, "a loop waiting for work never read as parked")
 
         CFRunLoopPerformBlock(target, CFRunLoopMode.defaultMode.rawValue) {
             Thread.sleep(forTimeInterval: 0.8)
         }
         CFRunLoopWakeUp(target)
 
-        try await Task.sleep(for: .milliseconds(400))
-        let blocked = heartbeat.read()
-
-        #expect(blocked.awake == true)
-        #expect(
-            clock.now().nanoseconds - blocked.idleAt.nanoseconds >= 200000000,
-            "the loop has not parked since it entered the block, so the busy time grows"
-        )
+        // The wake writes to a port; the loop's thread still has to be
+        // scheduled to read it, and on a machine with nothing to spare that
+        // takes longer than any interval worth writing down. Waiting for the
+        // reading rather than for a duration is what makes this hold there —
+        // and the loop above runs long enough that waiting cannot outlive it.
+        let blocked = await eventually {
+            let reading = heartbeat.read()
+            return reading.awake
+                && clock.now().nanoseconds - reading.idleAt.nanoseconds >= 200000000
+        }
+        #expect(blocked, "the blocked loop never reported 200ms of unbroken busy time")
     }
 }
