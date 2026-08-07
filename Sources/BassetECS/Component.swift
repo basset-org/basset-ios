@@ -163,8 +163,8 @@ public enum ComponentValue: Equatable, Sendable {
 /// this replaced said them twice — a case fixing the type, a switch arm fixing
 /// the id — far enough apart that an arm naming the wrong id read as correct.
 ///
-/// It is still written by hand, so `everyCaseClaimsADistinctId` is what proves
-/// each factory names its own id rather than a neighbour's.
+/// It is still written by hand, so `everyFactoryClaimsTheIdItIsNamedFor` is
+/// what holds each factory to the id it is named for.
 ///
 /// `init` is private: the factories below are the only components that exist.
 public struct Component: Equatable, Sendable {
