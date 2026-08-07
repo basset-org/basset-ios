@@ -271,4 +271,13 @@ struct ComponentTests {
         #expect(MemoryLayout<Component>.stride == 24)
         #expect(MemoryLayout<Component>.offset(of: \.value) == 0)
     }
+
+    /// Both tables are exhaustive, so a component minted without a word or a
+    /// role fails to build. This holds the third property the compiler cannot:
+    /// that no label is blank and no two components read as the same thing.
+    @Test func everyIdHasItsOwnLabel() {
+        let labels = Component.ID.allCases.map(\.label)
+        #expect(labels.allSatisfy { !$0.isEmpty })
+        #expect(Set(labels).count == labels.count)
+    }
 }
