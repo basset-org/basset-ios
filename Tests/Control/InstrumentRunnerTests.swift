@@ -523,7 +523,7 @@ struct RuntimeConvergenceTests {
     // Nobody calls anything here. The runtime schedules its own wake-up when
     // the request arrives, which is the half of the promise a test driving
     // `expire(at:)` by hand cannot show.
-    @Test func theDeviceWakesItselfWhenTheRequestRunsOut() async throws {
+    @Test func theDeviceWakesItselfWhenTheRequestRunsOut() async {
         let (subject, _) = runtime()
 
         subject.converge(
@@ -533,12 +533,34 @@ struct RuntimeConvergenceTests {
         #expect(subject.activeInstruments == [.memoryFootprint])
         let memory = subject.memory
 
-        try await Task.sleep(for: .milliseconds(900))
+        let expired = await eventually { subject.liveRequestIds.isEmpty }
         subject.settle()
 
-        #expect(subject.liveRequestIds.isEmpty)
+        #expect(expired, "the request outlived an expiry set 0.3s out")
         #expect(subject.activeInstruments.isEmpty)
         #expect(memory?.stopCount == 1)
+    }
+
+    /// The bound, not the mechanism that enforced it: the timer and the send
+    /// path both end an expired request, and a test cannot silence one to watch
+    /// the other. What it can hold is the property either way — nothing the
+    /// request no longer authorises reaches the wire.
+    @Test func aReadingProducedAfterTheRequestRanOutIsNotSent() async throws {
+        let (subject, opener) = runtime()
+
+        subject.converge(
+            to: [request(1, instruments: ["memory.footprint"], expiresIn: 0.05)],
+            ingestEndpoint: "in"
+        )
+        let memory = try #require(subject.memory)
+        let before = opener.stream(1)?.count ?? 0
+
+        #expect(await eventually { subject.liveRequestIds.isEmpty })
+        memory.take()
+        subject.settle()
+
+        #expect(opener.stream(1)?.count ?? 0 == before)
+        #expect(subject.liveRequestIds.isEmpty)
     }
 
     @Test func aRequestStillWithinItsTimeIsLeftRunning() {
