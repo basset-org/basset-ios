@@ -555,7 +555,7 @@ struct RuntimeConvergenceTests {
         let memory = try #require(subject.memory)
         let before = opener.stream(1)?.count ?? 0
 
-        try await Task.sleep(for: .milliseconds(150))
+        #expect(await eventually { subject.liveRequestIds.isEmpty })
         memory.take()
         subject.settle()
 

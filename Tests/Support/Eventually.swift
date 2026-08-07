@@ -23,7 +23,13 @@ func eventually(
             return true
         }
 
-        try? await Task.sleep(for: interval)
+        // A cancelled sleep throws rather than suspending, so swallowing it
+        // turns the wait into a spin that runs the deadline out at full speed.
+        do {
+            try await Task.sleep(for: interval)
+        } catch {
+            break
+        }
     }
 
     return condition()
