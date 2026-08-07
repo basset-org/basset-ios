@@ -57,10 +57,9 @@ public struct FrameEncoder {
         appendLittleEndian(entity.capturedAt, to: &out)
         appendUvarint(UInt64(entity.components.count), to: &out)
         for component in entity.components {
-            let (id, value) = component.wire
-            appendLittleEndian(id.rawValue, to: &out)
-            out.append(value.scalar.rawValue)
-            append(value, to: &out)
+            appendLittleEndian(component.id.rawValue, to: &out)
+            out.append(component.value.scalar.rawValue)
+            append(component.value, to: &out)
         }
         return out
     }

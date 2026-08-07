@@ -58,9 +58,8 @@ public struct Entity: Equatable, Sendable {
         var hasher = Hasher()
         hasher.combine(id)
         for component in components {
-            let (componentId, value) = component.wire
-            hasher.combine(componentId)
-            hasher.combine(value.rendered)
+            hasher.combine(component.id)
+            hasher.combine(component.value.rendered)
         }
         return hasher.finalize()
     }
