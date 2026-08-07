@@ -262,4 +262,13 @@ struct ComponentTests {
         #expect(Component.totalNanoseconds(12296).value == .uint64(12296))
         #expect(Component.peakNanoseconds(373667).value == .uint64(373667))
     }
+
+    /// The field order that keeps a component at 24 bytes. Swift lays stored
+    /// properties out in declaration order, so a one-byte id ahead of the
+    /// eight-aligned value pads the gap and costs a third more memory per
+    /// component, silently and everywhere.
+    @Test func aComponentCostsNoPadding() {
+        #expect(MemoryLayout<Component>.stride == 24)
+        #expect(MemoryLayout<Component>.offset(of: \.value) == 0)
+    }
 }

@@ -1,5 +1,7 @@
 import Foundation
 
+/// One reading: what it is about, when it was taken, and the components that
+/// describe it.
 public struct Entity: Equatable, Sendable {
     public enum ID: UInt16, Sendable, CaseIterable {
         case unknown = 0

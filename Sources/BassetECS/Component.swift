@@ -158,15 +158,9 @@ public enum ComponentValue: Equatable, Sendable {
 
 /// A reading's smallest unit: which component, and what it carries.
 ///
-/// Stored rather than derived from a case, so the id a component claims and the
-/// type it carries are stated together, on the line that makes it. The shape
-/// this replaced said them twice — a case fixing the type, a switch arm fixing
-/// the id — far enough apart that an arm naming the wrong id read as correct.
-///
-/// It is still written by hand, so `everyFactoryClaimsTheIdItIsNamedFor` is
-/// what holds each factory to the id it is named for.
-///
-/// `init` is private: the factories below are the only components that exist.
+/// Built only through the factories below, so the id and the type it carries
+/// are paired in one place; `everyFactoryClaimsTheIdItIsNamedFor` holds them
+/// there.
 public struct Component: Equatable, Sendable {
     public enum ID: UInt16, Sendable, CaseIterable {
         case cpuUsageRatio = 1
@@ -365,8 +359,11 @@ public struct Component: Equatable, Sendable {
         case secondaryAudioSilenced = 194
     }
 
-    public let id: ID
+    // Order is load-bearing: Swift lays stored properties out as declared, and a
+    // one-byte id ahead of an eight-aligned value pads out to a 32-byte stride
+    // where this order costs 24. `aComponentCostsNoPadding` pins it.
     public let value: ComponentValue
+    public let id: ID
 
     private init(_ id: ID, _ value: some ScalarValue) {
         self.id = id
