@@ -1,18 +1,17 @@
 import Foundation
 
 public enum IgnoredSessions {
-    private static let lock: NSLock = .init()
-    private nonisolated(unsafe) static var owned: Set<ObjectIdentifier> = []
+    private static let owned: Mutex<Set<ObjectIdentifier>> = .init([])
 
     public static func remember(_ session: AnyObject) {
-        lock.withLock { owned.insert(ObjectIdentifier(session)) }
+        owned.withLock { $0.insert(ObjectIdentifier(session)) }
     }
 
     public static func contains(_ session: AnyObject) -> Bool {
-        lock.withLock { owned.contains(ObjectIdentifier(session)) }
+        owned.withLock { $0.contains(ObjectIdentifier(session)) }
     }
 
     public static func forget(_ session: AnyObject) {
-        lock.withLock { owned.remove(ObjectIdentifier(session)) }
+        owned.withLock { $0.remove(ObjectIdentifier(session)) }
     }
 }

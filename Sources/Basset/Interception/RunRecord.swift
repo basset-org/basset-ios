@@ -218,8 +218,7 @@ final class RunRecordFile: @unchecked Sendable {
 
     private let bytes: UnsafeMutableRawPointer
     private let descriptor: Int32
-    private let lock: NSLock = .init()
-    private var record: RunRecord
+    private let guarded: Mutex<RunRecord>
 
     init?(at url: URL, startedBy launch: RunRecord) {
         let descriptor = open(url.path, O_RDWR | O_CREAT, 0o600)
@@ -247,7 +246,7 @@ final class RunRecordFile: @unchecked Sendable {
         self.descriptor = descriptor
         bytes = mapped
         previous = RunRecord.decode(UnsafeRawPointer(mapped))
-        record = launch
+        guarded = .init(launch)
         launch.encode(into: mapped)
     }
 
@@ -280,9 +279,9 @@ final class RunRecordFile: @unchecked Sendable {
     /// survive a kill mid-update, which is why nothing derived from it needs two
     /// fields to agree.
     func stamp(_ update: (inout RunRecord) -> Void) {
-        lock.lock()
-        defer { lock.unlock() }
-        update(&record)
-        record.encode(into: bytes)
+        guarded.withLock { record in
+            update(&record)
+            record.encode(into: bytes)
+        }
     }
 }

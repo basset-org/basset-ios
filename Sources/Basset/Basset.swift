@@ -25,8 +25,12 @@ public struct Config: Sendable {
 }
 
 public enum Basset {
-    private nonisolated(unsafe) static var loop: DeviceLoop?
+    /// Held across `start`, which is what keeps the loop unreachable until it
+    /// has read what the last run persisted. Publishing it any earlier lets an
+    /// `identify` on another thread converge a control response that
+    /// `startFromDisk` then replaces with what was on disk.
     private static let lock: NSLock = .init()
+    private nonisolated(unsafe) static var loop: DeviceLoop?
 
     public static func start(apiKey: String) {
         start(Config(apiKey: apiKey))
@@ -77,16 +81,18 @@ public enum Basset {
 /// Launch, then upsert, then hold. Everything the device asks the control plane
 /// is one of those three.
 final class DeviceLoop: @unchecked Sendable {
+    private struct State {
+        var userId: String?
+        var lastCtrlResponse: CtrlResponse?
+        var ingestEndpoint: String?
+    }
+
     private let config: Config
     private let control: ControlClient
     private let identity: DeviceIdentity
     private let runner: InstrumentRunner
-    private let lock: NSLock = .init()
-    private var userId: String?
+    private let guarded: Mutex<State> = .init(State())
     private var following: Task<Void, Never>?
-    private var lastCtrlResponse: CtrlResponse?
-
-    private var ingestEndpoint: String?
 
     init(config: Config) {
         self.config = config
@@ -106,9 +112,7 @@ final class DeviceLoop: @unchecked Sendable {
     }
 
     func identify(userId: String?) {
-        lock.lock()
-        self.userId = userId
-        lock.unlock()
+        guarded.withLock { $0.userId = userId }
 
         Task.detached(priority: .utility) { [self] in
             _ = try? await upsert()
@@ -116,10 +120,7 @@ final class DeviceLoop: @unchecked Sendable {
     }
 
     func currentState() -> DeviceState {
-        lock.lock()
-        let user = userId
-        let answer = lastCtrlResponse
-        lock.unlock()
+        let (user, answer) = guarded.withLock { ($0.userId, $0.lastCtrlResponse) }
 
         return DeviceState(
             deviceId: identity.deviceId,
@@ -138,7 +139,7 @@ final class DeviceLoop: @unchecked Sendable {
     }
 
     private func upsert() async throws -> String {
-        let user = lock.withLock { userId }
+        let user = guarded.withLock { $0.userId }
 
         let response: DeviceResponse
         do {
@@ -150,14 +151,14 @@ final class DeviceLoop: @unchecked Sendable {
 
         record(.putDevice, .accepted(requestCount: response.requests.count))
         runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
-        lock.withLock { ingestEndpoint = response.ingestEndpoint }
+        guarded.withLock { $0.ingestEndpoint = response.ingestEndpoint }
         return response.deviceToken
     }
 
     private func record(_ call: CtrlResponse.Call, _ outcome: CtrlResponse.Outcome) {
-        lock.lock()
-        lastCtrlResponse = CtrlResponse(call: call, outcome: outcome, at: Date())
-        lock.unlock()
+        guarded.withLock {
+            $0.lastCtrlResponse = CtrlResponse(call: call, outcome: outcome, at: Date())
+        }
     }
 
     private func outcome(for error: Error) -> CtrlResponse.Outcome {
@@ -194,7 +195,7 @@ final class DeviceLoop: @unchecked Sendable {
                     }
 
                     record(.requests, .accepted(requestCount: requests.count))
-                    let endpoint = lock.withLock { ingestEndpoint }
+                    let endpoint = guarded.withLock { $0.ingestEndpoint }
                     runner.converge(to: requests, ingestEndpoint: endpoint)
                 }
             } catch ControlError.unauthorized {

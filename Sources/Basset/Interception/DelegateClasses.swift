@@ -27,28 +27,33 @@ import ObjectiveC
 /// call at all — so adding one makes the system believe the app handles something
 /// it ignores.
 public final class DelegateClasses: @unchecked Sendable {
-    private let lock: NSLock = .init()
-    private var seen: [ObjectIdentifier: AnyClass] = [:]
-    private var arrivals: [Int: (AnyClass) -> Void] = [:]
-    private var nextToken = 0
+    private struct State {
+        var seen: [ObjectIdentifier: AnyClass] = [:]
+        var arrivals: [Int: (AnyClass) -> Void] = [:]
+        var nextToken = 0
+    }
+
+    private let guarded: Mutex<State> = .init(State())
 
     public var all: [AnyClass] {
-        lock.withLock { Array(seen.values) }
+        guarded.withLock { Array($0.seen.values) }
     }
 
     public init() {}
 
     public func add(_ delegateClass: AnyClass) {
-        lock.lock()
         let key = ObjectIdentifier(delegateClass)
-        guard seen[key] == nil else {
-            lock.unlock()
+        let waiting = guarded.withLock { state -> [(AnyClass) -> Void]? in
+            guard state.seen[key] == nil else {
+                return nil
+            }
+
+            state.seen[key] = delegateClass
+            return Array(state.arrivals.values)
+        }
+        guard let waiting else {
             return
         }
-
-        seen[key] = delegateClass
-        let waiting = Array(arrivals.values)
-        lock.unlock()
 
         waiting.forEach { $0(delegateClass) }
     }
@@ -59,19 +64,18 @@ public final class DelegateClasses: @unchecked Sendable {
     /// that wants to watch it.
     @discardableResult
     public func attachAndFollow(_ attach: @escaping (AnyClass) -> Void) -> Int {
-        lock.lock()
-        let existing = Array(seen.values)
-        nextToken += 1
-        let token = nextToken
-        arrivals[token] = attach
-        lock.unlock()
+        let (existing, token) = guarded.withLock { state -> ([AnyClass], Int) in
+            state.nextToken += 1
+            state.arrivals[state.nextToken] = attach
+            return (Array(state.seen.values), state.nextToken)
+        }
 
         existing.forEach(attach)
         return token
     }
 
     public func stopFollowing(_ token: Int) {
-        lock.withLock { arrivals.removeValue(forKey: token) }
+        guarded.withLock { $0.arrivals.removeValue(forKey: token) }
     }
 }
 

@@ -73,8 +73,7 @@ public final class LogStoreReader: @unchecked Sendable {
 
     private let subsystems: [String]
     private let ceiling: Int
-    private let lock: NSLock = .init()
-    private var watermark: Date
+    private let watermark: Mutex<Date>
 
     public init(
         subsystems: [String],
@@ -83,7 +82,7 @@ public final class LogStoreReader: @unchecked Sendable {
     ) {
         self.subsystems = subsystems
         self.ceiling = ceiling
-        self.watermark = since
+        watermark = .init(since)
     }
 
     private static func entries(
@@ -153,18 +152,14 @@ public final class LogStoreReader: @unchecked Sendable {
     #endif
 
     public func drain(now: Date = Date()) -> LogStoreOutcome {
-        lock.lock()
-        let since = watermark
-        lock.unlock()
+        let since = watermark.withLock { $0 }
 
         let outcome = Self.entries(subsystems: subsystems, since: since, ceiling: ceiling)
 
         if case .read(let records) = outcome {
-            lock.lock()
             // The newest record read, never the wall clock: a store that lags
             // would otherwise have its backlog skipped rather than reported.
-            watermark = max(records.map(\.date).max() ?? since, since)
-            lock.unlock()
+            watermark.withLock { $0 = max(records.map(\.date).max() ?? since, since) }
             _ = now
         }
         return outcome

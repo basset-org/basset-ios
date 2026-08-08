@@ -5,20 +5,19 @@ import Foundation
 /// remember when it last ran, and the handler is a `@Sendable` closure that
 /// cannot capture a `var`.
 final class Mutable<Value>: @unchecked Sendable {
-    private let lock: NSLock = .init()
-    private var value: Value
+    private let guarded: Mutex<Value>
 
     init(_ value: Value) {
-        self.value = value
+        guarded = .init(value)
     }
 
     /// The previous value, replaced by this one, in a single step.
     func take(_ next: Value) -> Value {
-        lock.lock()
-        defer { lock.unlock() }
-        let previous = value
-        value = next
-        return previous
+        guarded.withLock { value in
+            let previous = value
+            value = next
+            return previous
+        }
     }
 }
 
