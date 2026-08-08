@@ -554,11 +554,17 @@ struct RuntimeConvergenceTests {
     /// path both end an expired request, and a test cannot silence one to watch
     /// the other. What it can hold is the property either way — nothing the
     /// request no longer authorises reaches the wire.
-    /// Driven rather than waited for. That the deadline arrives on its own is
-    /// `theDeviceWakesItselfWhenTheRequestRunsOut`; what this asks is whether
-    /// the reading path checks the deadline it was given, which no clock has to
-    /// be involved to answer.
-    @Test func aReadingProducedAfterTheRequestRanOutIsNotSent() throws {
+    /// An instrument that has been stopped holds a context whose status stays
+    /// deactivated, so a callback still in flight when the request ended lands
+    /// nowhere. Driven rather than waited for: that the deadline arrives on its
+    /// own is `theDeviceWakesItselfWhenTheRequestRunsOut`, and neither question
+    /// needs a clock to answer.
+    ///
+    /// Not the deadline `emit` rechecks before its send loop. That one covers a
+    /// wake the system deferred, which a test cannot arrange from here — the
+    /// timer this drops through has already fired by the time a reading could be
+    /// taken.
+    @Test func aReadingFromAStoppedInstrumentIsNotSent() throws {
         let (subject, opener) = runtime()
 
         subject.converge(
