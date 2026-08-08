@@ -26,6 +26,19 @@ import Testing
     }
 }
 
+@objc private class ReleaseRaceSubject: NSObject {
+    @objc dynamic func work() {}
+}
+
+@objc private class ForeignHookSubject: NSObject {
+    nonisolated(unsafe) static var originalRuns = 0
+    nonisolated(unsafe) static var foreignRuns = 0
+
+    @objc dynamic func work() {
+        Self.originalRuns += 1
+    }
+}
+
 @objc private class ChainedSubject: Subject {}
 @objc private class SharedSubject: Subject {}
 @objc private class RestartedSubject: Subject {}
@@ -187,6 +200,57 @@ struct ChangeGatedEmissionTests {
 }
 
 struct SwizzleTests {
+    /// A thunk runs on whichever thread the app called the hooked method on,
+    /// while deactivation drops observers from the runner queue. Reading the
+    /// list unguarded retained a buffer the release had already freed.
+    @Test func callingAHookWhileObserversAreReleasedIsSafe() {
+        let subject = ReleaseRaceSubject()
+        let handles = (0 ..< 8).map { _ in Swizzle() }
+        for handle in handles {
+            _ = handle.after(ReleaseRaceSubject.self, #selector(ReleaseRaceSubject.work)) {
+                _ in
+            }
+        }
+
+        DispatchQueue.concurrentPerform(iterations: 16) { index in
+            if index % 4 == 3 {
+                handles[index % handles.count].releaseObservers()
+            } else {
+                for _ in 0 ..< 2000 {
+                    subject.work()
+                }
+            }
+        }
+    }
+
+    /// Another SDK may already hold this selector, and its hook is part of the
+    /// chain rather than something to displace.
+    @Test func aHookAnotherSdkInstalledFirstIsStillCalled() throws {
+        let selector = #selector(ForeignHookSubject.work)
+        let method = try #require(class_getInstanceMethod(ForeignHookSubject.self, selector))
+        let original = method_getImplementation(method)
+        let foreign: @convention(block) (AnyObject) -> Void = { receiver in
+            ForeignHookSubject.foreignRuns += 1
+            unsafeBitCast(
+                original,
+                to: (@convention(c) (AnyObject, Selector) -> Void).self
+            )(receiver, selector)
+        }
+        method_setImplementation(method, imp_implementationWithBlock(foreign))
+
+        var seen = 0
+        #expect(
+            Swizzle().after(ForeignHookSubject.self, selector) { _ in seen += 1 }
+                == .installed
+        )
+
+        ForeignHookSubject().work()
+
+        #expect(ForeignHookSubject.foreignRuns == 1, "the other SDK's hook still runs")
+        #expect(ForeignHookSubject.originalRuns == 1, "and it still reaches the original")
+        #expect(seen == 1)
+    }
+
     @Test func theOriginalStillRunsAndTheObserverSeesIt() {
         let swizzle = Swizzle()
         var seen = 0
