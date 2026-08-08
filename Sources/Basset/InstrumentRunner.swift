@@ -172,6 +172,8 @@ final class InstrumentRunner: @unchecked Sendable {
             if persisting {
                 atLaunchRequests.save(firstPerRequestId)
             }
+
+            dropRequestsAtTheirCap()
         }
     }
 
@@ -531,7 +533,7 @@ final class InstrumentRunner: @unchecked Sendable {
         }
 
         transports[requestId] = opened
-        flushBuffer(for: requestId, over: opened)
+        flushBuffer(for: requestId, request, over: opened)
         return opened
     }
 
@@ -543,10 +545,17 @@ final class InstrumentRunner: @unchecked Sendable {
         buffered.append((requestId: requestId, frame: frame))
     }
 
-    private func flushBuffer(for requestId: UInt64, over transport: Transport) {
+    private func flushBuffer(for requestId: UInt64,
+                             _ request: BassetRequest,
+                             over transport: Transport)
+    {
         let waiting = buffered.filter { $0.requestId == requestId }
         buffered.removeAll { $0.requestId == requestId }
-        waiting.forEach { transport.send($0.frame) }
-        sent[requestId, default: 0] += waiting.count
+
+        let room = request.maxFrames
+            .map { max(0, Int($0) - sent[requestId, default: 0]) } ?? waiting.count
+        let allowed = waiting.prefix(room)
+        allowed.forEach { transport.send($0.frame) }
+        sent[requestId, default: 0] += allowed.count
     }
 }
