@@ -20,8 +20,7 @@ final class PathTransitions: StreamingInstrument, @unchecked Sendable {
     }
 
     private var monitor: NWPathMonitor?
-    private let lock: NSLock = .init()
-    private var last: Snapshot?
+    private let last: Mutex<Snapshot?> = .init(nil)
     #endif
 
     static let id: InstrumentID = .networkPathTransitions
@@ -85,12 +84,12 @@ final class PathTransitions: StreamingInstrument, @unchecked Sendable {
                 reason: path.status == .satisfied
                     ? nil : Self.reason(path.unsatisfiedReason)
             )
-            let changed = self.lock.withLock {
-                guard now != self.last else {
+            let changed = self.last.withLock { last in
+                guard now != last else {
                     return false
                 }
 
-                self.last = now
+                last = now
                 return true
             }
             guard changed else {
@@ -115,7 +114,7 @@ final class PathTransitions: StreamingInstrument, @unchecked Sendable {
         #if canImport(Network)
         monitor?.cancel()
         monitor = nil
-        lock.withLock { last = nil }
+        last.withLock { $0 = nil }
         #endif
     }
 }
@@ -140,8 +139,7 @@ final class SessionConfiguration: StreamingInstrument {
     static let id: InstrumentID = .sessionConfiguration
     static let entity = Entity.ID.networkSession
 
-    private let lock: NSLock = .init()
-    private var described: Set<UInt32> = []
+    private let described: Mutex<Set<UInt32>> = .init([])
 
     init() {}
 
@@ -207,7 +205,7 @@ final class SessionConfiguration: StreamingInstrument {
             // A session makes many tasks and so is seen many times. Its
             // configuration is fixed at creation, so the second reading would be
             // the first one repeated.
-            let isNew = self.lock.withLock { self.described.insert(instance).inserted }
+            let isNew = self.described.withLock { $0.insert(instance).inserted }
             guard isNew else {
                 return
             }
@@ -218,7 +216,7 @@ final class SessionConfiguration: StreamingInstrument {
     }
 
     func stopObserving() {
-        lock.withLock { described.removeAll() }
+        described.withLock { $0.removeAll() }
     }
 }
 
@@ -431,15 +429,18 @@ import Foundation
 final class TaskMetricsDelegate: NSObject, URLSessionTaskDelegate,
     URLSessionDataDelegate
 {
+    private struct Sinks {
+        var reporting: ((URLSessionTask, URLSessionTaskMetrics, String) -> Void)?
+        var failing: ((URLSessionTask, Error) -> Void)?
+    }
+
     /// Readable so `network.session.configuration` can describe the session
     /// this proxy was made for without installing a second chokepoint of its
     /// own. Weak throughout: basset never keeps an app's session alive.
     private(set) weak var session: URLSession?
 
     private let existing: (any URLSessionTaskDelegate)?
-    private let lock: NSLock = .init()
-    private var reporting: ((URLSessionTask, URLSessionTaskMetrics, String) -> Void)?
-    private var failing: ((URLSessionTask, Error) -> Void)?
+    private let sinks: Mutex<Sinks> = .init(Sinks())
 
     /// Which delegate the metrics actually arrived on. The whole reason this
     /// instrument is shaped around a task delegate rather than a substituted
@@ -476,17 +477,14 @@ final class TaskMetricsDelegate: NSObject, URLSessionTaskDelegate,
         into sink: @escaping (URLSessionTask, URLSessionTaskMetrics, String) -> Void,
         failures: @escaping (URLSessionTask, Error) -> Void
     ) {
-        lock.withLock {
-            reporting = sink
-            failing = failures
+        sinks.withLock {
+            $0.reporting = sink
+            $0.failing = failures
         }
     }
 
     func stop() {
-        lock.withLock {
-            reporting = nil
-            failing = nil
-        }
+        sinks.withLock { $0 = Sinks() }
     }
 
     func urlSession(
@@ -494,7 +492,7 @@ final class TaskMetricsDelegate: NSObject, URLSessionTaskDelegate,
         task: URLSessionTask,
         didFinishCollecting metrics: URLSessionTaskMetrics
     ) {
-        let sink = lock.withLock { reporting }
+        let sink = sinks.withLock { $0.reporting }
         sink?(task, metrics, "taskDelegate")
         forwardTarget?.urlSession?(session, task: task, didFinishCollecting: metrics)
     }
@@ -508,7 +506,7 @@ final class TaskMetricsDelegate: NSObject, URLSessionTaskDelegate,
         didCompleteWithError error: Error?
     ) {
         if let error {
-            let sink = lock.withLock { failing }
+            let sink = sinks.withLock { $0.failing }
             sink?(task, error)
         }
         forwardTarget?.urlSession?(session, task: task, didCompleteWithError: error)

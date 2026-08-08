@@ -22,8 +22,7 @@ final class PermissionChanges: StreamingInstrument {
     static let id: InstrumentID = .permissionChanges
     static let entity = Entity.ID.permission
 
-    private let lock: NSLock = .init()
-    private var lastSeen: [String: String] = [:]
+    private let lastSeen: Mutex<[String: String]> = .init([:])
     private var observer: NSObjectProtocol?
 
     init() {}
@@ -53,20 +52,20 @@ final class PermissionChanges: StreamingInstrument {
             NotificationCenter.default.removeObserver(observer)
         }
         observer = nil
-        lock.withLock { lastSeen.removeAll() }
+        lastSeen.withLock { $0.removeAll() }
     }
 
     /// A subject with no status never moves — HealthKit's is unknowable by
     /// design, and reporting it as a change on every foreground would be the
     /// mechanism talking rather than the device.
     private func moved(in findings: [PermissionFinding]) -> [PermissionFinding] {
-        lock.withLock {
+        lastSeen.withLock { seen in
             findings.filter { finding in
                 guard let status = finding.status else {
                     return false
                 }
 
-                return lastSeen[finding.subject] != status
+                return seen[finding.subject] != status
             }
         }
     }
@@ -76,13 +75,13 @@ final class PermissionChanges: StreamingInstrument {
             return
         }
 
-        lock.withLock {
+        lastSeen.withLock { seen in
             for finding in findings {
                 guard let status = finding.status else {
                     continue
                 }
 
-                lastSeen[finding.subject] = status
+                seen[finding.subject] = status
             }
         }
         context.emit { out in

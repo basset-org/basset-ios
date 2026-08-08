@@ -205,13 +205,16 @@ final class MainThreadHang: StreamingInstrument {
 /// has stopped answering accumulates one probe rather than a backlog that becomes
 /// its own problem.
 final class QueueLatency: StreamingInstrument, @unchecked Sendable {
+    private struct State {
+        var outstandingSince: MonotonicTime?
+        var samples: [UInt64] = []
+    }
+
     static let id: InstrumentID = .queueLatency
     static let entity = Entity.ID.dispatchQueue
 
     private let clock: Clock = .init()
-    private let lock: NSLock = .init()
-    private var outstandingSince: MonotonicTime?
-    private var samples: [UInt64] = []
+    private let guarded: Mutex<State> = .init(State())
 
     init() {}
 
@@ -227,20 +230,17 @@ final class QueueLatency: StreamingInstrument, @unchecked Sendable {
     }
 
     func stopObserving() {
-        lock.withLock {
-            outstandingSince = nil
-            samples.removeAll()
-        }
+        guarded.withLock { $0 = State() }
     }
 
     private func probe() {
         let submitted = clock.now()
-        let alreadyWaiting = lock.withLock { () -> Bool in
-            guard outstandingSince == nil else {
+        let alreadyWaiting = guarded.withLock { state -> Bool in
+            guard state.outstandingSince == nil else {
                 return true
             }
 
-            outstandingSince = submitted
+            state.outstandingSince = submitted
             return false
         }
         guard !alreadyWaiting else {
@@ -253,18 +253,19 @@ final class QueueLatency: StreamingInstrument, @unchecked Sendable {
             }
 
             let waited = self.clock.now().nanoseconds &- submitted.nanoseconds
-            self.lock.withLock {
-                self.outstandingSince = nil
-                self.samples.append(waited)
+            self.guarded.withLock { state in
+                state.outstandingSince = nil
+                state.samples.append(waited)
             }
         }
     }
 
     private func report(over window: Context.FlushWindow, into out: inout Readings) {
-        let (taken, waitingSince) = lock.withLock { () -> ([UInt64], MonotonicTime?) in
-            defer { samples.removeAll() }
-            return (samples, outstandingSince)
-        }
+        let (taken, waitingSince) = guarded
+            .withLock { state -> ([UInt64], MonotonicTime?) in
+                defer { state.samples.removeAll() }
+                return (state.samples, state.outstandingSince)
+            }
 
         guard let worst = taken.max() else {
             // Nothing came back. Either no probe has completed yet, or the main

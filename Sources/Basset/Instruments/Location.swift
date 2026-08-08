@@ -31,6 +31,12 @@ import ObjectiveC
 /// longitude, no course, no speed — none of it is read. The accuracy *class* the
 /// app asked for is a configuration value, not a position.
 final class DelegateSilence: StreamingInstrument, LoadTimeInstall {
+    private struct State {
+        var startedAt: MonotonicTime?
+        var delivered: UInt64 = 0
+        var followed: [Int] = []
+    }
+
     static let id: InstrumentID = .locationSilence
     static let entity = Entity.ID.locationDelegate
 
@@ -40,10 +46,7 @@ final class DelegateSilence: StreamingInstrument, LoadTimeInstall {
     static let didUpdate: Selector = .init("locationManager:didUpdateLocations:")
 
     private let clock: Clock = .init()
-    private let lock: NSLock = .init()
-    private var startedAt: MonotonicTime?
-    private var delivered: UInt64 = 0
-    private var followed: [Int] = []
+    private let guarded: Mutex<State> = .init(State())
 
     init() {}
 
@@ -97,15 +100,11 @@ final class DelegateSilence: StreamingInstrument, LoadTimeInstall {
         let token = classes.attachAndFollow { [weak self] delegateClass in
             self?.watch(delegateClass, context)
         }
-        lock.withLock { followed.append(token) }
+        guarded.withLock { $0.followed.append(token) }
     }
 
     func stopObserving() {
-        lock.withLock {
-            startedAt = nil
-            delivered = 0
-            followed.removeAll()
-        }
+        guarded.withLock { $0 = State() }
     }
 
     /// The app asked for updates. What matters is the moment, and the accuracy it
@@ -113,9 +112,9 @@ final class DelegateSilence: StreamingInstrument, LoadTimeInstall {
     /// waits a long time for a fix that a reader would otherwise call a hang.
     private func began(_ receiver: AnyObject, _ context: Context) {
         let now = clock.now()
-        lock.withLock {
-            startedAt = now
-            delivered = 0
+        guarded.withLock {
+            $0.startedAt = now
+            $0.delivered = 0
         }
         context.emit { out in
             out.put(.callbackImplemented(true))
@@ -153,16 +152,15 @@ final class DelegateSilence: StreamingInstrument, LoadTimeInstall {
     /// interval the user experienced as waiting. Later ones are a cadence, and
     /// counting them is enough.
     private func updated(_ delegateClass: AnyClass, _ context: Context) {
-        let waited = lock.withLock { () -> UInt64? in
-            delivered += 1
-            guard let startedAt else {
-                return nil
+        let (waited, count) = guarded.withLock { state -> (UInt64?, UInt64) in
+            state.delivered += 1
+            guard let startedAt = state.startedAt else {
+                return (nil, state.delivered)
             }
 
-            self.startedAt = nil
-            return clock.now().nanoseconds &- startedAt.nanoseconds
+            state.startedAt = nil
+            return (clock.now().nanoseconds &- startedAt.nanoseconds, state.delivered)
         }
-        let count = lock.withLock { delivered }
 
         context.emit { out in
             out.put(.callbackImplemented(true))

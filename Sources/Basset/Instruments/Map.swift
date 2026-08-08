@@ -17,6 +17,12 @@ import ObjectiveC
 /// read — a tile failure is a count and an error code, and where the user was
 /// looking is not part of the finding.
 final class TileLoading: StreamingInstrument, LoadTimeInstall {
+    private struct State {
+        var completed: UInt64 = 0
+        var failures: UInt64 = 0
+        var followed: [Int] = []
+    }
+
     static let id: InstrumentID = .mapTileLoading
     static let entity = Entity.ID.mapView
 
@@ -25,10 +31,7 @@ final class TileLoading: StreamingInstrument, LoadTimeInstall {
     static let didFinishLoading: Selector = .init("mapViewDidFinishLoadingMap:")
     static let didFailLoading: Selector = .init("mapViewDidFailLoadingMap:withError:")
 
-    private let lock: NSLock = .init()
-    private var completed: UInt64 = 0
-    private var failures: UInt64 = 0
-    private var followed: [Int] = []
+    private let guarded: Mutex<State> = .init(State())
 
     init() {}
 
@@ -54,15 +57,11 @@ final class TileLoading: StreamingInstrument, LoadTimeInstall {
         let token = classes.attachAndFollow { [weak self] delegateClass in
             self?.watch(delegateClass, context)
         }
-        lock.withLock { followed.append(token) }
+        guarded.withLock { $0.followed.append(token) }
     }
 
     func stopObserving() {
-        lock.withLock {
-            completed = 0
-            failures = 0
-            followed.removeAll()
-        }
+        guarded.withLock { $0 = State() }
     }
 
     private func watch(_ delegateClass: AnyClass, _ context: Context) {
@@ -88,9 +87,9 @@ final class TileLoading: StreamingInstrument, LoadTimeInstall {
     }
 
     private func finished(_ delegateClass: AnyClass, _ context: Context) {
-        let counts = lock.withLock { () -> (UInt64, UInt64) in
-            completed += 1
-            return (completed, failures)
+        let counts = guarded.withLock { state -> (UInt64, UInt64) in
+            state.completed += 1
+            return (state.completed, state.failures)
         }
         context.emit { out in
             out.put(.mapLoadsCompleted(counts.0))
@@ -107,9 +106,9 @@ final class TileLoading: StreamingInstrument, LoadTimeInstall {
         of delegateClass: AnyClass,
         into context: Context
     ) {
-        let counts = lock.withLock { () -> (UInt64, UInt64) in
-            failures += 1
-            return (completed, failures)
+        let counts = guarded.withLock { state -> (UInt64, UInt64) in
+            state.failures += 1
+            return (state.completed, state.failures)
         }
         context.emit { out in
             out.put(.mapLoadsCompleted(counts.0))

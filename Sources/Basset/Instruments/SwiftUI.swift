@@ -33,6 +33,18 @@ final class DisplayListChurn: StreamingInstrument {
         let fingerprint: Int
     }
 
+    private struct State {
+        /// Keyed by the registry's instance number, never by the controller's
+        /// address: an address is reused as soon as the controller at it is
+        /// released, and a new screen inheriting a dead one's sample reads as
+        /// unchanged — which is the one reading this instrument exists to take.
+        var lastSample: [UInt32: Sample] = [:]
+        var changes: UInt64 = 0
+        var latest: Sample?
+        var generation: String?
+        var status = "not sampled yet"
+    }
+
     static let id: InstrumentID = .swiftUIDisplayListChurn
     static let entity = Entity.ID.swiftUIDisplayList
 
@@ -47,16 +59,7 @@ final class DisplayListChurn: StreamingInstrument {
     private static let sampleInterval = 0.25
     private static let hostCeiling = 4
 
-    private let lock: NSLock = .init()
-    /// Keyed by the registry's instance number, never by the controller's
-    /// address: an address is reused as soon as the controller at it is
-    /// released, and a new screen inheriting a dead one's sample reads as
-    /// unchanged — which is the one reading this instrument exists to take.
-    private var lastSample: [UInt32: Sample] = [:]
-    private var changes: UInt64 = 0
-    private var latest: Sample?
-    private var generation: String?
-    private var status = "not sampled yet"
+    private let guarded: Mutex<State> = .init(State())
     private var sampler: DispatchSourceTimer?
 
     #if canImport(UIKit)
@@ -115,16 +118,17 @@ final class DisplayListChurn: StreamingInstrument {
                 return
             }
 
-            lock.lock()
-            let reported = (
-                status: status,
-                generation: generation,
-                latest: latest,
-                changes: changes,
-                hosts: UInt32(hosts.count)
-            )
-            changes = 0
-            lock.unlock()
+            let hostCount = UInt32(hosts.count)
+            let reported = guarded.withLock { state in
+                defer { state.changes = 0 }
+                return (
+                    status: state.status,
+                    generation: state.generation,
+                    latest: state.latest,
+                    changes: state.changes,
+                    hosts: hostCount
+                )
+            }
 
             out.put(.windowNanoseconds(window.nanoseconds))
             out.put(.mechanismStatus(reported.status))
@@ -146,13 +150,7 @@ final class DisplayListChurn: StreamingInstrument {
     func stopObserving() {
         sampler?.cancel()
         sampler = nil
-        lock.lock()
-        lastSample.removeAll()
-        changes = 0
-        latest = nil
-        generation = nil
-        status = "not sampled yet"
-        lock.unlock()
+        guarded.withLock { $0 = State() }
     }
 
     #if canImport(UIKit)
@@ -201,27 +199,24 @@ final class DisplayListChurn: StreamingInstrument {
     /// Bounds the dictionary, which otherwise grows for as long as a capture
     /// visits screens.
     private func forget(everythingBut live: Set<UInt32>) {
-        lock.lock()
-        lastSample = lastSample.filter { live.contains($0.key) }
-        lock.unlock()
+        guarded.withLock { $0.lastSample = $0.lastSample.filter { live.contains($0.key) } }
     }
 
     private func note(_ sample: Sample, for key: UInt32, generation: String) {
-        lock.lock()
-        if let previous = lastSample[key], previous != sample {
-            changes += 1
+        guarded.withLock { state in
+            if let previous = state.lastSample[key], previous != sample {
+                state.changes += 1
+            }
+
+            state.lastSample[key] = sample
+            state.latest = sample
+            state.generation = generation
+            state.status = "ok"
         }
-        lastSample[key] = sample
-        latest = sample
-        self.generation = generation
-        status = "ok"
-        lock.unlock()
     }
 
     private func record(status: String) {
-        lock.lock()
-        self.status = status
-        lock.unlock()
+        guarded.withLock { $0.status = status }
     }
     #endif
 }
@@ -236,6 +231,11 @@ final class DisplayListChurn: StreamingInstrument {
 /// reading is marked when the type erased itself. Either one can be the useless
 /// one.
 final class HostAppear: StreamingInstrument {
+    private struct State {
+        var loadedAt: [ObjectIdentifier: UInt64] = [:]
+        var identifiers: [ObjectIdentifier: UInt32] = [:]
+    }
+
     static let id: InstrumentID = .swiftUIHostAppear
     static let entity = Entity.ID.swiftUIHost
 
@@ -244,9 +244,7 @@ final class HostAppear: StreamingInstrument {
     /// uptime.
     private static let pendingCeiling = 64
 
-    private let lock: NSLock = .init()
-    private var loadedAt: [ObjectIdentifier: UInt64] = [:]
-    private var identifiers: [ObjectIdentifier: UInt32] = [:]
+    private let guarded: Mutex<State> = .init(State())
 
     #if canImport(UIKit)
     private let hosts: WeakRegistry<UIViewController> = .init()
@@ -267,10 +265,10 @@ final class HostAppear: StreamingInstrument {
             // identity at all — where an entry whose controller is gone is one
             // whose address is free to be handed to a new one.
             let alive = Set(hosts.tracked.map { ObjectIdentifier($0.object) })
-            lock.lock()
-            identifiers = identifiers.filter { alive.contains($0.key) }
-            identifiers[ObjectIdentifier(controller)] = instance
-            lock.unlock()
+            guarded.withLock { state in
+                state.identifiers = state.identifiers.filter { alive.contains($0.key) }
+                state.identifiers[ObjectIdentifier(controller)] = instance
+            }
         }
 
         _ = context.swizzle.after(
@@ -290,10 +288,7 @@ final class HostAppear: StreamingInstrument {
     }
 
     func stopObserving() {
-        lock.lock()
-        loadedAt.removeAll()
-        identifiers.removeAll()
-        lock.unlock()
+        guarded.withLock { $0 = State() }
     }
 
     #if canImport(UIKit)
@@ -302,12 +297,14 @@ final class HostAppear: StreamingInstrument {
             return
         }
 
-        lock.lock()
-        if loadedAt.count >= Self.pendingCeiling {
-            loadedAt.removeAll()
+        let loadedAt = context.clock.now().nanoseconds
+        guarded.withLock { state in
+            if state.loadedAt.count >= Self.pendingCeiling {
+                state.loadedAt.removeAll()
+            }
+
+            state.loadedAt[ObjectIdentifier(receiver)] = loadedAt
         }
-        loadedAt[ObjectIdentifier(receiver)] = context.clock.now().nanoseconds
-        lock.unlock()
     }
 
     private func appeared(_ receiver: AnyObject, _ context: Context) {
@@ -320,10 +317,9 @@ final class HostAppear: StreamingInstrument {
         hosts.add(controller)
 
         let key = ObjectIdentifier(receiver)
-        lock.lock()
-        let loaded = loadedAt.removeValue(forKey: key)
-        let instance = identifiers[key]
-        lock.unlock()
+        let (loaded, instance) = guarded.withLock { state in
+            (state.loadedAt.removeValue(forKey: key), state.identifiers[key])
+        }
 
         let root = SwiftUIHost.rootView(of: receiver)
 
@@ -365,6 +361,11 @@ final class HostAppear: StreamingInstrument {
 /// AttributeGraph cycles in the app. Reading a view tree or reflecting a display
 /// list from here reproduces that.
 final class HostUpdates: StreamingInstrument, @unchecked Sendable {
+    private struct Hooked {
+        var classes: Set<ObjectIdentifier> = []
+        var lastName: String?
+    }
+
     static let id: InstrumentID = .swiftUIHostUpdates
     static let entity = Entity.ID.swiftUIHost
 
@@ -372,9 +373,7 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
     private static let totalNanoseconds: TallySlot = .second
     private static let peakNanoseconds: TallySlot = .third
 
-    private let lock: NSLock = .init()
-    private var hookedClasses: Set<ObjectIdentifier> = []
-    private var lastHookedName: String?
+    private let hooked: Mutex<Hooked> = .init(Hooked())
 
     #if canImport(UIKit)
     private let hosts: WeakRegistry<UIViewController> = .init()
@@ -417,9 +416,7 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
             }
 
             out.put(.hostCount(UInt32(hosts.count)))
-            lock.lock()
-            let name = lastHookedName
-            lock.unlock()
+            let name = hooked.withLock { $0.lastName }
             if let name {
                 out.put(.hostViewClass(name))
             }
@@ -428,10 +425,7 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
     }
 
     func stopObserving() {
-        lock.lock()
-        hookedClasses.removeAll()
-        lastHookedName = nil
-        lock.unlock()
+        hooked.withLock { $0 = Hooked() }
     }
 
     #if canImport(UIKit)
@@ -446,13 +440,16 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
         hosts.add(controller)
 
         let key = ObjectIdentifier(hostingView)
-        lock.lock()
-        let alreadyHooked = hookedClasses.contains(key)
-        if !alreadyHooked {
-            hookedClasses.insert(key)
-            lastHookedName = NSStringFromClass(hostingView)
+        let name = NSStringFromClass(hostingView)
+        let alreadyHooked = hooked.withLock { hooked -> Bool in
+            let already = hooked.classes.contains(key)
+            if !already {
+                hooked.classes.insert(key)
+                hooked.lastName = name
+            }
+
+            return already
         }
-        lock.unlock()
         guard !alreadyHooked else {
             return
         }
@@ -485,9 +482,7 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
     }
 
     private func forget(_ key: ObjectIdentifier) {
-        lock.lock()
-        hookedClasses.remove(key)
-        lock.unlock()
+        hooked.withLock { $0.classes.remove(key) }
     }
 
     private func hookLayout(of hostingView: AnyClass, _ context: Context) {
