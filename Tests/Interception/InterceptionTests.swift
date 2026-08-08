@@ -950,8 +950,11 @@ struct ObservationsTests {
             }
         }
 
+        #expect(
+            observations.count == 0,
+            "every attach that lost the race to teardown was refused"
+        )
         observations.detachAll()
-        #expect(observations.count == 0)
     }
 
     /// A follower snapshotted before the request ended can still be in flight,
