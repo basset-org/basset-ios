@@ -53,14 +53,21 @@ private final class RecordingOpener: TransportOpener, @unchecked Sendable {
     private let lock: NSLock = .init()
     private var opened: [UInt64: RecordingTransport] = [:]
     private let kind: TransportType?
+    private var refusals: Int
 
-    init(kind: TransportType? = .quic) {
+    init(kind: TransportType? = .quic, refusingFirst refusals: Int = 0) {
         self.kind = kind
+        self.refusals = refusals
     }
 
     func open(request: BassetRequest, ingestEndpoint: String) -> Transport? {
         lock.lock()
         defer { lock.unlock() }
+        guard refusals == 0 else {
+            refusals -= 1
+            return nil
+        }
+
         let stream = RecordingTransport(kind: kind)
         opened[request.requestId] = stream
         return stream
@@ -1156,6 +1163,29 @@ struct LaunchBufferTests {
             atLaunchRequests.load().isEmpty,
             "and it does not come back on the next launch"
         )
+    }
+
+    /// An opener may refuse and then succeed, which puts the flush on the
+    /// reading path: the backlog leaves inside the same reading that opened the
+    /// transport. The reading that got there is not owed a frame the flush
+    /// already spent.
+    @Test func aReadingThatOpensTheTransportRespectsWhatTheFlushSpent() {
+        let (subject, opener) = runtime(opener: RecordingOpener(refusingFirst: 1))
+
+        subject.converge(
+            to: [cappedRequest(1, instruments: ["memory.footprint"], maxFrames: 1)],
+            ingestEndpoint: "in"
+        )
+        subject.memory?.take()
+        subject.settle()
+
+        #expect(subject.bufferedFrameCount == 1, "the opener refused, so it is held")
+
+        subject.memory?.take()
+        subject.settle()
+
+        #expect(opener.stream(1)?.count == 1, "the cap, counting the flushed reading")
+        #expect(subject.liveRequestIds.isEmpty)
     }
 
     /// What the flush sent counts against the cap rather than resetting it.
