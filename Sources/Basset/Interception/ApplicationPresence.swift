@@ -25,8 +25,7 @@ enum ApplicationPresence {
     private static let foreground: AtomicStatus = .init()
     /// Subscribing twice would count every transition twice. `start` guards
     /// itself, so this is for the second caller that does not exist yet.
-    private static let lock: NSLock = .init()
-    private nonisolated(unsafe) static var watching = false
+    private static let watching: Mutex<Bool> = .init(false)
 
     static var isForeground: Bool {
         foreground.isActive
@@ -40,10 +39,11 @@ enum ApplicationPresence {
     /// any thread; the first read needs main, and takes it asynchronously rather
     /// than blocking the caller's launch.
     static func capture() {
-        lock.lock()
-        let already = watching
-        watching = true
-        lock.unlock()
+        let already = watching.withLock { watching -> Bool in
+            let seen = watching
+            watching = true
+            return seen
+        }
         guard !already else {
             return
         }

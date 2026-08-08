@@ -1,18 +1,19 @@
 import Foundation
 
 public final class Observation: NSObject {
+    private struct State {
+        weak var observed: NSObject?
+        var attached = false
+    }
+
     private let keyPath: String
     private let handler: (Any?) -> Void
-    private let lock: NSLock = .init()
-    private weak var observed: NSObject?
-    private var attached = false
+    private let guarded: Mutex<State> = .init(State())
 
     /// False once the observed object is gone, which is what lets an owner
     /// drop registrations for objects the app has finished with.
     public var isAttached: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return attached && observed != nil
+        guarded.withLock { $0.attached && $0.observed != nil }
     }
 
     deinit {
@@ -45,10 +46,10 @@ public final class Observation: NSObject {
         handler: @escaping (Any?) -> Void
     ) -> Observation {
         let observation = Observation(keyPath: keyPath, handler: handler)
-        observation.lock.lock()
-        observation.observed = observed
-        observation.attached = true
-        observation.lock.unlock()
+        observation.guarded.withLock { state in
+            state.observed = observed
+            state.attached = true
+        }
 
         var options: NSKeyValueObservingOptions = [.new]
         if initial {
@@ -68,16 +69,19 @@ public final class Observation: NSObject {
     /// under the lock is what makes the second caller a no-op rather than the
     /// last thing the process does.
     public func detach() {
-        lock.lock()
-        guard attached, let observed else {
-            lock.unlock()
+        let claimed = guarded.withLock { state -> NSObject? in
+            guard state.attached, let observed = state.observed else {
+                return nil
+            }
+
+            state.attached = false
+            return observed
+        }
+        guard let claimed else {
             return
         }
 
-        attached = false
-        lock.unlock()
-
-        observed.removeObserver(self, forKeyPath: keyPath)
+        claimed.removeObserver(self, forKeyPath: keyPath)
     }
 }
 
@@ -85,14 +89,15 @@ public final class Observation: NSObject {
 /// on the runner queue during activation, at the same time, so the registrations
 /// they collect cannot live in a bare array.
 public final class Observations: @unchecked Sendable {
-    private let lock: NSLock = .init()
-    private var attached: [Observation] = []
-    private var isStopped = false
+    private struct State {
+        var attached: [Observation] = []
+        var isStopped = false
+    }
+
+    private let guarded: Mutex<State> = .init(State())
 
     public var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return attached.count
+        guarded.withLock { $0.attached.count }
     }
 
     public init() {}
@@ -101,25 +106,26 @@ public final class Observations: @unchecked Sendable {
     /// app building one per screen visit would otherwise accumulate a
     /// registration per visit for the life of the request.
     public func attach(_ make: () -> [Observation]) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !isStopped else {
-            return
-        }
+        guarded.withLock { state in
+            guard !state.isStopped else {
+                return
+            }
 
-        attached.removeAll { !$0.isAttached }
-        attached.append(contentsOf: make())
+            state.attached.removeAll { !$0.isAttached }
+            state.attached.append(contentsOf: make())
+        }
     }
 
     /// One way. A follower snapshotted before its request ended can still be in
     /// flight, and a registration it lands after this point is one nothing left
     /// alive will remove.
     public func detachAll() {
-        lock.lock()
-        isStopped = true
-        let detaching = attached
-        attached.removeAll()
-        lock.unlock()
+        let detaching = guarded.withLock { state -> [Observation] in
+            state.isStopped = true
+            let held = state.attached
+            state.attached.removeAll()
+            return held
+        }
 
         detaching.forEach { $0.detach() }
     }

@@ -11,17 +11,24 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
         }
     }
 
-    private let lock: NSLock = .init()
-    private var boxes: [Box] = []
-    private var arrivals: [Int: (Tracked, UInt32) -> Void] = [:]
-    private var nextToken = 0
-    private var nextInstance: UInt32 = 0
+    private struct State {
+        var boxes: [Box] = []
+        var arrivals: [Int: (Tracked, UInt32) -> Void] = [:]
+        var nextToken = 0
+        var nextInstance: UInt32 = 0
+
+        mutating func forgetReleased() {
+            boxes.removeAll { $0.tracked == nil }
+        }
+    }
+
+    private let guarded: Mutex<State> = .init(State())
 
     public var all: [Tracked] {
-        lock.lock()
-        defer { lock.unlock() }
-        boxes.removeAll { $0.tracked == nil }
-        return boxes.compactMap(\.tracked)
+        guarded.withLock { state in
+            state.forgetReleased()
+            return state.boxes.compactMap(\.tracked)
+        }
     }
 
     public var count: Int {
@@ -33,27 +40,28 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
     /// `ObjectIdentifier` can hand a new object the state of a dead one. This
     /// number only ever counts up.
     public var tracked: [(object: Tracked, instance: UInt32)] {
-        lock.lock()
-        defer { lock.unlock() }
-        boxes.removeAll { $0.tracked == nil }
-        return boxes.compactMap { box in box.tracked.map { ($0, box.instance) } }
+        guarded.withLock { state in
+            state.forgetReleased()
+            return state.boxes.compactMap { box in box.tracked.map { ($0, box.instance) } }
+        }
     }
 
     public init() {}
 
     public func add(_ tracked: Tracked) {
-        lock.lock()
-        boxes.removeAll { $0.tracked == nil }
-        guard !boxes.contains(where: { $0.tracked === tracked }) else {
-            lock.unlock()
+        let arrival = guarded.withLock { state -> (UInt32, [(Tracked, UInt32) -> Void])? in
+            state.forgetReleased()
+            guard !state.boxes.contains(where: { $0.tracked === tracked }) else {
+                return nil
+            }
+
+            state.nextInstance += 1
+            state.boxes.append(Box(tracked, state.nextInstance))
+            return (state.nextInstance, Array(state.arrivals.values))
+        }
+        guard let (instance, waiting) = arrival else {
             return
         }
-
-        nextInstance += 1
-        let instance = nextInstance
-        boxes.append(Box(tracked, instance))
-        let waiting = Array(arrivals.values)
-        lock.unlock()
 
         waiting.forEach { $0(tracked, instance) }
     }
@@ -67,17 +75,18 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
     /// delegate to hook, and nothing ever said otherwise — so a camera in that
     /// ordinary order reported no frames at all.
     public func announce(_ tracked: Tracked) {
-        lock.lock()
-        boxes.removeAll { $0.tracked == nil }
-        guard let box = boxes.first(where: { $0.tracked === tracked }) else {
-            lock.unlock()
+        let known = guarded.withLock { state -> (UInt32, [(Tracked, UInt32) -> Void])? in
+            state.forgetReleased()
+            guard let box = state.boxes.first(where: { $0.tracked === tracked }) else {
+                return nil
+            }
+
+            return (box.instance, Array(state.arrivals.values))
+        }
+        guard let (instance, waiting) = known else {
             add(tracked)
             return
         }
-
-        let instance = box.instance
-        let waiting = Array(arrivals.values)
-        lock.unlock()
 
         waiting.forEach { $0(tracked, instance) }
     }
@@ -91,13 +100,15 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
     /// screen.
     @discardableResult
     public func attachAndFollow(_ attach: @escaping (Tracked, UInt32) -> Void) -> Int {
-        lock.lock()
-        boxes.removeAll { $0.tracked == nil }
-        let existing = boxes.compactMap { box in box.tracked.map { ($0, box.instance) } }
-        nextToken += 1
-        let token = nextToken
-        arrivals[token] = attach
-        lock.unlock()
+        let (existing, token) = guarded
+            .withLock { state -> ([(Tracked, UInt32)], Int) in
+                state.forgetReleased()
+                state.nextToken += 1
+                state.arrivals[state.nextToken] = attach
+                let live = state.boxes
+                    .compactMap { box in box.tracked.map { ($0, box.instance) } }
+                return (live, state.nextToken)
+            }
 
         existing.forEach { attach($0.0, $0.1) }
         return token
@@ -107,31 +118,33 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
     /// camera registry is shared by every `camera.*` instrument — and
     /// deactivating one must not silence its siblings.
     public func stopFollowing(_ token: Int) {
-        lock.lock()
-        arrivals.removeValue(forKey: token)
-        lock.unlock()
+        guarded.withLock { $0.arrivals.removeValue(forKey: token) }
     }
 }
 
 public final class Registries: @unchecked Sendable {
-    private let lock: NSLock = .init()
-    private var byType: [ObjectIdentifier: AnyObject] = [:]
-    private var byDelegateOwner: [ObjectIdentifier: DelegateClasses] = [:]
+    private struct State {
+        var byType: [ObjectIdentifier: AnyObject] = [:]
+        var byDelegateOwner: [ObjectIdentifier: DelegateClasses] = [:]
+    }
+
+    private let guarded: Mutex<State> = .init(State())
 
     public init() {}
 
     public func registry<Tracked: AnyObject>(_ type: Tracked
         .Type) -> WeakRegistry<Tracked>
     {
-        lock.lock()
-        defer { lock.unlock() }
-        let key = ObjectIdentifier(type)
-        if let existing = byType[key] as? WeakRegistry<Tracked> {
-            return existing
+        guarded.withLock { state in
+            let key = ObjectIdentifier(type)
+            if let existing = state.byType[key] as? WeakRegistry<Tracked> {
+                return existing
+            }
+
+            let created = WeakRegistry<Tracked>()
+            state.byType[key] = created
+            return created
         }
-        let created = WeakRegistry<Tracked>()
-        byType[key] = created
-        return created
     }
 
     /// The class-space counterpart, keyed by whatever the caller is keying on.
@@ -139,13 +152,14 @@ public final class Registries: @unchecked Sendable {
     /// of value — an `ObjectIdentifier` of a type — and a shared table would let
     /// `CLLocationManager`'s instance registry and its delegate classes collide.
     func delegates(_ key: ObjectIdentifier) -> DelegateClasses {
-        lock.lock()
-        defer { lock.unlock() }
-        if let existing = byDelegateOwner[key] {
-            return existing
+        guarded.withLock { state in
+            if let existing = state.byDelegateOwner[key] {
+                return existing
+            }
+
+            let created = DelegateClasses()
+            state.byDelegateOwner[key] = created
+            return created
         }
-        let created = DelegateClasses()
-        byDelegateOwner[key] = created
-        return created
     }
 }

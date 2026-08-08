@@ -8,7 +8,11 @@ import os
 /// The standard library's `Mutex` is this, and is iOS 18. Everything below the
 /// initialiser is what closes that gap; when the floor reaches iOS 18, deleting
 /// this file and importing `Synchronization` leaves every call site as it is.
-struct Mutex<Value>: @unchecked Sendable {
+/// Non-copyable for the same reason the standard library's is: copying a lock
+/// gives two names for one piece of state, and the copy that shares it today is
+/// the copy that stops sharing it after the migration. Hold one in a class and
+/// reach it through that.
+struct Mutex<Value>: ~Copyable, @unchecked Sendable {
     private let storage: OSAllocatedUnfairLock<Value>
 
     init(_ initialValue: Value) {
@@ -18,7 +22,9 @@ struct Mutex<Value>: @unchecked Sendable {
     /// Never call out to anything that can take another lock, run app code, or
     /// come back here: `os_unfair_lock` is not recursive and traps rather than
     /// blocking when it catches itself.
-    func withLock<Result>(_ body: (inout Value) throws -> Result) rethrows -> Result {
+    borrowing func withLock<Result>(
+        _ body: (inout Value) throws -> Result
+    ) rethrows -> Result {
         try storage.withLockUnchecked { try body(&$0) }
     }
 }
