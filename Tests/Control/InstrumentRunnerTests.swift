@@ -53,14 +53,21 @@ private final class RecordingOpener: TransportOpener, @unchecked Sendable {
     private let lock: NSLock = .init()
     private var opened: [UInt64: RecordingTransport] = [:]
     private let kind: TransportType?
+    private var refusals: Int
 
-    init(kind: TransportType? = .quic) {
+    init(kind: TransportType? = .quic, refusingFirst refusals: Int = 0) {
         self.kind = kind
+        self.refusals = refusals
     }
 
     func open(request: BassetRequest, ingestEndpoint: String) -> Transport? {
         lock.lock()
         defer { lock.unlock() }
+        guard refusals == 0 else {
+            refusals -= 1
+            return nil
+        }
+
         let stream = RecordingTransport(kind: kind)
         opened[request.requestId] = stream
         return stream
@@ -278,15 +285,17 @@ private func request(
 private func cappedRequest(
     _ id: UInt64,
     instruments: [String],
-    maxFrames: UInt32
+    maxFrames: UInt32,
+    atLaunch: Bool = false,
+    token: String? = "request-token"
 ) -> BassetRequest {
     BassetRequest(
         requestId: id,
         instruments: instruments,
-        atLaunch: false,
+        atLaunch: atLaunch,
         expiresAt: Date().addingTimeInterval(600),
         maxFrames: maxFrames,
-        requestToken: "request-token"
+        requestToken: token
     )
 }
 
@@ -1100,5 +1109,120 @@ struct LaunchBufferTests {
             "collecting before any network call"
         )
         #expect(subject.memory?.observeCount == 1)
+    }
+
+    /// Waiting for a token is not an exemption from max_frames. The backlog is
+    /// bounded by the buffer rather than by the request, so a cap of three
+    /// against ten held readings sends three and ends there.
+    @Test func aBacklogLargerThanTheCapSendsOnlyWhatTheCapCovers() {
+        let atLaunchRequests = AtLaunchRequests(storage: scratchDefaults())
+        let opener = RecordingOpener()
+        let subject = InstrumentRunner(
+            instruments: [.stream(FakeMemory.self)],
+            opener: opener,
+            atLaunchRequests: atLaunchRequests
+        )
+
+        subject.converge(
+            to: [cappedRequest(
+                1,
+                instruments: ["memory.footprint"],
+                maxFrames: 3,
+                atLaunch: true,
+                token: nil
+            )],
+            ingestEndpoint: nil
+        )
+        for _ in 0 ..< 10 {
+            subject.memory?.take()
+        }
+        subject.settle()
+
+        #expect(subject.requestStates().first?.framesHeld == 10)
+        #expect(subject.requestStates().first?.framesSent == 0)
+
+        subject.converge(
+            to: [cappedRequest(
+                1,
+                instruments: ["memory.footprint"],
+                maxFrames: 3,
+                atLaunch: true
+            )],
+            ingestEndpoint: "in"
+        )
+
+        #expect(opener.stream(1)?.count == 3, "the cap, not the backlog")
+        #expect(
+            subject.liveRequestIds.isEmpty,
+            "the flush spent the cap, so the request is over"
+        )
+        #expect(subject.activeInstruments.isEmpty)
+        #expect(opener.stream(1)?.closed == true)
+        #expect(subject.bufferedFrameCount == 0)
+        #expect(
+            atLaunchRequests.load().isEmpty,
+            "and it does not come back on the next launch"
+        )
+    }
+
+    /// An opener may refuse and then succeed, which puts the flush on the
+    /// reading path: the backlog leaves inside the same reading that opened the
+    /// transport. The reading that got there is not owed a frame the flush
+    /// already spent.
+    @Test func aReadingThatOpensTheTransportRespectsWhatTheFlushSpent() {
+        let (subject, opener) = runtime(opener: RecordingOpener(refusingFirst: 1))
+
+        subject.converge(
+            to: [cappedRequest(1, instruments: ["memory.footprint"], maxFrames: 1)],
+            ingestEndpoint: "in"
+        )
+        subject.memory?.take()
+        subject.settle()
+
+        #expect(subject.bufferedFrameCount == 1, "the opener refused, so it is held")
+
+        subject.memory?.take()
+        subject.settle()
+
+        #expect(opener.stream(1)?.count == 1, "the cap, counting the flushed reading")
+        #expect(subject.liveRequestIds.isEmpty)
+    }
+
+    /// What the flush sent counts against the cap rather than resetting it.
+    @Test func aBacklogUnderTheCapLeavesTheRestOfIt() {
+        let (subject, opener) = runtime()
+
+        subject.converge(
+            to: [cappedRequest(
+                1,
+                instruments: ["memory.footprint"],
+                maxFrames: 3,
+                atLaunch: true,
+                token: nil
+            )],
+            ingestEndpoint: nil
+        )
+        subject.memory?.take()
+        subject.memory?.take()
+        subject.settle()
+
+        subject.converge(
+            to: [cappedRequest(
+                1,
+                instruments: ["memory.footprint"],
+                maxFrames: 3,
+                atLaunch: true
+            )],
+            ingestEndpoint: "in"
+        )
+
+        #expect(opener.stream(1)?.count == 2)
+        #expect(subject.liveRequestIds == [1], "one reading of the cap is left")
+
+        subject.memory?.take()
+        subject.settle()
+
+        #expect(opener.stream(1)?.count == 3)
+        #expect(subject.liveRequestIds.isEmpty)
     }
 }

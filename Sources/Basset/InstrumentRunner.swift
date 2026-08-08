@@ -172,6 +172,8 @@ final class InstrumentRunner: @unchecked Sendable {
             if persisting {
                 atLaunchRequests.save(firstPerRequestId)
             }
+
+            dropRequestsAtTheirCap()
         }
     }
 
@@ -296,17 +298,21 @@ final class InstrumentRunner: @unchecked Sendable {
         finishDropping()
     }
 
+    private func framesLeft(for requestId: UInt64, _ request: BassetRequest) -> Int {
+        guard let cap = request.maxFrames else {
+            return .max
+        }
+
+        return max(0, Int(cap) - sent[requestId, default: 0])
+    }
+
     /// Every reading the request asked for has been delivered, so there is
     /// nothing left for it to observe. Enforced here rather than left to ingest
     /// refusing: a refusal arrives after the device has already paid for the
     /// capture, and a device that cannot reach ingest never hears one at all.
     private func dropRequestsAtTheirCap() {
         let full = Array(live.filter { requestId, request in
-            guard let cap = request.maxFrames else {
-                return false
-            }
-
-            return sent[requestId, default: 0] >= Int(cap)
+            framesLeft(for: requestId, request) == 0
         }
         .keys)
         guard !full.isEmpty else {
@@ -507,7 +513,9 @@ final class InstrumentRunner: @unchecked Sendable {
                 // Refused rather than lost: max_readings is a cap the request
                 // asked for, so what it turns away is not a fault to report as
                 // one. `refused` on the state says it happened.
-                guard transport.refused == nil else {
+                guard transport.refused == nil,
+                      framesLeft(for: requestId, request) > 0
+                else {
                     continue
                 }
 
@@ -531,7 +539,7 @@ final class InstrumentRunner: @unchecked Sendable {
         }
 
         transports[requestId] = opened
-        flushBuffer(for: requestId, over: opened)
+        flushBuffer(for: requestId, request, over: opened)
         return opened
     }
 
@@ -543,10 +551,15 @@ final class InstrumentRunner: @unchecked Sendable {
         buffered.append((requestId: requestId, frame: frame))
     }
 
-    private func flushBuffer(for requestId: UInt64, over transport: Transport) {
+    private func flushBuffer(for requestId: UInt64,
+                             _ request: BassetRequest,
+                             over transport: Transport)
+    {
         let waiting = buffered.filter { $0.requestId == requestId }
         buffered.removeAll { $0.requestId == requestId }
-        waiting.forEach { transport.send($0.frame) }
-        sent[requestId, default: 0] += waiting.count
+
+        let allowed = waiting.prefix(framesLeft(for: requestId, request))
+        allowed.forEach { transport.send($0.frame) }
+        sent[requestId, default: 0] += allowed.count
     }
 }
