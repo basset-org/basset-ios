@@ -30,6 +30,15 @@ import Testing
     @objc dynamic func work() {}
 }
 
+@objc private class ForeignHookSubject: NSObject {
+    nonisolated(unsafe) static var originalRuns = 0
+    nonisolated(unsafe) static var foreignRuns = 0
+
+    @objc dynamic func work() {
+        Self.originalRuns += 1
+    }
+}
+
 @objc private class ChainedSubject: Subject {}
 @objc private class SharedSubject: Subject {}
 @objc private class RestartedSubject: Subject {}
@@ -212,6 +221,34 @@ struct SwizzleTests {
                 }
             }
         }
+    }
+
+    /// Another SDK may already hold this selector, and its hook is part of the
+    /// chain rather than something to displace.
+    @Test func aHookAnotherSdkInstalledFirstIsStillCalled() throws {
+        let selector = #selector(ForeignHookSubject.work)
+        let method = try #require(class_getInstanceMethod(ForeignHookSubject.self, selector))
+        let original = method_getImplementation(method)
+        let foreign: @convention(block) (AnyObject) -> Void = { receiver in
+            ForeignHookSubject.foreignRuns += 1
+            unsafeBitCast(
+                original,
+                to: (@convention(c) (AnyObject, Selector) -> Void).self
+            )(receiver, selector)
+        }
+        method_setImplementation(method, imp_implementationWithBlock(foreign))
+
+        var seen = 0
+        #expect(
+            Swizzle().after(ForeignHookSubject.self, selector) { _ in seen += 1 }
+                == .installed
+        )
+
+        ForeignHookSubject().work()
+
+        #expect(ForeignHookSubject.foreignRuns == 1, "the other SDK's hook still runs")
+        #expect(ForeignHookSubject.originalRuns == 1, "and it still reaches the original")
+        #expect(seen == 1)
     }
 
     @Test func theOriginalStillRunsAndTheObserverSeesIt() {

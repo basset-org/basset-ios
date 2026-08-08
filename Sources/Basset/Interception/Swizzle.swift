@@ -117,33 +117,46 @@ private struct HookObserver {
 }
 
 private final class HookSite {
+    private struct State {
+        var chained: IMP?
+        var observers: [HookObserver] = []
+    }
+
     let shape: HookShape
     let selector: Selector
-    /// Read by every thunk and settled before the replacement IMP is installed,
-    /// so a call arriving during installation chains the original rather than
-    /// finding nothing to call.
-    let chained: IMP?
 
-    private let guarded: Mutex<[HookObserver]> = .init([])
+    private let guarded: Mutex<State>
 
     /// A copy, taken under the lock and walked outside it. The observers are
     /// app-visible code and must not run with the lock held.
     var observers: [HookObserver] {
-        guarded.withLock { $0 }
+        guarded.withLock { $0.observers }
+    }
+
+    private var chained: IMP? {
+        guarded.withLock { $0.chained }
     }
 
     init(shape: HookShape, selector: Selector, chained: IMP?) {
         self.shape = shape
         self.selector = selector
-        self.chained = chained
+        guarded = .init(State(chained: chained))
     }
 
     func add(_ observer: HookObserver) {
-        guarded.withLock { $0.append(observer) }
+        guarded.withLock { $0.observers.append(observer) }
     }
 
     func release(_ owner: HookOwner) {
-        guarded.withLock { $0.removeAll { $0.owner == owner } }
+        guarded.withLock { $0.observers.removeAll { $0.owner == owner } }
+    }
+
+    /// What the replacement actually displaced, which is knowable only from the
+    /// call that displaced it. Another SDK swizzling the same selector between
+    /// the read and the replace is the case this exists for: chaining what was
+    /// read beforehand would overwrite that hook and never call it.
+    func chain(_ implementation: IMP?) {
+        guarded.withLock { $0.chained = implementation }
     }
 
     func callChained(_ receiver: AnyObject) {
@@ -747,7 +760,7 @@ public final class Swizzle: @unchecked Sendable {
             replacement,
             method_getTypeEncoding(inherited)
         ) {
-            _ = method_setImplementation(inherited, replacement)
+            site.chain(method_setImplementation(inherited, replacement))
         }
 
         Self.sites[key] = site
