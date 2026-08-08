@@ -105,15 +105,30 @@ public final class Observations: @unchecked Sendable {
     /// Bounded by live objects rather than by how many the app has ever made: an
     /// app building one per screen visit would otherwise accumulate a
     /// registration per visit for the life of the request.
+    /// Registering runs outside the lock. `Observation.attach` asks KVO to
+    /// observe, which delivers the initial value before it returns, and running
+    /// that under a lock this one is not allowed to re-enter turns a caller
+    /// nobody has written yet into a trap.
     public func attach(_ make: () -> [Observation]) {
-        guarded.withLock { state in
+        guard !guarded.withLock({ $0.isStopped }) else {
+            return
+        }
+
+        let made = make()
+        let kept = guarded.withLock { state -> Bool in
             guard !state.isStopped else {
-                return
+                return false
             }
 
             state.attached.removeAll { !$0.isAttached }
-            state.attached.append(contentsOf: make())
+            state.attached.append(contentsOf: made)
+            return true
         }
+        guard !kept else {
+            return
+        }
+
+        made.forEach { $0.detach() }
     }
 
     /// One way. A follower snapshotted before its request ended can still be in
