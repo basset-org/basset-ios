@@ -230,6 +230,31 @@ struct FailoverTests {
         #expect(quic.count == 0)
     }
 
+    /// Readings arrive on whichever thread took them while the race resolves on
+    /// the connection's queue, so sending, carrying and abandoning overlap by
+    /// design. Nothing may be lost between the two transports.
+    @Test func sendingWhileTheRaceResolvesLosesNothing() {
+        let (transport, quic, http2) = subject()
+        transport.start()
+
+        let sends = 512
+        DispatchQueue.concurrentPerform(iterations: 8) { index in
+            switch index {
+            case 0: quic.becomeReady()
+            case 1: quic.fail()
+            default:
+                for byte in 0 ..< sends {
+                    transport.send(reading(UInt8(byte % 256)))
+                }
+            }
+        }
+
+        #expect(
+            quic.count + http2.count + transport.dropped == sends * 6,
+            "every reading was carried, held then flushed, or counted as dropped"
+        )
+    }
+
     private func subject() -> (FailoverTransport, Channel, Channel) {
         let quic = Channel(kind: .quic)
         let http2 = Channel(kind: .http2)

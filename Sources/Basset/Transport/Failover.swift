@@ -24,78 +24,82 @@ final class FailoverTransport: Transport, @unchecked Sendable {
         case setAside(attempts: Int, retryOnNextSend: Bool)
     }
 
+    private struct State {
+        var primary: (any RacedTransport)?
+        var active: Transport?
+        var held: [Data] = []
+        var lastNote: String?
+        var refusedAt: Date?
+        var closed = false
+        var evicted = 0
+        var attempts = 0
+    }
+
     private let makePrimary: @Sendable () -> any RacedTransport
     private let fallback: Transport
     private let retryAfter: TimeInterval
     private let now: @Sendable () -> Date
-    private let lock: NSLock = .init()
-
-    private var primary: (any RacedTransport)?
-    private var active: Transport?
-    private var held: [Data] = []
-    private var lastNote: String?
-    private var refusedAt: Date?
-    private var closed = false
-    private var evicted = 0
-    private var attempts = 0
+    private let guarded: Mutex<State> = .init(State())
     private let maxHeld = 1024
 
     var primaryState: PrimaryState {
-        lock.lock()
-        defer { lock.unlock() }
-        if let primary {
-            return primary === active ? .carrying : .connecting
+        guarded.withLock { state in
+            if let primary = state.primary {
+                return primary === state.active ? .carrying : .connecting
+            }
+
+            return .setAside(
+                attempts: state.attempts,
+                retryOnNextSend: mayRetryPrimary(state)
+            )
         }
-        return .setAside(attempts: attempts, retryOnNextSend: mayRetryPrimary())
     }
 
     var kind: TransportType? {
-        lock.lock()
-        defer { lock.unlock() }
-        return active?.kind
+        guarded.withLock { $0.active?.kind }
     }
 
     var isReady: Bool {
-        lock.lock()
-        let current = active
-        lock.unlock()
-        return current?.isReady ?? false
+        guarded.withLock { $0.active }?.isReady ?? false
     }
 
     /// Always QUIC's, whichever transport ended up carrying: the question is why
     /// the first choice was not taken. Kept after the connection is gone,
     /// because that is when it gets asked.
     var note: String? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let text = primary?.note ?? lastNote else {
+        // The candidate's own note is read after the lock is released: asking a
+        // transport for it takes that transport's lock, and holding this one
+        // across the question nests them.
+        let reported = guarded.withLock { state in
+            (
+                primary: state.primary,
+                lastNote: state.lastNote,
+                attempts: state.attempts,
+                mayRetry: mayRetryPrimary(state)
+            )
+        }
+        guard let text = reported.primary?.note ?? reported.lastNote else {
             return nil
         }
-        guard primary == nil else {
+        guard reported.primary == nil else {
             return text
         }
 
-        let tried = attempts == 1 ? "1 attempt" : "\(attempts) attempts"
-        let next = mayRetryPrimary()
+        let tried = reported.attempts == 1 ? "1 attempt" : "\(reported.attempts) attempts"
+        let next = reported.mayRetry
             ? "retries on the next reading"
             : "retried \(Int(retryAfter))s after an attempt, and only on a reading"
         return "\(text) — set aside after \(tried), \(next)"
     }
 
     var refused: String? {
-        lock.lock()
-        let current = active
-        lock.unlock()
-        return current?.refused
+        guarded.withLock { $0.active }?.refused
     }
 
     /// Evicted here while nothing could carry, plus whatever the transport that
     /// ended up carrying lost on its own.
     var dropped: Int {
-        lock.lock()
-        let mine = evicted
-        let current = active
-        lock.unlock()
+        let (mine, current) = guarded.withLock { ($0.evicted, $0.active) }
         return mine + (current?.dropped ?? fallback.dropped)
     }
 
@@ -119,67 +123,71 @@ final class FailoverTransport: Transport, @unchecked Sendable {
     }
 
     func send(_ frame: Data) {
-        lock.lock()
-        // An idle QUIC connection is closed by both ends after 30s, which is
-        // ordinary for readings that arrive in bursts, so a quiet request has to
-        // be able to come back. Retried on a send, never on a timer: a device
-        // with nothing to say holds no connection and wakes no radio.
-        let shouldRetry = mayRetryPrimary()
+        let (shouldRetry, active) = guarded.withLock { state -> (Bool, Transport?) in
+            // An idle QUIC connection is closed by both ends after 30s, which is
+            // ordinary for readings that arrive in bursts, so a quiet request has
+            // to be able to come back. Retried on a send, never on a timer: a
+            // device with nothing to say holds no connection and wakes no radio.
+            let shouldRetry = mayRetryPrimary(state)
+            guard let active = state.active else {
+                if state.held.count >= maxHeld {
+                    state.held.removeFirst()
+                    state.evicted += 1
+                }
 
-        guard let active else {
-            if held.count >= maxHeld {
-                held.removeFirst()
-                evicted += 1
+                state.held.append(frame)
+                return (shouldRetry, nil)
             }
-            held.append(frame)
-            lock.unlock()
-            if shouldRetry {
-                attemptPrimary()
-            }
-            return
+
+            return (shouldRetry, active)
         }
 
-        lock.unlock()
-
-        active.send(frame)
+        active?.send(frame)
         if shouldRetry {
             attemptPrimary()
         }
     }
 
     func close() {
-        lock.lock()
-        closed = true
-        let current = active
-        let candidate = primary
-        active = nil
-        primary = nil
-        held = []
-        lock.unlock()
+        let (current, candidate) = guarded.withLock { state -> (
+            Transport?,
+            (any RacedTransport)?
+        ) in
+            state.closed = true
+            let current = state.active
+            let candidate = state.primary
+            state.active = nil
+            state.primary = nil
+            state.held = []
+            return (current, candidate)
+        }
 
         current?.close()
         candidate?.close()
         fallback.close()
     }
 
-    private func mayRetryPrimary() -> Bool {
-        active === fallback
-            && primary == nil
-            && !closed
-            && (refusedAt.map { now().timeIntervalSince($0) >= retryAfter } ?? false)
+    private func mayRetryPrimary(_ state: State) -> Bool {
+        state.active === fallback
+            && state.primary == nil
+            && !state.closed
+            && (state.refusedAt.map { now().timeIntervalSince($0) >= retryAfter } ?? false)
     }
 
     private func attemptPrimary() {
         let candidate = makePrimary()
-        lock.lock()
-        guard !closed, primary == nil else {
-            lock.unlock()
+        let taken = guarded.withLock { state -> Bool in
+            guard !state.closed, state.primary == nil else {
+                return false
+            }
+
+            state.primary = candidate
+            state.attempts += 1
+            return true
+        }
+        guard taken else {
             return
         }
-
-        primary = candidate
-        attempts += 1
-        lock.unlock()
 
         candidate.onReady = { [weak self, weak candidate] in
             guard let candidate else {
@@ -195,20 +203,21 @@ final class FailoverTransport: Transport, @unchecked Sendable {
     }
 
     private func carry(over transport: any RacedTransport) {
-        lock.lock()
-        // Only the connection currently being raced may take the stream. A
-        // `ready` from an abandoned one arrives after the fallback has the
-        // backlog, and honouring it hands readings to a socket nobody reads.
-        guard !closed, primary === transport else {
-            lock.unlock()
-            return
+        let backlog = guarded.withLock { state -> [Data]? in
+            // Only the connection currently being raced may take the stream. A
+            // `ready` from an abandoned one arrives after the fallback has the
+            // backlog, and honouring it hands readings to a socket nobody reads.
+            guard !state.closed, state.primary === transport else {
+                return nil
+            }
+
+            state.active = transport
+            let backlog = state.held
+            state.held = []
+            return backlog
         }
 
-        active = transport
-        let backlog = held
-        held = []
-        lock.unlock()
-        backlog.forEach(transport.send)
+        backlog?.forEach(transport.send)
     }
 
     /// A QUIC connection that fails after it started carrying still has to be
@@ -216,23 +225,30 @@ final class FailoverTransport: Transport, @unchecked Sendable {
     /// ingest routes on the request token and the encoder interns nothing across
     /// frames — where a dead socket costs every reading from that moment on.
     private func abandon(_ candidate: (any RacedTransport)?) {
-        lock.lock()
-        guard !closed else {
-            lock.unlock()
+        // Asked before the lock is taken, for the reason `note` explains.
+        let reported = candidate?.note
+        let backlog = guarded.withLock { state -> [Data]? in
+            guard !state.closed else {
+                return nil
+            }
+
+            state.lastNote = reported ?? state.lastNote
+            state.primary = nil
+            state.refusedAt = now()
+
+            let backlog = state.held
+            state.held = []
+            state.active = fallback
+            return backlog
+        }
+        guard let backlog else {
             return
         }
 
-        lastNote = candidate?.note ?? lastNote
+        // Released after the candidate stopped being the primary, so a `ready`
+        // still on its way finds nothing to carry rather than a live stream.
         candidate?.onReady = nil
         candidate?.onFailure = nil
-        primary = nil
-        refusedAt = now()
-
-        let backlog = held
-        held = []
-        active = fallback
-        lock.unlock()
-
         candidate?.close()
         backlog.forEach(fallback.send)
     }
