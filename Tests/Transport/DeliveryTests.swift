@@ -109,10 +109,6 @@ private func stubbedChannel() -> HTTP2Channel {
     )
 }
 
-private func settle(_ milliseconds: Int) async {
-    try? await Task.sleep(for: .milliseconds(milliseconds))
-}
-
 @Suite(.serialized)
 struct DeliveryTests {
     /// The handover case. A POST lost to a connection dying used to take its
@@ -123,9 +119,8 @@ struct DeliveryTests {
         let channel = stubbedChannel()
 
         channel.send(Data([1, 2, 3]))
-        await settle(2500)
 
-        #expect(StubbedResponses.seen >= 2, "the failure was retried")
+        #expect(await eventually { StubbedResponses.seen >= 2 }, "the failure was retried")
         #expect(channel.dropped == 0, "and nothing was written off")
     }
 
@@ -136,9 +131,8 @@ struct DeliveryTests {
         let channel = stubbedChannel()
 
         channel.send(Data([1, 2, 3]))
-        await settle(1000)
 
-        #expect(channel.refused == "max_frames")
+        #expect(await eventually { channel.refused == "max_frames" })
         #expect(channel.dropped >= 1, "the batch it was carrying is gone")
     }
 
@@ -149,9 +143,8 @@ struct DeliveryTests {
         let channel = stubbedChannel()
 
         channel.send(Data([1, 2, 3]))
-        await settle(1000)
 
-        #expect(channel.dropped == 1)
+        #expect(await eventually { channel.dropped == 1 })
         #expect(StubbedResponses.seen == 1, "asked once")
     }
 
@@ -166,10 +159,9 @@ struct DeliveryTests {
         let channel = stubbedChannel()
 
         channel.send(Data([1, 2, 3]))
-        await settle(1500)
 
-        #expect(StubbedResponses.hostsAsked == ["in.example"])
-        #expect(channel.dropped == 1, "the batch is written off, not re-aimed")
+        #expect(await eventually { channel.dropped == 1 }, "the batch is written off")
+        #expect(StubbedResponses.hostsAsked == ["in.example"], "and not re-aimed")
     }
 
     /// A token expiring is not a reason to lose a reading: the next PUT /device
@@ -179,9 +171,8 @@ struct DeliveryTests {
         let channel = stubbedChannel()
 
         channel.send(Data([1, 2, 3]))
-        await settle(2500)
 
+        #expect(await eventually { StubbedResponses.seen >= 2 })
         #expect(channel.dropped == 0)
-        #expect(StubbedResponses.seen >= 2)
     }
 }

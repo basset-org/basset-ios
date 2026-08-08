@@ -554,17 +554,29 @@ struct RuntimeConvergenceTests {
     /// path both end an expired request, and a test cannot silence one to watch
     /// the other. What it can hold is the property either way — nothing the
     /// request no longer authorises reaches the wire.
-    @Test func aReadingProducedAfterTheRequestRanOutIsNotSent() async throws {
+    /// An instrument that has been stopped holds a context whose status stays
+    /// deactivated, so a callback still in flight when the request ended lands
+    /// nowhere. Driven rather than waited for: that the deadline arrives on its
+    /// own is `theDeviceWakesItselfWhenTheRequestRunsOut`, and neither question
+    /// needs a clock to answer.
+    ///
+    /// Not the deadline `emit` rechecks before its send loop. That one covers a
+    /// wake the system deferred, which a test cannot arrange from here — the
+    /// timer this drops through has already fired by the time a reading could be
+    /// taken.
+    @Test func aReadingFromAStoppedInstrumentIsNotSent() throws {
         let (subject, opener) = runtime()
 
         subject.converge(
-            to: [request(1, instruments: ["memory.footprint"], expiresIn: 0.05)],
+            to: [request(1, instruments: ["memory.footprint"], expiresIn: 600)],
             ingestEndpoint: "in"
         )
         let memory = try #require(subject.memory)
         let before = opener.stream(1)?.count ?? 0
 
-        #expect(await eventually { subject.liveRequestIds.isEmpty })
+        subject.expire(at: Date().addingTimeInterval(601))
+        #expect(subject.liveRequestIds.isEmpty)
+
         memory.take()
         subject.settle()
 
