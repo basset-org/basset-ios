@@ -903,6 +903,90 @@ struct ObservationTests {
         observation.detach()
         observation.detach()
     }
+
+    /// Removing a KVO observer twice raises, and an ObjC exception cannot be
+    /// caught from Swift — the host app goes down with it.
+    @Test func detachingFromManyThreadsRemovesTheObserverOnce() {
+        let subject = Subject()
+        let observation = Observation.attach(to: subject, keyPath: "counter") { _ in }
+
+        DispatchQueue.concurrentPerform(iterations: 64) { _ in
+            observation.detach()
+        }
+
+        #expect(observation.isAttached == false)
+    }
+}
+
+/// A follower runs on whichever thread called the swizzled method and on the
+/// runner queue during activation, so these arrive at once by design.
+struct ObservationsTests {
+    @Test func attachingFromManyThreadsKeepsEveryObservation() {
+        let observations = Observations()
+        let subjects = (0 ..< 64).map { _ in Subject() }
+
+        DispatchQueue.concurrentPerform(iterations: subjects.count) { index in
+            observations.attach {
+                [Observation.attach(to: subjects[index], keyPath: "counter") { _ in }]
+            }
+        }
+
+        #expect(observations.count == subjects.count)
+        observations.detachAll()
+        #expect(observations.count == 0)
+    }
+
+    @Test func attachingWhileTearingDownLeavesNothingRegistered() {
+        let observations = Observations()
+        let subjects = (0 ..< 64).map { _ in Subject() }
+
+        DispatchQueue.concurrentPerform(iterations: subjects.count) { index in
+            if index == subjects.count / 2 {
+                observations.detachAll()
+            } else {
+                observations.attach {
+                    [Observation.attach(to: subjects[index], keyPath: "counter") { _ in }]
+                }
+            }
+        }
+
+        observations.detachAll()
+        #expect(observations.count == 0)
+    }
+
+    /// A follower snapshotted before the request ended can still be in flight,
+    /// and a registration landing after teardown is one nothing removes.
+    @Test func attachingAfterTeardownIsRefused() {
+        let observations = Observations()
+        let subject = Subject()
+        observations.detachAll()
+
+        observations.attach {
+            [Observation.attach(to: subject, keyPath: "counter") { _ in }]
+        }
+
+        #expect(observations.count == 0)
+    }
+
+    @Test func anObservationForAReleasedObjectIsDroppedOnTheNextAttach() {
+        let observations = Observations()
+        let kept = Subject()
+
+        do {
+            let transient = Subject()
+            observations.attach {
+                [Observation.attach(to: transient, keyPath: "counter") { _ in }]
+            }
+            #expect(observations.count == 1)
+        }
+
+        observations.attach {
+            [Observation.attach(to: kept, keyPath: "counter") { _ in }]
+        }
+
+        #expect(observations.count == 1, "the dead one made way rather than piling up")
+        observations.detachAll()
+    }
 }
 
 struct ClockTests {

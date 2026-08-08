@@ -11,7 +11,7 @@ final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraDeviceFormat
     static let entity = Entity.ID.captureDevice
 
-    private var observations: [Observation] = []
+    private let observations: Observations = .init()
 
     init() {}
 
@@ -37,19 +37,19 @@ final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
                 return
             }
 
-            self.observations.removeAll { !$0.isAttached }
-            self.observations.append(
-                Observation.attach(to: session, keyPath: "running") { [weak self] _ in
-                    self?.report(session, instance: instance, into: context)
-                }
-            )
+            self.observations.attach {
+                [
+                    Observation.attach(to: session, keyPath: "running") { [weak self] _ in
+                        self?.report(session, instance: instance, into: context)
+                    },
+                ]
+            }
         }
         #endif
     }
 
     func stopObserving() {
-        observations.forEach { $0.detach() }
-        observations.removeAll()
+        observations.detachAll()
     }
 
     #if os(iOS)
@@ -495,7 +495,7 @@ final class CameraSessionConfiguration: StreamingInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraSessionConfiguration
     static let entity = Entity.ID.captureSession
 
-    private var observations: [Observation] = []
+    private let observations: Observations = .init()
 
     init() {}
 
@@ -521,23 +521,23 @@ final class CameraSessionConfiguration: StreamingInstrument, LoadTimeInstall {
                 return
             }
 
-            self.observations.removeAll { !$0.isAttached }
             // Once when the session is caught, and again whenever it starts
             // or stops. A configuration that never reaches running is the
             // reading worth having, so it is emitted before anything runs
             // rather than only alongside a state change.
-            self.observations.append(
-                Observation.attach(to: session, keyPath: "running") { [weak self] _ in
-                    self?.report(session, instance: instance, into: context)
-                }
-            )
+            self.observations.attach {
+                [
+                    Observation.attach(to: session, keyPath: "running") { [weak self] _ in
+                        self?.report(session, instance: instance, into: context)
+                    },
+                ]
+            }
         }
         #endif
     }
 
     func stopObserving() {
-        observations.forEach { $0.detach() }
-        observations.removeAll()
+        observations.detachAll()
     }
 
     #if os(iOS)
@@ -577,7 +577,7 @@ final class CameraSessionState: StreamingInstrument, LoadTimeInstall {
 
     private static let observed = ["running", "interrupted"]
 
-    private var observations: [Observation] = []
+    private let observations: Observations = .init()
 
     init() {}
 
@@ -603,18 +603,13 @@ final class CameraSessionState: StreamingInstrument, LoadTimeInstall {
                 return
             }
 
-            // Bounded by live sessions rather than by how many the app has
-            // ever made: an app building one per screen visit would other-
-            // wise accumulate a registration per visit for the life of the
-            // request.
-            self.observations.removeAll { !$0.isAttached }
             // One reading per change, and one at attach — not one per
             // observed key path. `report` writes both components whichever
             // key woke it, so asking each for its initial value emitted the
             // same reading twice and spent two of the request's readings on
             // it.
-            for keyPath in Self.observed {
-                self.observations.append(
+            self.observations.attach {
+                Self.observed.map { keyPath in
                     Observation.attach(
                         to: session,
                         keyPath: keyPath,
@@ -622,15 +617,14 @@ final class CameraSessionState: StreamingInstrument, LoadTimeInstall {
                     ) { [weak self] _ in
                         self?.report(session, instance: instance, into: context)
                     }
-                )
+                }
             }
         }
         #endif
     }
 
     func stopObserving() {
-        observations.forEach { $0.detach() }
-        observations.removeAll()
+        observations.detachAll()
     }
 
     #if os(iOS)
