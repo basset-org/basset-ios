@@ -252,6 +252,16 @@ final class CameraDeviceInventory: StreamingInstrument {
 }
 
 final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
+    private struct State {
+        var instrumented: Set<ObjectIdentifier> = []
+        /// Delegate classes this defined a callback on rather than wrapped one
+        /// that was already there. Every output bound to such a class has to be
+        /// named again, not just the one that happened to be seen first.
+        var defined: Set<ObjectIdentifier> = []
+        var rebinding: Set<ObjectIdentifier> = []
+        var watching = 0
+    }
+
     static let id: InstrumentID = .cameraFrameDelivery
     static let entity = Entity.ID.videoFrames
 
@@ -268,19 +278,10 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
     )
     #endif
 
-    private let lock: NSLock = .init()
-    private var instrumented: Set<ObjectIdentifier> = []
-    /// Delegate classes this defined a callback on rather than wrapped one that
-    /// was already there. Every output bound to such a class has to be named
-    /// again, not just the one that happened to be seen first.
-    private var defined: Set<ObjectIdentifier> = []
-    private var rebinding: Set<ObjectIdentifier> = []
-    private var watching = 0
+    private let guarded: Mutex<State> = .init(State())
 
     private var isWatchingSomething: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return watching > 0
+        guarded.withLock { $0.watching > 0 }
     }
 
     init() {}
@@ -333,12 +334,7 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
     }
 
     func stopObserving() {
-        lock.lock()
-        instrumented.removeAll()
-        watching = 0
-        defined.removeAll()
-        rebinding.removeAll()
-        lock.unlock()
+        guarded.withLock { $0 = State() }
     }
 
     #if os(iOS)
@@ -352,12 +348,14 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
         // Per delegate class, not per output: the hook rewrites a method on
         // the class, so a second output sharing the delegate's type would
         // otherwise add a second observer and count every frame twice.
-        lock.lock()
-        let fresh = instrumented.insert(ObjectIdentifier(subject)).inserted
-        if fresh {
-            watching += 1
+        let fresh = guarded.withLock { state -> Bool in
+            let fresh = state.instrumented.insert(ObjectIdentifier(subject)).inserted
+            if fresh {
+                state.watching += 1
+            }
+
+            return fresh
         }
-        lock.unlock()
         guard fresh else {
             // The class is hooked, but this output is not the one that was bound
             // when the callback was defined, and AVFoundation asked *it* what its
@@ -394,9 +392,7 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
             return
         }
 
-        lock.lock()
-        self.defined.insert(ObjectIdentifier(subject))
-        lock.unlock()
+        guarded.withLock { $0.defined.insert(ObjectIdentifier(subject)) }
         rebind(output, delegate: delegate)
     }
 
@@ -405,9 +401,7 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
         delegate: AVCaptureVideoDataOutputSampleBufferDelegate,
         subject: AnyClass
     ) {
-        lock.lock()
-        let wasDefined = defined.contains(ObjectIdentifier(subject))
-        lock.unlock()
+        let wasDefined = guarded.withLock { $0.defined.contains(ObjectIdentifier(subject)) }
         guard wasDefined else {
             return
         }
@@ -434,18 +428,14 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
         }
 
         let key = ObjectIdentifier(output)
-        lock.lock()
-        let alreadyRebinding = !rebinding.insert(key).inserted
-        lock.unlock()
+        let alreadyRebinding = guarded.withLock { !$0.rebinding.insert(key).inserted }
         guard !alreadyRebinding else {
             return
         }
 
         output.setSampleBufferDelegate(delegate, queue: queue)
 
-        lock.lock()
-        rebinding.remove(key)
-        lock.unlock()
+        guarded.withLock { $0.rebinding.remove(key) }
     }
 
     /// Highest weight wins the interval, so the reason that explains a stall

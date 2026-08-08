@@ -15,8 +15,7 @@ final class ThreadCPUUsage: StreamingInstrument {
     /// still does.
     private static let ceiling = 32
 
-    private let lock: NSLock = .init()
-    private var previous: [UInt64: UInt64] = [:]
+    private let previous: Mutex<[UInt64: UInt64]> = .init([:])
 
     init() {}
 
@@ -31,7 +30,7 @@ final class ThreadCPUUsage: StreamingInstrument {
     }
 
     func stopObserving() {
-        lock.withLock { previous.removeAll() }
+        previous.withLock { $0.removeAll() }
     }
 
     private func write(
@@ -62,24 +61,24 @@ final class ThreadCPUUsage: StreamingInstrument {
     }
 
     private func consumed(in samples: [ThreadSample]) -> [Consumed] {
-        lock.lock()
-        defer { lock.unlock() }
+        previous.withLock { previous in
+            var current = [UInt64: UInt64]()
+            var consumed = [Consumed]()
+            for sample in samples where sample.identifier != 0 {
+                let total = sample.cpuNanoseconds
+                current[sample.identifier] = total
+                guard let before = previous[sample.identifier],
+                      total > before
+                else {
+                    continue
+                }
 
-        var current = [UInt64: UInt64]()
-        var consumed = [Consumed]()
-        for sample in samples where sample.identifier != 0 {
-            let total = sample.cpuNanoseconds
-            current[sample.identifier] = total
-            guard let before = previous[sample.identifier],
-                  total > before
-            else {
-                continue
+                consumed.append(Consumed(sample: sample, nanoseconds: total - before))
             }
 
-            consumed.append(Consumed(sample: sample, nanoseconds: total - before))
+            previous = current
+            return consumed
         }
-        previous = current
-        return consumed
     }
 
     private func put(
@@ -103,8 +102,7 @@ final class Wakeups: StreamingInstrument {
     static let id: InstrumentID = .cpuWakeups
     static let entity = Entity.ID.process
 
-    private let lock: NSLock = .init()
-    private var previous: ProcessWakeups?
+    private let previous: Mutex<ProcessWakeups?> = .init(nil)
 
     init() {}
 
@@ -119,7 +117,7 @@ final class Wakeups: StreamingInstrument {
     }
 
     func stopObserving() {
-        lock.withLock { previous = nil }
+        previous.withLock { $0 = nil }
     }
 
     private func write(
@@ -132,7 +130,7 @@ final class Wakeups: StreamingInstrument {
             return
         }
 
-        let before = lock.withLock { () -> ProcessWakeups? in
+        let before = previous.withLock { previous -> ProcessWakeups? in
             defer { previous = now }
             return previous
         }

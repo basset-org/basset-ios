@@ -17,6 +17,11 @@ import ObjectiveC
 /// the call if nobody does. The obligation rides in the argument, not the
 /// signature — so a callback may be defined only when it carries no obligation.
 final class ProviderActions: StreamingInstrument, LoadTimeInstall {
+    private struct State {
+        var counts: [String: UInt64] = [:]
+        var followed: [Int] = []
+    }
+
     static let id: InstrumentID = .callProviderActions
     static let entity = Entity.ID.callProvider
 
@@ -35,9 +40,7 @@ final class ProviderActions: StreamingInstrument, LoadTimeInstall {
         ("provider:didDeactivateAudioSession:", "audioDeactivated"),
     ]
 
-    private let lock: NSLock = .init()
-    private var counts: [String: UInt64] = [:]
-    private var followed: [Int] = []
+    private let guarded: Mutex<State> = .init(State())
 
     init() {}
 
@@ -62,14 +65,11 @@ final class ProviderActions: StreamingInstrument, LoadTimeInstall {
         let token = classes.attachAndFollow { [weak self] delegateClass in
             self?.watch(delegateClass, context)
         }
-        lock.withLock { followed.append(token) }
+        guarded.withLock { $0.followed.append(token) }
     }
 
     func stopObserving() {
-        lock.withLock {
-            counts.removeAll()
-            followed.removeAll()
-        }
+        guarded.withLock { $0 = State() }
     }
 
     private func watch(_ delegateClass: AnyClass, _ context: Context) {
@@ -112,9 +112,9 @@ final class ProviderActions: StreamingInstrument, LoadTimeInstall {
         of delegateClass: AnyClass,
         into context: Context
     ) {
-        let count = lock.withLock { () -> UInt64 in
-            counts[action, default: 0] += 1
-            return counts[action] ?? 1
+        let count = guarded.withLock { state -> UInt64 in
+            state.counts[action, default: 0] += 1
+            return state.counts[action] ?? 1
         }
         context.emit { out in
             out.put(.callAction(action))

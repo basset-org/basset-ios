@@ -22,6 +22,11 @@ import ObjectiveC
 /// `didReceiveAuthenticationChallenge` take completion handlers, and calling one
 /// twice terminates the app. Neither is touched here.
 final class ContentProcessTermination: StreamingInstrument, LoadTimeInstall {
+    private struct State {
+        var terminations: UInt64 = 0
+        var followed: [Int] = []
+    }
+
     static let id: InstrumentID = .webContentTermination
     static let entity = Entity.ID.webView
 
@@ -29,9 +34,7 @@ final class ContentProcessTermination: StreamingInstrument, LoadTimeInstall {
     static let setNavigationDelegate: Selector = .init("setNavigationDelegate:")
     static let didTerminate: Selector = .init("webViewWebContentProcessDidTerminate:")
 
-    private let lock: NSLock = .init()
-    private var terminations: UInt64 = 0
-    private var followed: [Int] = []
+    private let guarded: Mutex<State> = .init(State())
 
     init() {}
 
@@ -69,14 +72,11 @@ final class ContentProcessTermination: StreamingInstrument, LoadTimeInstall {
         let token = classes.attachAndFollow { [weak self] delegateClass in
             self?.watch(delegateClass, context)
         }
-        lock.withLock { followed.append(token) }
+        guarded.withLock { $0.followed.append(token) }
     }
 
     func stopObserving() {
-        lock.withLock {
-            terminations = 0
-            followed.removeAll()
-        }
+        guarded.withLock { $0 = State() }
     }
 
     /// Whether the app was already listening is itself worth reporting: an app
@@ -120,9 +120,9 @@ final class ContentProcessTermination: StreamingInstrument, LoadTimeInstall {
         of delegateClass: AnyClass,
         into context: Context
     ) {
-        let count = lock.withLock { () -> UInt64 in
-            terminations += 1
-            return terminations
+        let count = guarded.withLock { state -> UInt64 in
+            state.terminations += 1
+            return state.terminations
         }
 
         context.emit { out in

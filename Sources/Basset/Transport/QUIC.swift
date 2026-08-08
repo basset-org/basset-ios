@@ -5,6 +5,13 @@ import Network
 /// Raw QUIC, not HTTP/3: frames go directly on the stream, so the request token
 /// rides in-band as the first length-prefixed record rather than in a header.
 final class QUICChannel: RacedTransport, @unchecked Sendable {
+    private struct State {
+        var ready = false
+        var sentHeader = false
+        var givingUp: DispatchWorkItem?
+        var history: [String] = []
+    }
+
     var onReady: (@Sendable () -> Void)?
     var onFailure: (@Sendable () -> Void)?
 
@@ -12,26 +19,18 @@ final class QUICChannel: RacedTransport, @unchecked Sendable {
     private let queue: DispatchQueue
     private let header: Data
     private let readyTimeout: DispatchTimeInterval
-    private let lock: NSLock = .init()
-    private var ready = false
-    private var sentHeader = false
-    private var givingUp: DispatchWorkItem?
-    private var history: [String] = []
+    private let guarded: Mutex<State> = .init(State())
 
     var kind: TransportType? {
         .quic
     }
 
     var note: String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return history.isEmpty ? nil : history.joined(separator: " → ")
+        guarded.withLock { $0.history.isEmpty ? nil : $0.history.joined(separator: " → ") }
     }
 
     var isReady: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return ready
+        guarded.withLock { $0.ready }
     }
 
     init(
@@ -103,29 +102,23 @@ final class QUICChannel: RacedTransport, @unchecked Sendable {
             @unknown default: "unknown"
             }
 
-        lock.lock()
-        history.append(described)
-        if history.count > 8 {
-            history.removeFirst()
+        guarded.withLock { state in
+            state.history.append(described)
+            if state.history.count > 8 {
+                state.history.removeFirst()
+            }
         }
-        lock.unlock()
     }
 
     private func markReady() {
-        lock.lock()
-        ready = true
-        givingUp?.cancel()
-        givingUp = nil
-        lock.unlock()
+        guarded.withLock { state in
+            state.ready = true
+            state.givingUp?.cancel()
+            state.givingUp = nil
+        }
     }
 
     private func giveUpIfStillWaiting() {
-        lock.lock()
-        guard !ready, givingUp == nil else {
-            lock.unlock()
-            return
-        }
-
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.isReady else {
                 return
@@ -133,8 +126,18 @@ final class QUICChannel: RacedTransport, @unchecked Sendable {
 
             self.onFailure?()
         }
-        givingUp = work
-        lock.unlock()
+        let scheduled = guarded.withLock { state -> Bool in
+            guard !state.ready, state.givingUp == nil else {
+                return false
+            }
+
+            state.givingUp = work
+            return true
+        }
+        guard scheduled else {
+            return
+        }
+
         queue.asyncAfter(deadline: .now() + readyTimeout, execute: work)
     }
 
@@ -144,10 +147,11 @@ final class QUICChannel: RacedTransport, @unchecked Sendable {
     /// reads a frame's bytes as the token and rejects the stream, and the device
     /// never learns — the connection stays up and the readings go nowhere.
     private func sendHeader() {
-        lock.lock()
-        let already = sentHeader
-        sentHeader = true
-        lock.unlock()
+        let already = guarded.withLock { state -> Bool in
+            let already = state.sentHeader
+            state.sentHeader = true
+            return already
+        }
 
         guard !already else {
             return

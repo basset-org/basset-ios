@@ -30,8 +30,7 @@ final class CoreDataChanges: StreamingInstrument {
     static let id: InstrumentID = .coreDataChanges
     static let entity = Entity.ID.managedObjectContext
 
-    private let lock: NSLock = .init()
-    private var tally: Tallied = .init()
+    private let tally: Mutex<Tallied> = .init(Tallied())
     private var observer: NSObjectProtocol?
 
     init() {}
@@ -84,7 +83,7 @@ final class CoreDataChanges: StreamingInstrument {
             NotificationCenter.default.removeObserver(observer)
         }
         observer = nil
-        lock.withLock { tally = Tallied() }
+        tally.withLock { $0 = Tallied() }
     }
 
     /// Runs on whichever thread mutated the context, so it does the least
@@ -97,7 +96,7 @@ final class CoreDataChanges: StreamingInstrument {
         let deleted = CoreDataNotifications.Change.deleted.count(in: note.userInfo)
         let refreshed = CoreDataNotifications.Change.refreshed.count(in: note.userInfo)
 
-        lock.withLock {
+        tally.withLock { tally in
             tally.notifications += 1
             tally.inserted += inserted
             tally.updated += updated
@@ -109,7 +108,7 @@ final class CoreDataChanges: StreamingInstrument {
     }
 
     private func take() -> Tallied? {
-        lock.withLock { () -> Tallied? in
+        tally.withLock { tally -> Tallied? in
             defer { tally = Tallied() }
             return tally.isEmpty ? nil : tally
         }
@@ -234,11 +233,10 @@ final class CoreDataSave: StreamingInstrument {
     static let entity = Entity.ID.managedObjectContext
 
     private let clock: Clock = .init()
-    private let lock: NSLock = .init()
     /// Keyed by the context's identity and holding only a time. The context
     /// itself is never retained — basset does not keep an app object alive, and a
     /// save that never completes leaves one stale entry rather than a leak.
-    private var started: [ObjectIdentifier: MonotonicTime] = [:]
+    private let started: Mutex<[ObjectIdentifier: MonotonicTime]> = .init([:])
     private var observers: [NSObjectProtocol] = []
 
     init() {}
@@ -257,7 +255,7 @@ final class CoreDataSave: StreamingInstrument {
             }
 
             let now = self.clock.now()
-            self.lock.withLock { self.started[ObjectIdentifier(saving)] = now }
+            self.started.withLock { $0[ObjectIdentifier(saving)] = now }
         }
         watch(CoreDataNotifications.didSave) { [weak self] note in
             self?.report(note, into: context)
@@ -267,7 +265,7 @@ final class CoreDataSave: StreamingInstrument {
     func stopObserving() {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
-        lock.withLock { started.removeAll() }
+        started.withLock { $0.removeAll() }
     }
 
     private func watch(
@@ -325,7 +323,7 @@ final class CoreDataSave: StreamingInstrument {
         }
 
         let key = ObjectIdentifier(saving)
-        let began = lock.withLock { () -> MonotonicTime? in
+        let began = started.withLock { started -> MonotonicTime? in
             defer { started[key] = nil }
             return started[key]
         }

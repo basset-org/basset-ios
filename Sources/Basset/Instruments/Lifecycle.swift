@@ -19,8 +19,7 @@ final class AppState: StreamingInstrument {
     static let entity = Entity.ID.appLifecycle
 
     private var observers: [NSObjectProtocol] = []
-    private let lock: NSLock = .init()
-    private var leftForegroundAt: MonotonicTime?
+    private let leftForegroundAt: Mutex<MonotonicTime?> = .init(nil)
 
     init() {}
 
@@ -33,7 +32,7 @@ final class AppState: StreamingInstrument {
         report(ApplicationPresence.state, context: context)
 
         watch(UIApplication.didEnterBackgroundNotification, context) { [weak self] in
-            self?.lock.withLock { self?.leftForegroundAt = context.clock.continuous() }
+            self?.leftForegroundAt.withLock { $0 = context.clock.continuous() }
             self?.report("background", context: context)
         }
         watch(UIApplication.willEnterForegroundNotification, context) { [weak self] in
@@ -46,9 +45,9 @@ final class AppState: StreamingInstrument {
                 return
             }
 
-            let away = self.lock.withLock { () -> MonotonicTime? in
-                defer { self.leftForegroundAt = nil }
-                return self.leftForegroundAt
+            let away = leftForegroundAt.withLock { left -> MonotonicTime? in
+                defer { left = nil }
+                return left
             }
             guard let away else {
                 return
@@ -66,7 +65,7 @@ final class AppState: StreamingInstrument {
     func stopObserving() {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
-        lock.withLock { leftForegroundAt = nil }
+        leftForegroundAt.withLock { $0 = nil }
     }
 
     private func watch(

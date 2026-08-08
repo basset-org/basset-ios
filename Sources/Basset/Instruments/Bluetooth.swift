@@ -29,8 +29,7 @@ final class CentralState: StreamingInstrument, LoadTimeInstall {
     static let setDelegate: Selector = .init("setDelegate:")
     static let didUpdateState: Selector = .init("centralManagerDidUpdateState:")
 
-    private let lock: NSLock = .init()
-    private var followed: [Int] = []
+    private let followed: Mutex<[Int]> = .init([])
 
     init() {}
 
@@ -79,11 +78,11 @@ final class CentralState: StreamingInstrument, LoadTimeInstall {
         let token = classes.attachAndFollow { [weak self] delegateClass in
             self?.watch(delegateClass, context)
         }
-        lock.withLock { followed.append(token) }
+        followed.withLock { $0.append(token) }
     }
 
     func stopObserving() {
-        lock.withLock { followed.removeAll() }
+        followed.withLock { $0.removeAll() }
     }
 
     private func watch(_ delegateClass: AnyClass, _ context: Context) {
