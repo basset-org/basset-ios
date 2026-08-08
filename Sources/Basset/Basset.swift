@@ -25,7 +25,12 @@ public struct Config: Sendable {
 }
 
 public enum Basset {
-    private static let running: Mutex<DeviceLoop?> = .init(nil)
+    /// Held across `start`, which is what keeps the loop unreachable until it
+    /// has read what the last run persisted. Publishing it any earlier lets an
+    /// `identify` on another thread converge a control response that
+    /// `startFromDisk` then replaces with what was on disk.
+    private static let lock: NSLock = .init()
+    private nonisolated(unsafe) static var loop: DeviceLoop?
 
     public static func start(apiKey: String) {
         start(Config(apiKey: apiKey))
@@ -42,29 +47,34 @@ public enum Basset {
         // would have been in had the request been there at launch.
         ApplicationPresence.capture()
 
-        let started = running.withLock { loop -> DeviceLoop? in
-            guard loop == nil else {
-                return nil
-            }
-
-            let started = DeviceLoop(config: config)
-            loop = started
-            return started
+        lock.lock()
+        defer { lock.unlock() }
+        guard loop == nil else {
+            return
         }
-        started?.start()
+
+        let started = DeviceLoop(config: config)
+        loop = started
+        started.start()
     }
 
     /// Associates this device with one of your users, so a request can target
     /// them by id. An attribute change like any other, so it rides the same
     /// upsert rather than a call of its own.
     public static func identify(userId: String?) {
-        running.withLock { $0 }?.identify(userId: userId)
+        lock.lock()
+        let running = loop
+        lock.unlock()
+        running?.identify(userId: userId)
     }
 
     /// What the SDK is doing, for an app that wants to show it. Read-only —
     /// nothing here activates an instrument. Nil until `start`.
     public static func currentState() -> DeviceState? {
-        running.withLock { $0 }?.currentState()
+        lock.lock()
+        let running = loop
+        lock.unlock()
+        return running?.currentState()
     }
 }
 
