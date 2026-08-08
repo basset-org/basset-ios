@@ -26,6 +26,10 @@ import Testing
     }
 }
 
+@objc private class ReleaseRaceSubject: NSObject {
+    @objc dynamic func work() {}
+}
+
 @objc private class ChainedSubject: Subject {}
 @objc private class SharedSubject: Subject {}
 @objc private class RestartedSubject: Subject {}
@@ -187,6 +191,29 @@ struct ChangeGatedEmissionTests {
 }
 
 struct SwizzleTests {
+    /// A thunk runs on whichever thread the app called the hooked method on,
+    /// while deactivation drops observers from the runner queue. Reading the
+    /// list unguarded retained a buffer the release had already freed.
+    @Test func callingAHookWhileObserversAreReleasedIsSafe() {
+        let subject = ReleaseRaceSubject()
+        let handles = (0 ..< 8).map { _ in Swizzle() }
+        for handle in handles {
+            _ = handle.after(ReleaseRaceSubject.self, #selector(ReleaseRaceSubject.work)) {
+                _ in
+            }
+        }
+
+        DispatchQueue.concurrentPerform(iterations: 16) { index in
+            if index % 4 == 3 {
+                handles[index % handles.count].releaseObservers()
+            } else {
+                for _ in 0 ..< 2000 {
+                    subject.work()
+                }
+            }
+        }
+    }
+
     @Test func theOriginalStillRunsAndTheObserverSeesIt() {
         let swizzle = Swizzle()
         var seen = 0

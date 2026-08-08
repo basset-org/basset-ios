@@ -119,20 +119,31 @@ private struct HookObserver {
 private final class HookSite {
     let shape: HookShape
     let selector: Selector
-    var chained: IMP?
-    var observers: [HookObserver] = []
+    /// Read by every thunk and settled before the replacement IMP is installed,
+    /// so a call arriving during installation chains the original rather than
+    /// finding nothing to call.
+    let chained: IMP?
 
-    init(shape: HookShape, selector: Selector) {
-        self.shape = shape
-        self.selector = selector
+    private let guarded: Mutex<[HookObserver]> = .init([])
+
+    /// A copy, taken under the lock and walked outside it. The observers are
+    /// app-visible code and must not run with the lock held.
+    var observers: [HookObserver] {
+        guarded.withLock { $0 }
     }
 
-    /// Replaced whole rather than emptied in place, because a thunk on another
-    /// thread reads this array without taking the lock: swapping one array for
-    /// another leaves that reader on a buffer that stays valid, where removing
-    /// from the buffer it is walking does not.
+    init(shape: HookShape, selector: Selector, chained: IMP?) {
+        self.shape = shape
+        self.selector = selector
+        self.chained = chained
+    }
+
+    func add(_ observer: HookObserver) {
+        guarded.withLock { $0.append(observer) }
+    }
+
     func release(_ owner: HookOwner) {
-        observers = observers.filter { $0.owner != owner }
+        guarded.withLock { $0.removeAll { $0.owner == owner } }
     }
 
     func callChained(_ receiver: AnyObject) {
@@ -718,23 +729,25 @@ public final class Swizzle: @unchecked Sendable {
                 existing.shape == shape,
                 "\(key) is already hooked as \(existing.shape.name) and cannot also be \(shape.name)"
             )
-            existing.observers.append(HookObserver(owner: owner, body: observer))
+            existing.add(HookObserver(owner: owner, body: observer))
             return .joinedExisting
         }
 
-        let site = HookSite(shape: shape, selector: selector)
-        site.observers.append(HookObserver(owner: owner, body: observer))
+        let site = HookSite(
+            shape: shape,
+            selector: selector,
+            chained: method_getImplementation(inherited)
+        )
+        site.add(HookObserver(owner: owner, body: observer))
         let replacement = build(site)
 
-        if class_addMethod(
+        if !class_addMethod(
             hooked,
             selector,
             replacement,
             method_getTypeEncoding(inherited)
         ) {
-            site.chained = method_getImplementation(inherited)
-        } else {
-            site.chained = method_setImplementation(inherited, replacement)
+            _ = method_setImplementation(inherited, replacement)
         }
 
         Self.sites[key] = site
@@ -761,12 +774,12 @@ public final class Swizzle: @unchecked Sendable {
                 existing.shape == shape,
                 "\(key) is already hooked as \(existing.shape.name) and cannot also be \(shape.name)"
             )
-            existing.observers.append(HookObserver(owner: owner, body: observer))
+            existing.add(HookObserver(owner: owner, body: observer))
             return .joinedExisting
         }
 
-        let site = HookSite(shape: shape, selector: selector)
-        site.observers.append(HookObserver(owner: owner, body: observer))
+        let site = HookSite(shape: shape, selector: selector, chained: nil)
+        site.add(HookObserver(owner: owner, body: observer))
         guard class_addMethod(hooked, selector, build(site), encoding) else {
             return .selectorMissing
         }
