@@ -137,10 +137,10 @@ private final class HookSite {
         guarded.withLock { $0.chained }
     }
 
-    init(shape: HookShape, selector: Selector, chained: IMP?) {
+    init(shape: HookShape, selector: Selector) {
         self.shape = shape
         self.selector = selector
-        guarded = .init(State(chained: chained))
+        guarded = .init(State())
     }
 
     func add(_ observer: HookObserver) {
@@ -151,12 +151,13 @@ private final class HookSite {
         guarded.withLock { $0.observers.removeAll { $0.owner == owner } }
     }
 
-    /// What the replacement actually displaced, which is knowable only from the
-    /// call that displaced it. Another SDK swizzling the same selector between
-    /// the read and the replace is the case this exists for: chaining what was
-    /// read beforehand would overwrite that hook and never call it.
-    func chain(_ implementation: IMP?) {
-        guarded.withLock { $0.chained = implementation }
+    /// The swap and the record of what it displaced happen together. Only the
+    /// call that installs the replacement can say what was there — another SDK
+    /// may have taken the selector since it was read — and a thunk reaching a
+    /// method that has just been swapped waits here rather than chaining an
+    /// implementation that is already stale.
+    func replacing(_ swap: () -> IMP?) {
+        guarded.withLock { $0.chained = swap() }
     }
 
     func callChained(_ receiver: AnyObject) {
@@ -746,21 +747,21 @@ public final class Swizzle: @unchecked Sendable {
             return .joinedExisting
         }
 
-        let site = HookSite(
-            shape: shape,
-            selector: selector,
-            chained: method_getImplementation(inherited)
-        )
+        let site = HookSite(shape: shape, selector: selector)
         site.add(HookObserver(owner: owner, body: observer))
         let replacement = build(site)
 
-        if !class_addMethod(
-            hooked,
-            selector,
-            replacement,
-            method_getTypeEncoding(inherited)
-        ) {
-            site.chain(method_setImplementation(inherited, replacement))
+        site.replacing {
+            if class_addMethod(
+                hooked,
+                selector,
+                replacement,
+                method_getTypeEncoding(inherited)
+            ) {
+                return method_getImplementation(inherited)
+            }
+
+            return method_setImplementation(inherited, replacement)
         }
 
         Self.sites[key] = site
@@ -791,7 +792,7 @@ public final class Swizzle: @unchecked Sendable {
             return .joinedExisting
         }
 
-        let site = HookSite(shape: shape, selector: selector, chained: nil)
+        let site = HookSite(shape: shape, selector: selector)
         site.add(HookObserver(owner: owner, body: observer))
         guard class_addMethod(hooked, selector, build(site), encoding) else {
             return .selectorMissing
