@@ -142,10 +142,15 @@ final class InstrumentRunner: @unchecked Sendable {
         persisting: Bool = true
     ) {
         queue.sync {
-            let incoming = Dictionary(uniqueKeysWithValues: desired.map { (
-                $0.requestId,
-                $0
-            ) })
+            // One id cannot describe two captures, and keying the pairs
+            // directly traps: a response that names a request twice would take
+            // the app down rather than the request.
+            var incoming = [UInt64: BassetRequest]()
+            var firstPerRequestId = [BassetRequest]()
+            for request in desired where incoming[request.requestId] == nil {
+                incoming[request.requestId] = request
+                firstPerRequestId.append(request)
+            }
 
             // Snapshot the ids: dropping mutates `live`, and a keys view is a
             // window onto the dictionary being changed underneath it.
@@ -165,7 +170,7 @@ final class InstrumentRunner: @unchecked Sendable {
             scheduleExpiry()
 
             if persisting {
-                atLaunchRequests.save(desired)
+                atLaunchRequests.save(firstPerRequestId)
             }
         }
     }
