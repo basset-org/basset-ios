@@ -768,6 +768,58 @@ struct RuntimeConvergenceTests {
         #expect(subject.activeInstruments == [.memoryFootprint])
         #expect(subject.liveRequestIds == [1])
     }
+
+    @Test func aResponseNamingOneRequestTwiceKeepsTheFirstRatherThanFatal() {
+        let (subject, _) = runtime(bothFakes)
+
+        subject.converge(
+            to: [
+                request(1, instruments: ["memory.footprint"]),
+                request(1, instruments: ["power.thermalState"]),
+            ],
+            ingestEndpoint: "in"
+        )
+
+        #expect(subject.liveRequestIds == [1])
+        #expect(subject.activeInstruments == [.memoryFootprint])
+        #expect(subject.requestStates().count == 1)
+    }
+
+    @Test func aRequestNamedTwiceIsStoredOnceForTheNextLaunch() {
+        let atLaunchRequests = AtLaunchRequests(storage: scratchDefaults())
+        let subject = InstrumentRunner(
+            instruments: bothFakes,
+            opener: RecordingOpener(),
+            atLaunchRequests: atLaunchRequests
+        )
+
+        subject.converge(
+            to: [
+                request(1, instruments: ["memory.footprint"], atLaunch: true),
+                request(1, instruments: ["power.thermalState"], atLaunch: true),
+            ],
+            ingestEndpoint: "in"
+        )
+
+        #expect(atLaunchRequests.load().map(\.instruments) == [["memory.footprint"]])
+    }
+
+    @Test func aStoreHoldingTheSameRequestTwiceStillActivatesAtLaunch() {
+        let atLaunchRequests = AtLaunchRequests(storage: scratchDefaults())
+        let duplicated = request(1, instruments: ["memory.footprint"], atLaunch: true)
+        atLaunchRequests.save([duplicated, duplicated])
+
+        let subject = InstrumentRunner(
+            instruments: [.stream(FakeMemory.self)],
+            opener: RecordingOpener(),
+            atLaunchRequests: atLaunchRequests
+        )
+
+        subject.startFromDisk()
+
+        #expect(subject.liveRequestIds == [1])
+        #expect(subject.memory?.observeCount == 1)
+    }
 }
 
 /// The device cannot say whether ingest read what it wrote, so what it reports
