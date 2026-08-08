@@ -554,17 +554,23 @@ struct RuntimeConvergenceTests {
     /// path both end an expired request, and a test cannot silence one to watch
     /// the other. What it can hold is the property either way — nothing the
     /// request no longer authorises reaches the wire.
-    @Test func aReadingProducedAfterTheRequestRanOutIsNotSent() async throws {
+    /// Driven rather than waited for. That the deadline arrives on its own is
+    /// `theDeviceWakesItselfWhenTheRequestRunsOut`; what this asks is whether
+    /// the reading path checks the deadline it was given, which no clock has to
+    /// be involved to answer.
+    @Test func aReadingProducedAfterTheRequestRanOutIsNotSent() throws {
         let (subject, opener) = runtime()
 
         subject.converge(
-            to: [request(1, instruments: ["memory.footprint"], expiresIn: 0.05)],
+            to: [request(1, instruments: ["memory.footprint"], expiresIn: 600)],
             ingestEndpoint: "in"
         )
         let memory = try #require(subject.memory)
         let before = opener.stream(1)?.count ?? 0
 
-        #expect(await eventually { subject.liveRequestIds.isEmpty })
+        subject.expire(at: Date().addingTimeInterval(601))
+        #expect(subject.liveRequestIds.isEmpty)
+
         memory.take()
         subject.settle()
 
