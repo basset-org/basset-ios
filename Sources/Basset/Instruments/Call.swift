@@ -34,7 +34,7 @@ final class ProviderActions: StreamingInstrument, LoadTimeInstall {
         }
 
         // `setDelegate:queue:` carries two arguments; the one-object catch refuses its shape.
-        hooks.catchDelegateClass(at: setDelegate, on: provider, takingTwoObjects: ())
+        hooks.trackDelegateClass(at: setDelegate, on: provider, takingTwoObjects: ())
     }
 
     func observe(_ context: Context) {

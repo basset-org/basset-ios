@@ -29,7 +29,7 @@ final class DelegateSilence: StreamingInstrument, LoadTimeInstall {
             return
         }
 
-        hooks.catchDelegateClass(at: setDelegate, on: manager)
+        hooks.trackDelegateClass(at: setDelegate, on: manager)
     }
 
     /// Reported as a class, not the metre value, so it doesn't read as a position.

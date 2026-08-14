@@ -90,7 +90,7 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
         waiting.forEach { $0(tracked, instance) }
     }
 
-    /// Everything caught so far, and everything caught from here on.
+    /// Everything tracked so far, and everything tracked from here on.
     @discardableResult
     public func attachAndFollow(_ attach: @escaping (Tracked, UInt32) -> Void) -> Int {
         let (existing, token) = guarded
