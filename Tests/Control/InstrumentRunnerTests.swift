@@ -1295,7 +1295,7 @@ struct TallyHandoffTests {
     }
 }
 
-private struct FakeConfig: Decodable, Sendable, Equatable {
+private struct FakeConfig: Codable, Sendable, Equatable {
     let thresholdMs: Int
 }
 

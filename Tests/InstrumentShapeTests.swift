@@ -108,6 +108,26 @@ struct InstrumentShapeTests {
         }
     }
 
+    /// The schema a caller reads has to match what the type actually accepts, or it lies.
+    @Test func aDeclaredConfigSchemaMatchesWhetherTheTypeIsConfigurable() {
+        for registration in Instruments.all {
+            let isConfigurable = registration.instrumentType is any Configurable.Type
+            let declaresSchema = !registration.id.metadata.config.isEmpty
+            #expect(
+                isConfigurable == declaresSchema,
+                "\(registration.name) is Configurable: \(isConfigurable), schema: \(declaresSchema)"
+            )
+        }
+    }
+
+    /// Re-encodes and re-decodes `defaultConfig` through the same path a request's config takes.
+    @Test func everyRegistrationBuildsItsOwnDefaultConfigWithoutRefusingIt() {
+        for registration in Instruments.all {
+            let (_, refused) = registration.build(registration.defaultConfigJSON)
+            #expect(!refused, "\(registration.name) refused its own default config")
+        }
+    }
+
     /// iOS only — a Mac's major version means nothing to any instrument's floor.
     @Test func noShippedInstrumentNeedsANewerOSThanThisOne() {
         #if os(iOS)

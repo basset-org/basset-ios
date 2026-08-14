@@ -75,6 +75,26 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         case pastRuns
     }
 
+    /// One key a `Configurable` instrument's config JSON accepts — empty for every other one.
+    public struct ConfigField: Codable, Sendable, Equatable {
+        public enum ValueType: String, Codable, Sendable {
+            case int
+            case double
+            case bool
+            case string
+        }
+
+        public let key: String
+        public let type: ValueType
+        public let description: String
+
+        public init(key: String, type: ValueType, description: String) {
+            self.key = key
+            self.type = type
+            self.description = description
+        }
+    }
+
     public let summary: String
     public let whenToUse: String
     public let reveals: [String]
@@ -84,6 +104,7 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
     public let observed: Observed
     public let overhead: Overhead
     public let appStoreSafe: Bool
+    public let config: [ConfigField]
 
     public init(
         summary: String,
@@ -94,7 +115,8 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         cadence: Cadence,
         observed: Observed = .thisRun,
         overhead: Overhead = .negligible,
-        appStoreSafe: Bool = true
+        appStoreSafe: Bool = true,
+        config: [ConfigField] = []
     ) {
         self.summary = summary
         self.whenToUse = whenToUse
@@ -105,6 +127,22 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         self.observed = observed
         self.overhead = overhead
         self.appStoreSafe = appStoreSafe
+        self.config = config
+    }
+
+    /// Custom only for `config`: older serialized metadata predates the field and lacks it.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        summary = try container.decode(String.self, forKey: .summary)
+        whenToUse = try container.decode(String.self, forKey: .whenToUse)
+        reveals = try container.decode([String].self, forKey: .reveals)
+        related = try container.decode([String].self, forKey: .related)
+        mechanism = try container.decode(Mechanism.self, forKey: .mechanism)
+        cadence = try container.decode(Cadence.self, forKey: .cadence)
+        observed = try container.decode(Observed.self, forKey: .observed)
+        overhead = try container.decode(Overhead.self, forKey: .overhead)
+        appStoreSafe = try container.decode(Bool.self, forKey: .appStoreSafe)
+        config = try container.decodeIfPresent([ConfigField].self, forKey: .config) ?? []
     }
 }
 
@@ -311,7 +349,14 @@ public extension InstrumentID {
                 ],
                 mechanism: .runLoopObserver,
                 cadence: .onChange,
-                overhead: .negligible
+                overhead: .negligible,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "thresholdMs",
+                        type: .int,
+                        description: "How long the main thread must stay busy before this reports. Default 2000."
+                    ),
+                ]
             )
         case .threadSnapshot:
             InstrumentMetadata(
