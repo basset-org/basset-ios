@@ -384,6 +384,8 @@ public struct Component: Equatable, Sendable {
         case audioPreferredInputHonored = 223
         case availableInputCount = 224
         case audioOutputCount = 225
+        case delegateDurationNanoseconds = 226
+        case delegateDurationPeakNanoseconds = 227
     }
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.
@@ -508,6 +510,14 @@ public extension Component {
     static func framesDroppedCount(_ value: UInt64)
         -> Component { .init(.framesDroppedCount, value) }
     static func dropReason(_ value: String) -> Component { .init(.dropReason, value) }
+    static func delegateDurationNanoseconds(_ value: UInt64) -> Component { .init(
+        .delegateDurationNanoseconds,
+        value
+    ) }
+    static func delegateDurationPeakNanoseconds(_ value: UInt64) -> Component { .init(
+        .delegateDurationPeakNanoseconds,
+        value
+    ) }
     static func hangNanoseconds(_ value: UInt64) -> Component { .init(.hangNanoseconds, value) }
     static func hangResolved(_ value: Bool) -> Component { .init(.hangResolved, value) }
     static func runLoopTurnCount(_ value: UInt64) -> Component { .init(.runLoopTurnCount, value) }
