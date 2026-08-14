@@ -572,7 +572,14 @@ public extension InstrumentID {
                 ],
                 mechanism: .machCall,
                 cadence: .periodic,
-                overhead: .low
+                overhead: .low,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "windowSeconds",
+                        type: .int,
+                        description: "How often thread CPU usage is sampled and reported. Default 1."
+                    ),
+                ]
             )
         case .cpuWakeups:
             InstrumentMetadata(
