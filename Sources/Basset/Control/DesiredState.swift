@@ -4,6 +4,7 @@ struct BassetRequest: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case requestId = "request_id"
         case instruments
+        case instrumentConfig = "instrument_config"
         case atLaunch = "at_launch"
         case expiresAt = "expires_at"
         case maxFrames = "max_frames"
@@ -17,6 +18,8 @@ struct BassetRequest: Codable, Equatable, Sendable {
 
     let requestId: UInt64
     let instruments: [String]
+    /// Raw per instrument — `Registration.build` decodes the real `Config` at activation.
+    let instrumentConfig: [String: Data]
     let atLaunch: Bool
     let expiresAt: Date
     let maxFrames: UInt32?
@@ -27,6 +30,7 @@ struct BassetRequest: Codable, Equatable, Sendable {
         BassetRequest(
             requestId: requestId,
             instruments: instruments,
+            instrumentConfig: instrumentConfig,
             atLaunch: atLaunch,
             expiresAt: expiresAt,
             maxFrames: maxFrames,
@@ -37,6 +41,7 @@ struct BassetRequest: Codable, Equatable, Sendable {
     init(
         requestId: UInt64,
         instruments: [String],
+        instrumentConfig: [String: Data] = [:],
         atLaunch: Bool,
         expiresAt: Date,
         maxFrames: UInt32?,
@@ -44,6 +49,7 @@ struct BassetRequest: Codable, Equatable, Sendable {
     ) {
         self.requestId = requestId
         self.instruments = instruments
+        self.instrumentConfig = instrumentConfig
         self.atLaunch = atLaunch
         self.expiresAt = expiresAt
         self.maxFrames = maxFrames
@@ -54,6 +60,12 @@ struct BassetRequest: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         requestId = try container.decode(UInt64.self, forKey: .requestId)
         instruments = try container.decode([String].self, forKey: .instruments)
+        // Missing or malformed both mean the same: no config, the default applies.
+        let named = try? container.decodeIfPresent(
+            [String: JSONValue].self,
+            forKey: .instrumentConfig
+        )
+        instrumentConfig = (named ?? [:]).compactMapValues { try? JSONEncoder().encode($0) }
         atLaunch = try container.decodeIfPresent(Bool.self, forKey: .atLaunch) ?? false
         requestToken = try container.decodeIfPresent(String.self, forKey: .requestToken)
 
@@ -76,6 +88,13 @@ struct BassetRequest: Codable, Equatable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(requestId, forKey: .requestId)
         try container.encode(instruments, forKey: .instruments)
+        if !instrumentConfig.isEmpty {
+            let named = instrumentConfig.compactMapValues { try? JSONDecoder().decode(
+                JSONValue.self,
+                from: $0
+            ) }
+            try container.encode(named, forKey: .instrumentConfig)
+        }
         try container.encode(atLaunch, forKey: .atLaunch)
         try container.encode(Timestamps.render(expiresAt), forKey: .expiresAt)
         try container.encodeIfPresent(maxFrames, forKey: .maxFrames)
@@ -84,6 +103,55 @@ struct BassetRequest: Codable, Equatable, Sendable {
 
     func isLive(at moment: Date) -> Bool {
         expiresAt > moment
+    }
+}
+
+/// A JSON value of unknown shape, decoded before the owning instrument sees its `Config`.
+private enum JSONValue: Codable {
+    case null
+    case bool(Bool)
+    /// Tried before `number`: an integer past 2^53 loses precision going through `Double`.
+    case integer(Int64)
+    case number(Double)
+    case string(String)
+    case array([JSONValue])
+    case object([String: JSONValue])
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Int64.self) {
+            self = .integer(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else if let value = try? container.decode([String: JSONValue].self) {
+            self = .object(value)
+        } else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "not a JSON value"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .null: try container.encodeNil()
+        case .bool(let value): try container.encode(value)
+        case .integer(let value): try container.encode(value)
+        case .number(let value): try container.encode(value)
+        case .string(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        }
     }
 }
 

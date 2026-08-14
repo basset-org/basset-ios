@@ -28,4 +28,5 @@ public enum Domain: String, Codable, Sendable, CaseIterable {
     case log
     case runtime
     case device
+    case basset
 }

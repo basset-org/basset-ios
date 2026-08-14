@@ -128,6 +128,69 @@ struct DesiredStateDecodingTests {
         #expect(response.requests.isEmpty)
     }
 
+    /// A device on this build reads config exactly as `ctrl` sends it — a real nested
+    /// object per instrument, never a JSON string carrying more JSON inside it.
+    @Test func instrumentConfigDecodesPerInstrumentName() throws {
+        let response = try decode(
+            """
+            {"device_token":"d","ingest_endpoint":"in","requests":[
+             {"request_id":1,"instruments":["concurrency.mainThreadHang"],
+              "instrument_config":{"concurrency.mainThreadHang":{"thresholdMs":300}},
+              "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
+            """
+        )
+
+        let request = try #require(response.requests.first)
+        let configData = try #require(request.instrumentConfig["concurrency.mainThreadHang"])
+        let decoded = try JSONDecoder().decode([String: Int].self, from: configData)
+        #expect(decoded == ["thresholdMs": 300])
+    }
+
+    /// A `Double` round trip loses this exact value — Int64 carries it through untouched.
+    @Test func aLargeIntegerInConfigSurvivesExactly() throws {
+        let response = try decode(
+            """
+            {"device_token":"d","ingest_endpoint":"in","requests":[
+             {"request_id":1,"instruments":["ui.fps"],
+              "instrument_config":{"ui.fps":{"budgetNanoseconds":9007199254740993}},
+              "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
+            """
+        )
+
+        let request = try #require(response.requests.first)
+        let configData = try #require(request.instrumentConfig["ui.fps"])
+        let decoded = try JSONDecoder().decode([String: Int64].self, from: configData)
+        #expect(decoded == ["budgetNanoseconds": 9007199254740993])
+    }
+
+    /// The field a build older than this one has never heard of — reads as if absent.
+    @Test func aRequestWithNoInstrumentConfigFieldReadsAsEmpty() throws {
+        let response = try decode(
+            """
+            {"device_token":"d","ingest_endpoint":"in","requests":[
+             {"request_id":1,"instruments":["ui.fps"],
+              "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
+            """
+        )
+
+        #expect(response.requests.first?.instrumentConfig.isEmpty == true)
+    }
+
+    /// A malformed `instrument_config` costs that field, never the request beside it.
+    @Test func aMalformedInstrumentConfigFieldIsDroppedRatherThanFailingTheRequest() throws {
+        let response = try decode(
+            """
+            {"device_token":"d","ingest_endpoint":"in","requests":[
+             {"request_id":1,"instruments":["ui.fps"],"instrument_config":"not an object",
+              "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
+            """
+        )
+
+        let request = try #require(response.requests.first)
+        #expect(request.requestId == 1)
+        #expect(request.instrumentConfig.isEmpty)
+    }
+
     private func decode(_ json: String) throws -> DeviceResponse {
         try JSONDecoder().decode(DeviceResponse.self, from: Data(json.utf8))
     }
@@ -165,6 +228,28 @@ struct AtLaunchRequestTests {
         store.save([])
 
         #expect(store.load().isEmpty)
+    }
+
+    /// A relaunch has to decode its own persisted config the same way a live one does.
+    @Test func instrumentConfigSurvivesThePersistAndReloadRoundTrip() throws {
+        let store = scratch()
+        let configJSON = Data(#"{"thresholdMs":300}"#.utf8)
+        store.save([BassetRequest(
+            requestId: 1,
+            instruments: ["concurrency.mainThreadHang"],
+            instrumentConfig: ["concurrency.mainThreadHang": configJSON],
+            atLaunch: true,
+            expiresAt: Date().addingTimeInterval(600),
+            maxFrames: nil,
+            requestToken: "request-token"
+        )])
+
+        let reloaded = try #require(store.load().first)
+        let reloadedConfig = try #require(reloaded.instrumentConfig["concurrency.mainThreadHang"])
+        #expect(
+            try JSONDecoder().decode([String: Int].self, from: reloadedConfig) ==
+                ["thresholdMs": 300]
+        )
     }
 
     private func scratch() -> AtLaunchRequests {

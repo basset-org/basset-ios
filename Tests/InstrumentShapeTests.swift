@@ -42,9 +42,22 @@ struct InstrumentShapeTests {
         #expect(Set(names).count == names.count)
     }
 
+    /// The top byte is reserved for `basset` reporting on itself — never a requestable instrument.
+    @Test func onlyTheBassetDomainLivesInTheReservedBlock() {
+        for id in InstrumentID.allCases {
+            let reserved = id.rawValue & 0xff00 == 0xff00
+            #expect(
+                reserved == (id.domain == .basset),
+                "\(id.name) is \(reserved ? "in" : "outside") the reserved block but its domain is \(id.domain)"
+            )
+        }
+    }
+
     /// Registration is unconditional; only the mechanism body is platform-gated.
+    /// `basset`'s own domain never gets one — it reports on itself, not on request.
     @Test func everyIdInTheSpaceIsRegistered() {
-        #expect(Set(Instruments.all.map(\.id)) == Set(InstrumentID.allCases))
+        let requestable = InstrumentID.allCases.filter { $0.domain != .basset }
+        #expect(Set(Instruments.all.map(\.id)) == Set(requestable))
     }
 
     /// The enum and the registrations are one list read twice, kept in the same order.
@@ -120,8 +133,12 @@ struct InstrumentShapeTests {
     /// Grow-only ids — nothing removed or renumbered; duplicates already fail to compile.
     @Test func idSpacesOnlyEverGrow() {
         // Holes are retirements, never reissued (components: see retiredIdsStayReserved).
-        #expect(instrumentIdSnapshot == Array(1...21) + Array(23...39) + Array(42...54))
-        #expect(componentIdSnapshot == Array(1...225))
-        #expect(entityIdSnapshot == Array(0...32) + Array(35...46))
+        let instrumentIds: [UInt16] = Array(1...21) + Array(23...39) + Array(42...54) + [0xff00]
+        let componentIds: [UInt16] = Array(1...225)
+        let entityIds: [UInt16] = Array(0...32) + Array(35...46) + [0xff00]
+
+        #expect(instrumentIdSnapshot == instrumentIds)
+        #expect(componentIdSnapshot == componentIds)
+        #expect(entityIdSnapshot == entityIds)
     }
 }

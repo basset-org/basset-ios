@@ -39,7 +39,7 @@ protocol TransportOpener: Sendable {
 }
 
 struct FaultContributor {
-    let instrument: any FaultInstrument
+    let instrument: any Faultable
     let context: Context
 }
 
@@ -74,6 +74,8 @@ final class InstrumentRunner: @unchecked Sendable {
     private var live: [UInt64: BassetRequest] = [:]
     private var transports: [UInt64: Transport] = [:]
     private var active: Set<InstrumentID> = []
+    /// What each active instrument was actually built with — absent means no config sent.
+    private var activeConfig: [InstrumentID: Data] = [:]
     private var instances: [InstrumentID: any Instrument] = [:]
     private let faultLock: NSLock = .init()
     private var faultContributors: [FaultContributor] = []
@@ -307,7 +309,9 @@ final class InstrumentRunner: @unchecked Sendable {
 
     private func convergeInstruments() {
         var wanted = [InstrumentID: Registration]()
-        for request in live.values {
+        var configData = [InstrumentID: Data]()
+        // Ascending by requestId, so the highest wins — `live` promises no order of its own.
+        for request in live.values.sorted(by: { $0.requestId < $1.requestId }) {
             for name in request.instruments {
                 guard let registration = byName[name],
                       registration.isAvailableHere
@@ -316,26 +320,36 @@ final class InstrumentRunner: @unchecked Sendable {
                 }
 
                 wanted[registration.id] = registration
+                if let data = request.instrumentConfig[name] {
+                    configData[registration.id] = data
+                }
             }
         }
 
         for id in active.subtracting(wanted.keys) {
             deactivate(id)
         }
+        // A running instrument does not pick up a changed config on its own; restart it.
+        for id in active.intersection(wanted.keys) where activeConfig[id] != configData[id] {
+            deactivate(id)
+            active.remove(id)
+        }
         for (id, registration) in wanted where !active.contains(id) {
-            activate(registration)
+            activeConfig[id] = configData[id]
+            activate(registration, config: configData[id])
         }
         active = Set(wanted.keys).intersection(instances.keys)
         faultLock.withLock { rememberFaultContributors() }
     }
 
-    private func activate(_ registration: Registration) {
+    private func activate(_ registration: Registration, config: Data?) {
         let id = registration.id
 
         let status = statuses[id] ?? AtomicStatus()
         statuses[id] = status
 
-        let instrument = instances[id] ?? registration.build()
+        let (instrument, configRefused) = instances[id].map { ($0, false) }
+            ?? registration.build(config)
         instances[id] = instrument
 
         // Its own hook table handle, so deactivating releases only this instrument's observers.
@@ -353,31 +367,51 @@ final class InstrumentRunner: @unchecked Sendable {
             tallySlots: registration.tallySlots,
             // Its own status, so a reading is never attributed to whatever request replaced it.
             sink: { [weak self, status] entity in
-                self?.emit(entity, from: registration, activation: status)
+                self?.emit(
+                    entity,
+                    instrumentId: registration.id,
+                    matchingRequestsNaming: registration.name,
+                    activation: status
+                )
             },
             raise: { [weak self] kind, source in self?.fault(kind, from: source) }
         )
         contexts[id] = context
 
         status.activate()
+        if configRefused {
+            reportConfigRefused(for: registration, activation: status)
+        }
 
         // Gated on the registration: `threadSnapshot` also implements `reading`.
         if registration.delivery == .reading,
-           let snapshot = instrument as? any SnapshotInstrument
+           let snapshot = instrument as? any Snapshotable
         {
             var readings = context.readings()
             snapshot.reading(&readings)
             context.deliver(readings)
         }
-        if let streaming = instrument as? any StreamingInstrument {
+        if let streaming = instrument as? any Streamable {
             streaming.observe(context)
         }
+    }
+
+    /// Bypasses `Instrument`: the trigger is another instrument's own config decode failing.
+    private func reportConfigRefused(for registration: Registration, activation: AtomicStatus) {
+        var entity = Entity(.instrumentConfig)
+        entity.add(.instrument(registration.id.rawValue))
+        emit(
+            entity,
+            instrumentId: .configRefused,
+            matchingRequestsNaming: registration.name,
+            activation: activation
+        )
     }
 
     private func rememberFaultContributors() {
         var contributors = [FaultContributor]()
         for id in active {
-            guard let instrument = instances[id] as? any FaultInstrument,
+            guard let instrument = instances[id] as? any Faultable,
                   let context = contexts[id]
             else {
                 continue
@@ -400,23 +434,25 @@ final class InstrumentRunner: @unchecked Sendable {
 
         statuses[id]?.deactivate()
         contexts[id]?.teardown()
-        if let streaming = instances[id] as? any StreamingInstrument {
+        if let streaming = instances[id] as? any Streamable {
             streaming.stopObserving()
         }
 
         statuses.removeValue(forKey: id)
         contexts.removeValue(forKey: id)
         instances.removeValue(forKey: id)
+        activeConfig.removeValue(forKey: id)
         rememberFaultContributors()
     }
 
     private func emit(
         _ entity: Entity,
-        from registration: Registration,
+        instrumentId: InstrumentID,
+        matchingRequestsNaming filterName: String,
         activation: AtomicStatus
     ) {
         var record = entity
-        record.add(.instrument(registration.id.rawValue))
+        record.add(.instrument(instrumentId.rawValue))
         // Rides every reading, not just one, so a capture spanning a relaunch stays attributable.
         record.add(.launchId(LaunchIdentity.current))
 
@@ -438,7 +474,7 @@ final class InstrumentRunner: @unchecked Sendable {
             }
 
             for (requestId, request) in live
-                where request.instruments.contains(registration.name)
+                where request.instruments.contains(filterName)
             {
                 guard let frame else {
                     evicted[requestId, default: 0] += 1

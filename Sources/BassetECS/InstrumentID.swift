@@ -50,6 +50,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
     case linkedLibraries = 52
     case methodOwners = 53
     case windowTouches = 54
+    case configRefused = 0xff00
 
     public var name: String {
         switch self {
@@ -104,6 +105,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .linkedLibraries: "runtime.linkedLibraries"
         case .methodOwners: "runtime.methodOwners"
         case .windowTouches: "uikit.window.touches"
+        case .configRefused: "basset.configRefused"
         }
     }
 
@@ -160,6 +162,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .linkedLibraries: .runtime
         case .methodOwners: .runtime
         case .windowTouches: .uikit
+        case .configRefused: .basset
         }
     }
 
@@ -217,6 +220,8 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .linkedLibraries: .reading
         case .methodOwners: .reading
         case .windowTouches: .stream
+        // Never activated: basset emits this itself, outside the registration table.
+        case .configRefused: .reading
         }
     }
 

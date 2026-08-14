@@ -48,6 +48,7 @@ public struct Entity: Equatable, Sendable {
         case gpu = 44
         case method = 45
         case touches = 46
+        case instrumentConfig = 0xff00
     }
 
     public let id: ID

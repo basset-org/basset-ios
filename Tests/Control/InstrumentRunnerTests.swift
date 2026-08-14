@@ -276,6 +276,7 @@ private let faultPair: [Registration] = [
 private func request(
     _ id: UInt64,
     instruments: [String],
+    instrumentConfig: [String: Data] = [:],
     atLaunch: Bool = false,
     expiresIn seconds: TimeInterval = 600,
     token: String? = "request-token"
@@ -283,6 +284,7 @@ private func request(
     BassetRequest(
         requestId: id,
         instruments: instruments,
+        instrumentConfig: instrumentConfig,
         atLaunch: atLaunch,
         expiresAt: Date().addingTimeInterval(seconds),
         maxFrames: nil,
@@ -1290,6 +1292,213 @@ struct TallyHandoffTests {
 
         #expect(SlotProbe.read(.inRange) == 7, "slot 3 is inside the default four")
         #expect(SlotProbe.read(.pastTheEnd) == 0, "slot 4 is not, and is refused")
+    }
+}
+
+private struct FakeConfig: Decodable, Sendable, Equatable {
+    let thresholdMs: Int
+}
+
+private final class FakeConfigurable: ConfigurableStreamingInstrument {
+    static let id: InstrumentID = .queueLatency
+    static let entity = Entity.ID.dispatchQueue
+    static let defaultConfig: FakeConfig = .init(thresholdMs: 250)
+
+    let config: FakeConfig
+    let recorder: Recorder = .init()
+
+    init(config: FakeConfig) {
+        self.config = config
+    }
+
+    func observe(_ context: Context) {
+        recorder.observing(context)
+    }
+
+    func stopObserving() {
+        recorder.stopped()
+    }
+}
+
+private func configJSON(_ thresholdMs: Int) -> Data {
+    Data("{\"thresholdMs\":\(thresholdMs)}".utf8)
+}
+
+private let malformedConfigJSON: Data = .init("not json".utf8)
+
+private func sentRefusal(_ transport: RecordingTransport?) -> Bool {
+    var stamp = Data([PayloadKind.entity.rawValue])
+    stamp.append(contentsOf: withUnsafeBytes(of: Entity.ID.instrumentConfig.rawValue.littleEndian) {
+        Array($0)
+    })
+    return transport?.sent.contains { $0.range(of: stamp) != nil } ?? false
+}
+
+struct ConfigurableInstrumentTests {
+    @Test func validConfigIsDecodedRatherThanTheDefault() {
+        let (subject, opener) = runtime([.stream(FakeConfigurable.self)])
+
+        subject.converge(
+            to: [request(
+                1,
+                instruments: ["concurrency.queue.latency"],
+                instrumentConfig: ["concurrency.queue.latency": configJSON(300)]
+            )],
+            ingestEndpoint: "in"
+        )
+
+        #expect(subject.instance(FakeConfigurable.self)?.config == FakeConfig(thresholdMs: 300))
+        #expect(!sentRefusal(opener.stream(1)), "nothing was refused")
+        #expect(
+            subject.instance(FakeConfigurable.self)?.recorder.observeCount == 1,
+            "built is not the same as started"
+        )
+    }
+
+    @Test func noConfigTakesTheDefaultWithoutBeingARefusal() {
+        let (subject, opener) = runtime([.stream(FakeConfigurable.self)])
+
+        subject.converge(
+            to: [request(1, instruments: ["concurrency.queue.latency"])],
+            ingestEndpoint: "in"
+        )
+        subject.settle()
+
+        #expect(subject.instance(FakeConfigurable.self)?.config == FakeConfigurable.defaultConfig)
+        #expect(
+            !sentRefusal(opener.stream(1)),
+            "an instrument with nothing to configure is the ordinary case, not a refusal"
+        )
+    }
+
+    @Test func malformedConfigFallsBackToTheDefaultAndReportsItself() {
+        let (subject, opener) = runtime([.stream(FakeConfigurable.self)])
+
+        subject.converge(
+            to: [request(
+                1,
+                instruments: ["concurrency.queue.latency"],
+                instrumentConfig: ["concurrency.queue.latency": malformedConfigJSON]
+            )],
+            ingestEndpoint: "in"
+        )
+        subject.settle()
+
+        #expect(subject.instance(FakeConfigurable.self)?.config == FakeConfigurable.defaultConfig)
+        #expect(sentRefusal(opener.stream(1)), "a rejected config is reported, not silent")
+    }
+
+    @Test func configSentToAnInstrumentThatTakesNoneIsRefused() {
+        let (subject, opener) = runtime()
+
+        subject.converge(
+            to: [request(
+                1,
+                instruments: ["memory.footprint"],
+                instrumentConfig: ["memory.footprint": configJSON(300)]
+            )],
+            ingestEndpoint: "in"
+        )
+        subject.settle()
+
+        #expect(
+            sentRefusal(opener.stream(1)),
+            "memory.footprint has no Config type — sending it one is not silently ignored"
+        )
+    }
+
+    /// `live` is a dictionary; only sorting by request id makes this a rule, not luck.
+    @Test func theHighestRequestIdsConfigWinsWhenTwoNameTheSameInstrument() {
+        let (subject, _) = runtime([.stream(FakeConfigurable.self)])
+
+        subject.converge(
+            to: [
+                request(
+                    1,
+                    instruments: ["concurrency.queue.latency"],
+                    instrumentConfig: ["concurrency.queue.latency": configJSON(100)]
+                ),
+                request(
+                    2,
+                    instruments: ["concurrency.queue.latency"],
+                    instrumentConfig: ["concurrency.queue.latency": configJSON(200)]
+                ),
+            ],
+            ingestEndpoint: "in"
+        )
+
+        #expect(subject.instance(FakeConfigurable.self)?.config == FakeConfig(thresholdMs: 200))
+    }
+
+    /// An already-running instrument does not keep a config a later convergence dropped.
+    @Test func aRequestThatStopsSendingConfigDoesNotOverrideTheOneThatStillDoes() {
+        let (subject, _) = runtime([.stream(FakeConfigurable.self)])
+
+        subject.converge(
+            to: [
+                request(
+                    1,
+                    instruments: ["concurrency.queue.latency"],
+                    instrumentConfig: ["concurrency.queue.latency": configJSON(100)]
+                ),
+                request(2, instruments: ["concurrency.queue.latency"]),
+            ],
+            ingestEndpoint: "in"
+        )
+
+        #expect(subject.instance(FakeConfigurable.self)?.config == FakeConfig(thresholdMs: 100))
+    }
+
+    @Test func aChangedConfigRestartsTheInstrumentRatherThanBeingIgnored() {
+        let (subject, _) = runtime([.stream(FakeConfigurable.self)])
+
+        subject.converge(
+            to: [request(
+                1,
+                instruments: ["concurrency.queue.latency"],
+                instrumentConfig: ["concurrency.queue.latency": configJSON(100)]
+            )],
+            ingestEndpoint: "in"
+        )
+        let first = subject.instance(FakeConfigurable.self)
+        #expect(first?.config == FakeConfig(thresholdMs: 100))
+
+        subject.converge(
+            to: [request(
+                1,
+                instruments: ["concurrency.queue.latency"],
+                instrumentConfig: ["concurrency.queue.latency": configJSON(200)]
+            )],
+            ingestEndpoint: "in"
+        )
+        let second = subject.instance(FakeConfigurable.self)
+
+        #expect(second?.config == FakeConfig(thresholdMs: 200))
+        #expect(first !== second, "a running instrument cannot pick up new config in place")
+        #expect(first?.recorder.stopCount == 1, "the stale instance was torn down, not leaked")
+    }
+
+    @Test func theRefusalReachesOnlyRequestsThatNamedTheRefusedInstrument() {
+        let (subject, opener) = runtime([.stream(FakeConfigurable.self), .stream(FakeMemory.self)])
+
+        subject.converge(
+            to: [
+                request(
+                    1,
+                    instruments: ["concurrency.queue.latency"],
+                    instrumentConfig: ["concurrency.queue.latency": malformedConfigJSON]
+                ),
+                request(2, instruments: ["memory.footprint"]),
+            ],
+            ingestEndpoint: "in"
+        )
+        subject.settle()
+
+        #expect(sentRefusal(opener.stream(1)))
+        #expect(
+            !sentRefusal(opener.stream(2)),
+            "this request never named the instrument whose config was refused"
+        )
     }
 }
 
