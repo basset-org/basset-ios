@@ -21,7 +21,7 @@ final class CentralState: StreamingInstrument, LoadTimeInstall {
             return
         }
 
-        hooks.catchDelegateClass(at: setDelegate, on: manager)
+        hooks.trackDelegateClass(at: setDelegate, on: manager)
     }
 
     static func state(of central: AnyObject?) -> String {

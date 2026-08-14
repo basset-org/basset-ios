@@ -65,7 +65,7 @@ struct TaskMetricsTests {
             delegate: RedirectRefusal.shared,
             delegateQueue: nil
         )
-        TaskMetrics.caughtSession(session, RedirectRefusal.shared, HookTable(
+        TaskMetrics.trackSession(session, RedirectRefusal.shared, HookTable(
             swizzle: Swizzle(),
             registries: harness.registries
         ))

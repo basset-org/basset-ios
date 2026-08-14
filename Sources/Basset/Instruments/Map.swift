@@ -27,7 +27,7 @@ final class TileLoading: StreamingInstrument, LoadTimeInstall {
             return
         }
 
-        hooks.catchDelegateClass(at: setDelegate, on: mapView)
+        hooks.trackDelegateClass(at: setDelegate, on: mapView)
     }
 
     func observe(_ context: Context) {

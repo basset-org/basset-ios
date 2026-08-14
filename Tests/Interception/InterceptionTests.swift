@@ -44,14 +44,14 @@ import Testing
 @objc private class DoubledSubject: Subject {}
 @objc private class ArgumentSubject: Subject {}
 @objc private class TimingSubject: Subject {}
-@objc private class BirthSubject: Subject {}
-@objc private class SelfBirthSubject: Subject {}
+@objc private class ArgumentOwnerSubject: Subject {}
+@objc private class SelfTrackSubject: Subject {}
 @objc private class UnhookedSubject: Subject {}
 @objc private class MismatchSubject: Subject {}
 @objc private class MatchedSubject: Subject {}
 @objc private class ConflictedSubject: Subject {}
 
-@objc private class Caught: NSObject {}
+@objc private class Tracked: NSObject {}
 
 /// A two-object setter, the shape `-setSampleBufferDelegate:queue:` has.
 @objc private class TwoObjectSubject: NSObject {
@@ -118,20 +118,20 @@ import Testing
 
 /// A class-method factory; URLSession is reachable only through one of these.
 @objc private class Maker: NSObject {
-    @objc dynamic static func make() -> Caught {
-        Caught()
+    @objc dynamic static func make() -> Tracked {
+        Tracked()
     }
 
     @objc dynamic static func make(
         _ first: AnyObject?,
         second: AnyObject?,
         third: AnyObject?
-    ) -> Caught {
-        Caught()
+    ) -> Tracked {
+        Tracked()
     }
 
-    @objc dynamic func makeOne() -> Caught {
-        Caught()
+    @objc dynamic func makeOne() -> Tracked {
+        Tracked()
     }
 
     @objc dynamic func doNothing() {}
@@ -143,19 +143,19 @@ import Testing
 @objc private class WrongKindSubject: Maker {}
 
 /// A class the `class:`-keyed hooks below reach only by its runtime `AnyClass`, never
-/// `Caught.self`.
+/// `Tracked.self`.
 /// Swizzling is process-wide and permanent (see the note atop this file), so — same rule as
 /// every other subject here — each test below gets its own dedicated pair, never a shared one.
-@objc private class RuntimeCaughtSubjectA: NSObject {}
-@objc private class RuntimeBirthSubjectA: Subject {}
-@objc private class RuntimeCaughtSubjectB: NSObject {}
-@objc private class RuntimeUncaughtSubjectB: NSObject {}
-@objc private class RuntimeBirthSubjectB: Subject {}
-@objc private class RuntimeCaughtSubjectC: NSObject {}
-@objc private class RuntimeBirthSubjectC: Subject {}
-@objc private class RuntimeCaughtSubjectD: NSObject {}
-@objc private class RuntimeSelfBirthSubjectA: Subject {}
-@objc private class RuntimeSelfBirthSubjectB: Subject {}
+@objc private class RuntimeTrackedSubjectA: NSObject {}
+@objc private class RuntimeArgumentOwnerSubjectA: Subject {}
+@objc private class RuntimeTrackedSubjectB: NSObject {}
+@objc private class RuntimeUntrackedSubjectB: NSObject {}
+@objc private class RuntimeArgumentOwnerSubjectB: Subject {}
+@objc private class RuntimeTrackedSubjectC: NSObject {}
+@objc private class RuntimeArgumentOwnerSubjectC: Subject {}
+@objc private class RuntimeTrackedSubjectD: NSObject {}
+@objc private class RuntimeSelfTrackSubjectA: Subject {}
+@objc private class RuntimeSelfTrackSubjectB: Subject {}
 @objc private class RuntimeChangeSubject: TwoObjectSubject {}
 
 /// Emitted only on change — KVO fires on every set even when the state repeats.
@@ -516,7 +516,7 @@ struct SwizzleTests {
         )
 
         let subject = MatchedSubject()
-        subject.accept(Caught())
+        subject.accept(Tracked())
 
         #expect(subject.ran == 1, "the original ran with its argument intact")
         #expect(seen == 1)
@@ -556,7 +556,7 @@ struct FactorySwizzleTests {
 
         #expect(
             swizzle.afterFactory(
-                TypeFactorySubject.self, #selector(Maker.make as () -> Caught),
+                TypeFactorySubject.self, #selector(Maker.make as () -> Tracked),
                 kind: .type
             ) { _, result in
                 if let result {
@@ -600,8 +600,8 @@ struct FactorySwizzleTests {
             } == .installed
         )
 
-        let a = Caught()
-        let b = Caught()
+        let a = Tracked()
+        let b = Tracked()
         let returned = ThreeArgFactorySubject.make(a, second: b, third: nil)
 
         #expect(seen.count == 1)
@@ -617,7 +617,7 @@ struct FactorySwizzleTests {
 
         #expect(
             swizzle.afterFactory(
-                WrongKindSubject.self, #selector(Maker.make as () -> Caught),
+                WrongKindSubject.self, #selector(Maker.make as () -> Tracked),
                 kind: .instance
             ) { _, _ in } == .selectorMissing
         )
@@ -658,8 +658,8 @@ struct FactorySwizzleTests {
         )
 
         let subject = TwoObjectSubject()
-        let delegate = Caught()
-        let queue = Caught()
+        let delegate = Tracked()
+        let queue = Tracked()
         subject.set(delegate, queue: queue)
 
         #expect(
@@ -685,9 +685,9 @@ struct FactorySwizzleTests {
         )
 
         let subject = ThreeObjectSubject()
-        let session = Caught()
-        let task = Caught()
-        let metrics = Caught()
+        let session = Tracked()
+        let task = Tracked()
+        let metrics = Tracked()
         subject.urlSession(session, task: task, didFinishCollecting: metrics)
 
         #expect(
@@ -731,7 +731,7 @@ struct FactorySwizzleTests {
                 AnyObject, Selector, AnyObject?, AnyObject?, AnyObject?
             ) -> Void).self
         )
-        call(subject, Self.didFinishCollecting, Caught(), Caught(), Caught())
+        call(subject, Self.didFinishCollecting, Tracked(), Tracked(), Tracked())
 
         #expect(seen == 1)
     }
@@ -823,109 +823,109 @@ struct HookTableTests {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
 
-        hooks.catchBirths(
-            of: Caught.self,
+        hooks.trackArgument(
+            of: Tracked.self,
             at: #selector(Subject.accept(_:)),
-            on: BirthSubject.self
+            on: ArgumentOwnerSubject.self
         )
 
-        let born = Caught()
-        BirthSubject().accept(born)
+        let born = Tracked()
+        ArgumentOwnerSubject().accept(born)
 
-        #expect(registries.registry(Caught.self).all.count == 1)
+        #expect(registries.registry(Tracked.self).all.count == 1)
     }
 
     @Test func aChokepointCanRegisterTheReceiverItself() {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
 
-        hooks.catchSelf(
-            of: SelfBirthSubject.self,
+        hooks.trackSelf(
+            of: SelfTrackSubject.self,
             at: #selector(Subject.work),
-            on: SelfBirthSubject.self
+            on: SelfTrackSubject.self
         )
 
-        let subject = SelfBirthSubject()
+        let subject = SelfTrackSubject()
         subject.work()
 
-        #expect(registries.registry(SelfBirthSubject.self).all.count == 1)
+        #expect(registries.registry(SelfTrackSubject.self).all.count == 1)
     }
 }
 
 /// The `class:`-keyed twins Camera/Audio reach a framework class with instead of `of:` —
 /// same shapes, but the class only ever arrives as an `AnyClass`, the way `objc_getClass`
-/// hands one back, never as a compiled `Caught.self`.
+/// hands one back, never as a compiled `Tracked.self`.
 struct RuntimeClassHookTests {
     @Test func aChokepointRegistersWhatPassesThroughIt() {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
 
-        hooks.catchBirths(
-            class: RuntimeCaughtSubjectA.self,
+        hooks.trackArgument(
+            class: RuntimeTrackedSubjectA.self,
             at: #selector(Subject.accept(_:)),
-            on: RuntimeBirthSubjectA.self
+            on: RuntimeArgumentOwnerSubjectA.self
         )
 
-        let born = RuntimeCaughtSubjectA()
-        RuntimeBirthSubjectA().accept(born)
+        let born = RuntimeTrackedSubjectA()
+        RuntimeArgumentOwnerSubjectA().accept(born)
 
-        #expect(registries.registry(runtimeClass: RuntimeCaughtSubjectA.self).all.count == 1)
+        #expect(registries.registry(runtimeClass: RuntimeTrackedSubjectA.self).all.count == 1)
     }
 
     /// The class check is real, not a pass-through — an argument of the wrong kind is dropped.
-    @Test func anArgumentOfTheWrongKindIsNotCaught() {
+    @Test func anArgumentOfTheWrongKindIsNotTracked() {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
 
-        hooks.catchBirths(
-            class: RuntimeCaughtSubjectB.self,
+        hooks.trackArgument(
+            class: RuntimeTrackedSubjectB.self,
             at: #selector(Subject.accept(_:)),
-            on: RuntimeBirthSubjectB.self
+            on: RuntimeArgumentOwnerSubjectB.self
         )
 
-        let wrongKind = RuntimeUncaughtSubjectB()
-        RuntimeBirthSubjectB().accept(wrongKind)
+        let wrongKind = RuntimeUntrackedSubjectB()
+        RuntimeArgumentOwnerSubjectB().accept(wrongKind)
 
-        #expect(registries.registry(runtimeClass: RuntimeCaughtSubjectB.self).all.isEmpty)
+        #expect(registries.registry(runtimeClass: RuntimeTrackedSubjectB.self).all.isEmpty)
     }
 
     @Test func aChokepointCanRegisterTheReceiverItself() {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
 
-        hooks.catchSelf(
-            class: RuntimeSelfBirthSubjectA.self,
+        hooks.trackSelf(
+            class: RuntimeSelfTrackSubjectA.self,
             at: #selector(Subject.work),
-            on: RuntimeSelfBirthSubjectA.self
+            on: RuntimeSelfTrackSubjectA.self
         )
 
-        let subject = RuntimeSelfBirthSubjectA()
+        let subject = RuntimeSelfTrackSubjectA()
         subject.work()
 
-        #expect(registries.registry(runtimeClass: RuntimeSelfBirthSubjectA.self).all.count == 1)
+        #expect(registries.registry(runtimeClass: RuntimeSelfTrackSubjectA.self).all.count == 1)
     }
 
-    @Test func aReceiverIsCaughtAtACallTakingAnArgument() {
+    @Test func aReceiverIsTrackedAtACallTakingAnArgument() {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
 
-        hooks.catchSelf(
-            class: RuntimeSelfBirthSubjectB.self,
+        hooks.trackSelf(
+            class: RuntimeSelfTrackSubjectB.self,
             atCallTaking: #selector(Subject.accept(_:)),
-            on: RuntimeSelfBirthSubjectB.self
+            on: RuntimeSelfTrackSubjectB.self
         )
 
-        let subject = RuntimeSelfBirthSubjectB()
-        subject.accept(Caught())
+        let subject = RuntimeSelfTrackSubjectB()
+        subject.accept(Tracked())
 
-        #expect(registries.registry(runtimeClass: RuntimeSelfBirthSubjectB.self).all.count == 1)
+        #expect(registries.registry(runtimeClass: RuntimeSelfTrackSubjectB.self).all.count == 1)
     }
 
     @Test func aChangeIsAnnouncedRatherThanAddedOnce() {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
 
-        hooks.catchChanges(
+        hooks.announceSelf(
             class: RuntimeChangeSubject.self,
             atCallTakingTwo: #selector(TwoObjectSubject.set(_:queue:)),
             on: RuntimeChangeSubject.self
@@ -936,13 +936,13 @@ struct RuntimeClassHookTests {
             .attachAndFollow { _, _ in seen += 1 }
 
         let subject = RuntimeChangeSubject()
-        subject.set(Caught(), queue: Caught())
-        subject.set(Caught(), queue: Caught())
+        subject.set(Tracked(), queue: Tracked())
+        subject.set(Tracked(), queue: Tracked())
 
-        #expect(seen == 2, "announce re-notifies on every call, unlike catchSelf/catchBirths")
+        #expect(seen == 2, "announce re-notifies on every call, unlike trackSelf/trackArgument")
     }
 
-    @Test func followReachesInstancesAlreadyCaughtAndOnesCaughtLater() {
+    @Test func followReachesInstancesAlreadyTrackedAndOnesTrackedLater() {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
         let status = AtomicStatus()
@@ -957,26 +957,26 @@ struct RuntimeClassHookTests {
             sink: { _ in }
         )
 
-        hooks.catchBirths(
-            class: RuntimeCaughtSubjectC.self,
+        hooks.trackArgument(
+            class: RuntimeTrackedSubjectC.self,
             at: #selector(Subject.accept(_:)),
-            on: RuntimeBirthSubjectC.self
+            on: RuntimeArgumentOwnerSubjectC.self
         )
-        let before = RuntimeCaughtSubjectC()
-        RuntimeBirthSubjectC().accept(before)
+        let before = RuntimeTrackedSubjectC()
+        RuntimeArgumentOwnerSubjectC().accept(before)
 
         var attached = [AnyObject]()
-        context.follow(class: RuntimeCaughtSubjectC.self) { object, _ in attached.append(object) }
-        #expect(attached.count == 1, "what was already caught")
+        context.follow(class: RuntimeTrackedSubjectC.self) { object, _ in attached.append(object) }
+        #expect(attached.count == 1, "what was already tracked")
 
-        RuntimeBirthSubjectC().accept(RuntimeCaughtSubjectC())
+        RuntimeArgumentOwnerSubjectC().accept(RuntimeTrackedSubjectC())
         #expect(attached.count == 2, "and what arrives next")
     }
 
     @Test func aRuntimeRegistryIsKeyedByTheClassItTracks() {
         let registries = Registries()
-        let first = registries.registry(runtimeClass: RuntimeCaughtSubjectD.self)
-        let second = registries.registry(runtimeClass: RuntimeCaughtSubjectD.self)
+        let first = registries.registry(runtimeClass: RuntimeTrackedSubjectD.self)
+        let second = registries.registry(runtimeClass: RuntimeTrackedSubjectD.self)
 
         #expect(first === second)
     }
@@ -984,9 +984,9 @@ struct RuntimeClassHookTests {
 
 struct WeakRegistryTests {
     @Test func aDeadEntryVanishes() {
-        let registry = WeakRegistry<Caught>()
+        let registry = WeakRegistry<Tracked>()
         autoreleasepool {
-            let transient = Caught()
+            let transient = Tracked()
             registry.add(transient)
             #expect(registry.count == 1)
         }
@@ -995,30 +995,30 @@ struct WeakRegistryTests {
 
     /// `add` stays silent on a known object — announce is what re-notifies followers.
     @Test func announcingAKnownObjectTellsTheFollowersAgain() {
-        let registry = WeakRegistry<Caught>()
-        let caught = Caught()
-        registry.add(caught)
+        let registry = WeakRegistry<Tracked>()
+        let tracked = Tracked()
+        registry.add(tracked)
 
-        var attached = [Caught]()
+        var attached = [Tracked]()
         registry.attachAndFollow { object, _ in attached.append(object) }
         #expect(attached.count == 1)
 
-        registry.add(caught)
+        registry.add(tracked)
         #expect(attached.count == 1, "adding what is already held stays silent")
 
-        registry.announce(caught)
+        registry.announce(tracked)
         #expect(attached.count == 2, "announcing it does not")
-        #expect(attached.last === caught)
+        #expect(attached.last === tracked)
     }
 
     /// Announcing an unknown object is the same as it arriving — either order works.
     @Test func announcingAnUnknownObjectAddsIt() {
-        let registry = WeakRegistry<Caught>()
-        var attached = [Caught]()
+        let registry = WeakRegistry<Tracked>()
+        var attached = [Tracked]()
         registry.attachAndFollow { object, _ in attached.append(object) }
 
-        let caught = Caught()
-        registry.announce(caught)
+        let tracked = Tracked()
+        registry.announce(tracked)
 
         #expect(registry.count == 1)
         #expect(attached.count == 1)
@@ -1026,15 +1026,15 @@ struct WeakRegistryTests {
 
     /// The number outlives the address — a reused address must not inherit an old sample.
     @Test func theInstanceNumberIsNotReusedWhenAnAddressIs() {
-        let registry = WeakRegistry<Caught>()
+        let registry = WeakRegistry<Tracked>()
         var first: UInt32?
         autoreleasepool {
-            let transient = Caught()
+            let transient = Tracked()
             registry.add(transient)
             first = registry.tracked.first?.instance
         }
 
-        let replacement = Caught()
+        let replacement = Tracked()
         registry.add(replacement)
 
         #expect(first != nil)
@@ -1042,25 +1042,25 @@ struct WeakRegistryTests {
     }
 
     @Test func addingTheSameObjectTwiceKeepsOneEntry() {
-        let registry = WeakRegistry<Caught>()
-        let caught = Caught()
-        registry.add(caught)
-        registry.add(caught)
+        let registry = WeakRegistry<Tracked>()
+        let tracked = Tracked()
+        registry.add(tracked)
+        registry.add(tracked)
 
         #expect(registry.count == 1)
     }
 
     /// A registry walked only once at activation misses every object built afterward.
     @Test func followingReachesObjectsBornAfterActivation() {
-        let registry = WeakRegistry<Caught>()
-        let before = Caught()
+        let registry = WeakRegistry<Tracked>()
+        let before = Tracked()
         registry.add(before)
 
-        var attached = [Caught]()
-        registry.attachAndFollow { caught, _ in attached.append(caught) }
-        #expect(attached.count == 1, "what was already caught")
+        var attached = [Tracked]()
+        registry.attachAndFollow { tracked, _ in attached.append(tracked) }
+        #expect(attached.count == 1, "what was already tracked")
 
-        let after = Caught()
+        let after = Tracked()
         registry.add(after)
 
         #expect(attached.count == 2, "and what arrives next")
@@ -1068,38 +1068,38 @@ struct WeakRegistryTests {
     }
 
     @Test func oneInstrumentUnfollowingLeavesItsSiblingsAttached() {
-        let registry = WeakRegistry<Caught>()
+        let registry = WeakRegistry<Tracked>()
         var first = 0
         var second = 0
 
         let token = registry.attachAndFollow { _, _ in first += 1 }
         registry.attachAndFollow { _, _ in second += 1 }
 
-        registry.add(Caught())
+        registry.add(Tracked())
         registry.stopFollowing(token)
-        registry.add(Caught())
+        registry.add(Tracked())
 
         #expect(first == 1, "stopped after the first arrival")
         #expect(second == 2, "the sibling still hears about both")
     }
 
     /// The registry numbers what it catches, so instruments get identity for free.
-    @Test func everyCaughtObjectGetsItsOwnNumber() {
-        let registry = WeakRegistry<Caught>()
+    @Test func everyTrackedObjectGetsItsOwnNumber() {
+        let registry = WeakRegistry<Tracked>()
         var numbers = [UInt32]()
         registry.attachAndFollow { _, instance in numbers.append(instance) }
 
-        registry.add(Caught())
-        registry.add(Caught())
-        registry.add(Caught())
+        registry.add(Tracked())
+        registry.add(Tracked())
+        registry.add(Tracked())
 
         #expect(numbers == [1, 2, 3])
     }
 
-    @Test func anObjectCaughtBeforeFollowingKeepsItsNumber() {
-        let registry = WeakRegistry<Caught>()
-        let first = Caught()
-        let second = Caught()
+    @Test func anObjectTrackedBeforeFollowingKeepsItsNumber() {
+        let registry = WeakRegistry<Tracked>()
+        let first = Tracked()
+        let second = Tracked()
         registry.add(first)
         registry.add(second)
 
@@ -1110,21 +1110,21 @@ struct WeakRegistryTests {
     }
 
     @Test func theSameObjectArrivingTwiceNotifiesOnce() {
-        let registry = WeakRegistry<Caught>()
+        let registry = WeakRegistry<Tracked>()
         var seen = 0
         registry.attachAndFollow { _, _ in seen += 1 }
 
-        let caught = Caught()
-        registry.add(caught)
-        registry.add(caught)
+        let tracked = Tracked()
+        registry.add(tracked)
+        registry.add(tracked)
 
         #expect(seen == 1, "a chokepoint the app calls twice is one object")
     }
 
     @Test func aRegistryIsKeyedByTheTypeItTracks() {
         let registries = Registries()
-        let first = registries.registry(Caught.self)
-        let second = registries.registry(Caught.self)
+        let first = registries.registry(Tracked.self)
+        let second = registries.registry(Tracked.self)
 
         #expect(first === second)
     }
@@ -1392,12 +1392,12 @@ struct AtomicsTests {
 
 /// One selector on both sides of one class name — a name-keyed site table merges them.
 @objc private class BothSidesSubject: NSObject {
-    @objc dynamic class func fetch() -> Caught {
-        Caught()
+    @objc dynamic class func fetch() -> Tracked {
+        Tracked()
     }
 
-    @objc dynamic func fetch() -> Caught {
-        Caught()
+    @objc dynamic func fetch() -> Tracked {
+        Tracked()
     }
 }
 
@@ -1444,25 +1444,25 @@ extension HookTableTests {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
 
-        let outcome = hooks.catchDelegateClass(
+        let outcome = hooks.trackDelegateClass(
             at: Selector(("setDelegate:queue:")),
             on: DelegateQueueSubject.self,
             takingTwoObjects: ()
         )
         #expect(outcome == .installed)
 
-        DelegateQueueSubject().setDelegate(Caught(), queue: nil)
+        DelegateQueueSubject().setDelegate(Tracked(), queue: nil)
 
         let recorded = registries.delegates(ObjectIdentifier(DelegateQueueSubject.self)).all
         #expect(recorded.count == 1)
-        #expect(recorded.first === Caught.self)
+        #expect(recorded.first === Tracked.self)
     }
 
     /// The shape guard that made `CXProvider`'s delegate silently unwatchable.
     @Test func aOneObjectCatchOnATwoArgumentSetterIsRefusedNotTrapped() {
         let hooks = HookTable(swizzle: Swizzle(), registries: Registries())
 
-        let outcome = hooks.catchDelegateClass(
+        let outcome = hooks.trackDelegateClass(
             at: Selector(("setDelegate:queue:")),
             on: RefusedDelegateQueueSubject.self
         )
@@ -1474,7 +1474,7 @@ extension HookTableTests {
     @Test func aKVOObservedDelegateIsRecordedByItsPublicClass() {
         let registries = Registries()
         let hooks = HookTable(swizzle: Swizzle(), registries: registries)
-        _ = hooks.catchDelegateClass(
+        _ = hooks.trackDelegateClass(
             at: #selector(KVOCatchSubject.adopt(_:)),
             on: KVOCatchSubject.self
         )

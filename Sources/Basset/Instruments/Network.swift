@@ -235,8 +235,8 @@ final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
         registries.delegates(ObjectIdentifier(URLSession.self))
     }
 
-    /// Catches session creation — Swift's awaited `data(from:)` bypasses every task factory.
-    static func caughtSession(
+    /// Tracks session creation — Swift's awaited `data(from:)` bypasses every task factory.
+    static func trackSession(
         _ made: AnyObject?,
         _ delegate: AnyObject?,
         _ hooks: HookTable
@@ -271,7 +271,7 @@ final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
     }
 
     /// Nothing substituted — only the delegate's class is taken, enough to wrap the callback.
-    private static func caught(
+    private static func trackTask(
         _ made: AnyObject?,
         of receiver: AnyObject,
         _ hooks: HookTable
@@ -327,7 +327,7 @@ final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
             takingThreeObjects: (),
             kind: .type
         ) { _, _, delegate, _, made in
-            Self.caughtSession(made, delegate, hooks)
+            Self.trackSession(made, delegate, hooks)
         }
         _ = hooks.swizzle.afterFactory(
             URLSession.self,
@@ -335,7 +335,7 @@ final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
             takingOneObject: (),
             kind: .type
         ) { _, _, made in
-            Self.caughtSession(made, nil, hooks)
+            Self.trackSession(made, nil, hooks)
         }
 
         // ObjC selector strings — dataTask(with:) overloads two distinct selectors.
@@ -343,21 +343,21 @@ final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
             _ = hooks.swizzle.afterFactory(
                 URLSession.self, Selector(name), takingOneObject: ()
             ) { receiver, _, made in
-                Self.caught(made, of: receiver, hooks)
+                Self.trackTask(made, of: receiver, hooks)
             }
         }
         for name in twoObjectFactories {
             _ = hooks.swizzle.afterFactory(
                 URLSession.self, Selector(name), takingTwoObjects: ()
             ) { receiver, _, _, made in
-                Self.caught(made, of: receiver, hooks)
+                Self.trackTask(made, of: receiver, hooks)
             }
         }
         for name in threeObjectFactories {
             _ = hooks.swizzle.afterFactory(
                 URLSession.self, Selector(name), takingThreeObjects: ()
             ) { receiver, _, _, _, made in
-                Self.caught(made, of: receiver, hooks)
+                Self.trackTask(made, of: receiver, hooks)
             }
         }
         #endif
