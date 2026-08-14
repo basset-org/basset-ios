@@ -489,7 +489,8 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
             }
 
         let deliveryHooked = delivery == .installed || delivery == .implemented
-        let dropHooked = drop == .installed || drop == .implemented
+            || delivery == .joinedExisting
+        let dropHooked = drop == .installed || drop == .implemented || drop == .joinedExisting
         guard deliveryHooked || dropHooked else {
             return
         }
