@@ -94,7 +94,7 @@ final class MainThreadHang: Streamable, Configurable {
     /// 2s, Apple's own hang threshold.
     static let defaultConfig: Config = .init(thresholdMs: 2000)
 
-    /// Below this the poll loop busy-spins; above it, converting to nanoseconds overflows.
+    /// Below the minimum the poll loop busy-spins; the maximum is a sane cap, not an overflow one.
     private static let minimumThresholdMs = 100
     private static let maximumThresholdMs = 60000
     private static let pollsPerThreshold: UInt64 = 5
