@@ -753,14 +753,16 @@ struct FactorySwizzleTests {
         let swizzle = Swizzle()
         var seen = 0
         var buffer: UnsafeRawPointer?
+        var elapsed = [UInt64]()
 
         #expect(
             swizzle
                 .sampleBufferCallback(BufferSubject.self,
                                       Self.didOutput)
-                { _, _, got, _ in
+                { _, _, got, _, nanoseconds in
                     seen += 1
                     buffer = got
+                    elapsed.append(nanoseconds)
                 } == .installed
         )
 
@@ -771,6 +773,7 @@ struct FactorySwizzleTests {
         #expect(subject.ran == 1, "the delegate still receives its own frames")
         #expect(seen == 1)
         #expect(buffer == sample, "the buffer reaches the observer without being bridged")
+        #expect(elapsed.count == 1, "elapsed covers only the chained call, timed like `timing`")
     }
 
     /// Lacking the method, a delegate is never called; defining it exposes those frames.
@@ -783,7 +786,7 @@ struct FactorySwizzleTests {
             "nothing answers this selector before the hook"
         )
         #expect(
-            swizzle.sampleBufferCallback(SilentSubject.self, Self.didDrop) { _, _, _, _ in
+            swizzle.sampleBufferCallback(SilentSubject.self, Self.didDrop) { _, _, _, _, _ in
                 seen += 1
             } == .implemented
         )
@@ -812,7 +815,7 @@ struct FactorySwizzleTests {
 
         #expect(
             swizzle.sampleBufferCallback(ObjectBufferSubject.self, Self.didOutput) {
-                _, _, _, _ in
+                _, _, _, _, _ in
             } == .argumentKindMismatch(shape: "sampleBufferCallback")
         )
     }

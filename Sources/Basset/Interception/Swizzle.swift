@@ -526,10 +526,12 @@ public final class Swizzle: @unchecked Sendable {
     }
 
     /// Wraps where the delegate exists, defines where not — the buffer stays unbridged.
+    /// Elapsed nanoseconds cover only the chained call, timed the way `timing` times
+    /// `.timingVoid` — the app's own delegate work, not basset's observers after it.
     public func sampleBufferCallback(
         _ target: AnyClass?,
         _ selector: Selector,
-        _ observer: @escaping (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?)
+        _ observer: @escaping (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?, UInt64)
             -> Void
     ) -> SwizzleOutcome {
         install(
@@ -542,13 +544,21 @@ public final class Swizzle: @unchecked Sendable {
             let block: @convention(block) (
                 AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?
             ) -> Void = { receiver, output, buffer, connection in
+                var started = timespec()
+                clock_gettime(CLOCK_UPTIME_RAW, &started)
                 site.callChained(receiver, output, buffer, connection)
+                var finished = timespec()
+                clock_gettime(CLOCK_UPTIME_RAW, &finished)
+
+                let startedAt = UInt64(started.tv_sec) * 1000000000 + UInt64(started.tv_nsec)
+                let finishedAt = UInt64(finished.tv_sec) * 1000000000 + UInt64(finished.tv_nsec)
+                let elapsed = finishedAt > startedAt ? finishedAt - startedAt : 0
                 for observer in site.observers {
                     (
                         observer.body
-                            as? (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?)
+                            as? (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?, UInt64)
                             -> Void
-                    )?(receiver, output, buffer, connection)
+                    )?(receiver, output, buffer, connection, elapsed)
                 }
             }
             return imp_implementationWithBlock(block)

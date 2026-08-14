@@ -355,10 +355,12 @@ public extension InstrumentID {
             )
         case .cameraFrameDelivery:
             InstrumentMetadata(
-                summary: "How many camera frames reach the app each second, how many the system threw away instead, and why",
-                whenToUse: "a camera preview is black or frozen while the session reports itself running — frames may not be arriving at all, or may be arriving and being dropped faster than they are consumed",
+                summary: "How many camera frames reach the app each second, how long the app's own delegate takes to process each one, how many the system threw away instead, and why",
+                whenToUse: "a camera preview is black, frozen, or the app hangs while a session runs — frames may not be arriving at all, may be arriving and being dropped faster than they are consumed, or may be arriving on time while the app's own per-frame processing runs long enough to miss the next one",
                 reveals: [
                     "whether any frames reach the app, reported every second including the seconds where none did",
+                    "wall-clock time the app's own captureOutput:didOutputSampleBuffer:fromConnection: spends per frame, totalled and peak for the window",
+                    "which delegate class is receiving frames, reported once when it starts being watched",
                     "how many frames the system dropped, which an app that never wrote a drop callback cannot see",
                     "whether drops are the buffer pool running out, a frame arriving late, or a break in the stream",
                     "counted across every camera in the session together, not per camera",

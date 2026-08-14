@@ -364,10 +364,13 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
 
     static let id: InstrumentID = .cameraFrameDelivery
     static let entity = Entity.ID.videoFrames
+    static let tallySlots = 5
 
     private static let delivered: TallySlot = .first
     private static let dropped: TallySlot = .second
     private static let reason: TallySlot = .third
+    private static let delegateDurationTotal: TallySlot = .init(3)
+    private static let delegateDurationPeak: TallySlot = .init(4)
 
     #if os(iOS)
     private static let didOutput: Selector = .init(
@@ -431,6 +434,8 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
             if weight > 0 {
                 out.put(.dropReason(Self.named(weight)))
             }
+            out.put(.delegateDurationNanoseconds(context.tally.take(Self.delegateDurationTotal)))
+            out.put(.delegateDurationPeakNanoseconds(context.tally.take(Self.delegateDurationPeak)))
         }
         #endif
     }
@@ -464,15 +469,17 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
 
         let hot = context.hotPath
         let delivery = context.swizzle
-            .sampleBufferCallback(subject, Self.didOutput) { _, _, _, _ in
+            .sampleBufferCallback(subject, Self.didOutput) { _, _, _, _, elapsed in
                 guard hot.isActive else {
                     return
                 }
 
                 hot.add(Self.delivered)
+                hot.add(Self.delegateDurationTotal, elapsed)
+                hot.raise(Self.delegateDurationPeak, to: elapsed)
             }
         let drop = context.swizzle
-            .sampleBufferCallback(subject, Self.didDrop) { _, _, buffer, _ in
+            .sampleBufferCallback(subject, Self.didDrop) { _, _, buffer, _, _ in
                 guard hot.isActive else {
                     return
                 }
@@ -480,6 +487,17 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
                 hot.add(Self.dropped)
                 hot.raise(Self.reason, to: Self.weigh(buffer))
             }
+
+        let deliveryHooked = delivery == .installed || delivery == .implemented
+            || delivery == .joinedExisting
+        let dropHooked = drop == .installed || drop == .implemented || drop == .joinedExisting
+        guard deliveryHooked || dropHooked else {
+            return
+        }
+
+        context.emit { out in
+            out.put(.delegateClass(NSStringFromClass(subject)))
+        }
 
         // Either callback — a delegate defining only `didDrop` left delivered frames at zero.
         guard delivery == .implemented || drop == .implemented else {

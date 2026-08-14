@@ -73,6 +73,8 @@ public extension Component.ID {
         case .framesDeliveredCount: "Frames delivered"
         case .framesDroppedCount: "Frames dropped"
         case .dropReason: "Why dropped"
+        case .delegateDurationNanoseconds: "Delegate duration (ns)"
+        case .delegateDurationPeakNanoseconds: "Longest delegate duration (ns)"
         case .hangNanoseconds: "Hang duration (ns)"
         case .hangResolved: "Hang recovered"
         case .runLoopTurnCount: "Run loop turns"

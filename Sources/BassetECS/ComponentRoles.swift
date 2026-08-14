@@ -26,6 +26,8 @@ public extension Component.ID {
              .cpuUsageRatio,
              .deadlineMissCount,
              .deadlineOverrunNanoseconds,
+             .delegateDurationNanoseconds,
+             .delegateDurationPeakNanoseconds,
              .deletedCount,
              .displayListChangeCount,
              .displayListItemCount,
