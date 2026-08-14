@@ -74,9 +74,16 @@ first one that has not merged yet. Branch the second off the first's branch
 rather than `main`, and open its PR with that branch as the base
 (`gh pr create --base <first-branch>`). See GitHub's own writeup:
 <https://docs.github.com/en/pull-requests/get-started/about-stacked-prs>.
-`main` here is always squash-merged, so GitHub retargets the second PR to
-`main` on its own once the first squash-merges, and its diff narrows to just
-the second change without a rebase. A stack is the exception: most work
+
+**GitHub does not retarget a stacked PR when its base branch is deleted — it
+closes it**, and a closed PR whose base is gone can be neither reopened nor
+retargeted (`gh pr reopen` and `PATCH .../pulls/N -f base=main` both fail with
+the base branch missing). Squash-merging the first PR with `--delete-branch`
+therefore auto-closes every PR stacked on it. The moment the first PR merges,
+before anything else: `git rebase --onto main <old-base-tip> <second-branch>`
+(drops the now-squashed commits, replays only the second PR's own), force-push,
+and open a fresh PR against `main` if the old one already closed — the number
+cannot be salvaged once that happens. A stack is the exception: most work
 targets `main` directly.
 
 ## No dependencies
