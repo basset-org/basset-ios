@@ -64,6 +64,21 @@ the hunks that were deliberately left out.
 
 `.github/workflows/test.yml` runs the tests on every pull request.
 
+## Branches and pull requests
+
+`REVIEW.md` carries the standard — one branch, one pull request, one concern,
+squash-merged into a linear `main`. Read it before opening one.
+
+**Stack pull requests when necessary** — when a second change depends on a
+first one that has not merged yet. Branch the second off the first's branch
+rather than `main`, and open its PR with that branch as the base
+(`gh pr create --base <first-branch>`). See GitHub's own writeup:
+<https://docs.github.com/en/pull-requests/get-started/about-stacked-prs>.
+`main` here is always squash-merged, so GitHub retargets the second PR to
+`main` on its own once the first squash-merges, and its diff narrows to just
+the second change without a rebase. A stack is the exception: most work
+targets `main` directly.
+
 ## No dependencies
 
 Apple's own frameworks cover what this library needs. There are no package
