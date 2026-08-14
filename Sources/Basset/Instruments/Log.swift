@@ -132,20 +132,28 @@ struct LogTraffic {
     }
 }
 
+/// Shared by every `log.*` instrument that can be scoped to one subsystem instead of all of them.
+struct LogSubsystemFilter: Codable, Sendable {
+    let subsystem: String?
+}
+
 /// A message can carry what an app logged as public; token-shaped runs are scrubbed out.
-final class LogFaults: Streamable, PlainInstrument {
+final class LogFaults: Streamable, Configurable {
     static let id: InstrumentID = .logFaults
     static let entity = Entity.ID.logRecord
+    static let defaultConfig: LogSubsystemFilter = .init(subsystem: nil)
 
     private static let subjectsPerFlush = 24
 
     /// Refused while scanning, not after — a chatty subsystem would crowd out real faults.
-    private let reader: LogStoreReader = .init(
-        subsystems: [],
-        admitting: { $0.level.isDiagnostic }
-    )
+    let reader: LogStoreReader
 
-    init() {}
+    init(config: LogSubsystemFilter) {
+        reader = LogStoreReader(
+            subsystems: config.subsystem.map { [$0] } ?? [],
+            admitting: { $0.level.isDiagnostic }
+        )
+    }
 
     static func write(
         _ digest: LogDigest,
@@ -216,15 +224,18 @@ final class LogFaults: Streamable, PlainInstrument {
 }
 
 /// Who is logging and how much — no subsystem list exists, so this reads the process itself.
-final class LogSubsystems: Streamable, PlainInstrument {
+final class LogSubsystems: Streamable, Configurable {
     static let id: InstrumentID = .logSubsystems
     static let entity = Entity.ID.logRecord
+    static let defaultConfig: LogSubsystemFilter = .init(subsystem: nil)
 
     private static let sourcesPerFlush = 32
 
-    private let reader: LogStoreReader = .init(subsystems: [])
+    let reader: LogStoreReader
 
-    init() {}
+    init(config: LogSubsystemFilter) {
+        reader = LogStoreReader(subsystems: config.subsystem.map { [$0] } ?? [])
+    }
 
     static func write(
         _ traffic: LogTraffic,

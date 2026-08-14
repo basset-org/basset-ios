@@ -640,7 +640,14 @@ public extension InstrumentID {
                 ],
                 mechanism: .osLogStore,
                 cadence: .periodic,
-                overhead: .medium
+                overhead: .medium,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "subsystem",
+                        type: .string,
+                        description: "Only this subsystem's errors and faults. Default: every subsystem."
+                    ),
+                ]
             )
         case .logSubsystems:
             InstrumentMetadata(
@@ -653,7 +660,14 @@ public extension InstrumentID {
                 related: ["log.faults", "swiftui.runtimeIssues"],
                 mechanism: .osLogStore,
                 cadence: .periodic,
-                overhead: .medium
+                overhead: .medium,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "subsystem",
+                        type: .string,
+                        description: "Only this subsystem's traffic. Default: every subsystem."
+                    ),
+                ]
             )
         case .sessionConfiguration:
             InstrumentMetadata(
