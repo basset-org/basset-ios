@@ -25,7 +25,7 @@ final class ContentProcessTermination: StreamingInstrument, LoadTimeInstall {
             return
         }
 
-        hooks.catchDelegateClass(at: setNavigationDelegate, on: webView)
+        hooks.trackDelegateClass(at: setNavigationDelegate, on: webView)
     }
 
     private static func url(of webView: AnyObject?) -> String? {

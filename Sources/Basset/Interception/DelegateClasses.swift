@@ -34,7 +34,7 @@ public final class DelegateClasses: @unchecked Sendable {
         waiting.forEach { $0(delegateClass) }
     }
 
-    /// Every class caught so far, and every one caught from here on.
+    /// Every class tracked so far, and every one tracked from here on.
     @discardableResult
     public func attachAndFollow(_ attach: @escaping (AnyClass) -> Void) -> Int {
         let (existing, token) = guarded.withLock { state -> ([AnyClass], Int) in
@@ -55,7 +55,7 @@ public final class DelegateClasses: @unchecked Sendable {
 public extension HookTable {
     /// Installed at load — no public API lists a framework's live delegate instances.
     @discardableResult
-    func catchDelegateClass(at selector: Selector,
+    func trackDelegateClass(at selector: Selector,
                             on owner: AnyClass?) -> SwizzleOutcome
     {
         guard let owner else {
@@ -76,7 +76,7 @@ public extension HookTable {
 
     /// For `setDelegate:queue:`-shaped setters, where the delegate is the first of two arguments.
     @discardableResult
-    func catchDelegateClass(at selector: Selector,
+    func trackDelegateClass(at selector: Selector,
                             on owner: AnyClass?,
                             takingTwoObjects: Void) -> SwizzleOutcome
     {

@@ -2,8 +2,8 @@ import BassetECS
 import Foundation
 
 #if os(iOS)
-import AVFoundation
 import CoreMedia
+import CoreVideo
 import ObjectiveC
 #endif
 
@@ -17,29 +17,37 @@ final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
 
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)
-        hooks.catchSelf(
-            of: AVCaptureSession.self,
-            atCallTaking: #selector(AVCaptureSession.addOutput(_:)),
-            on: AVCaptureSession.self
+        guard let session = objc_getClass("AVCaptureSession") as? AnyClass else {
+            return
+        }
+
+        hooks.trackSelf(
+            class: session,
+            atCallTaking: Selector(("addOutput:")),
+            on: session
         )
-        hooks.catchSelf(
-            of: AVCaptureSession.self,
-            at: #selector(AVCaptureSession.startRunning),
-            on: AVCaptureSession.self
+        hooks.trackSelf(
+            class: session,
+            at: Selector(("startRunning")),
+            on: session
         )
         #endif
     }
 
     func observe(_ context: Context) {
         #if os(iOS)
-        context.follow(AVCaptureSession.self) { [weak self] session, instance in
-            guard let self else {
+        guard let session = objc_getClass("AVCaptureSession") as? AnyClass else {
+            return
+        }
+
+        context.follow(class: session) { [weak self] session, instance in
+            guard let self, let sessionObject = session as? NSObject else {
                 return
             }
 
             self.observations.attach {
                 [
-                    Observation.attach(to: session, keyPath: "running") { [weak self] _ in
+                    Observation.attach(to: sessionObject, keyPath: "running") { [weak self] _ in
                         self?.report(session, instance: instance, into: context)
                     },
                 ]
@@ -54,43 +62,63 @@ final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
 
     #if os(iOS)
     private func report(
-        _ session: AVCaptureSession,
+        _ session: AnyObject,
         instance: UInt32,
         into context: Context
     ) {
-        for input in session.inputs.compactMap({ $0 as? AVCaptureDeviceInput }) {
-            let device = input.device
-            let format = device.activeFormat
-            let dimensions = CMVideoFormatDescriptionGetDimensions(
-                format.formatDescription
-            )
-            let rates = format.videoSupportedFrameRateRanges
-            let path = Self.videoPath(for: input, in: session)
+        guard let inputs = session.value(forKey: "inputs") as? [AnyObject],
+              let deviceInputClass = objc_getClass("AVCaptureDeviceInput") as? AnyClass
+        else {
+            return
+        }
 
-            context.emitIfChanged(.captureDevice, of: device.uniqueID) { out in
+        for input in inputs where input.isKind(of: deviceInputClass) {
+            guard let device = input.value(forKey: "device") as AnyObject?,
+                  let format = device.value(forKey: "activeFormat") as AnyObject?,
+                  let description = Self.formatDescription(of: format)
+            else {
+                continue
+            }
+
+            let dimensions = CMVideoFormatDescriptionGetDimensions(description)
+            let rates = format.value(forKey: "videoSupportedFrameRateRanges") as? [AnyObject] ?? []
+            let path = Self.videoPath(for: input, in: session)
+            let uniqueID = device.value(forKey: "uniqueID") as? String ?? ""
+            let position = (device.value(forKey: "position") as? NSNumber)?.intValue ?? 0
+            let colorSpace = (device.value(forKey: "activeColorSpace") as? NSNumber)?.intValue ?? 0
+            let level = (device.value(forKey: "systemPressureState") as AnyObject?)?
+                .value(forKey: "level") as? String
+
+            context.emitIfChanged(.captureDevice, of: uniqueID) { out in
                 out.put(.instanceId(instance))
-                out.put(.deviceType(device.deviceType.rawValue))
-                out.put(.devicePosition(Self.named(device.position)))
-                out.put(.deviceUniqueId(device.uniqueID))
+                out.put(.deviceType(device.value(forKey: "deviceType") as? String ?? ""))
+                out.put(.devicePosition(Self.named(position: position)))
+                out.put(.deviceUniqueId(uniqueID))
                 out.put(.formatWidthPixels(dimensions.width))
                 out.put(.formatHeightPixels(dimensions.height))
                 out.put(
                     .formatPixelFormat(
-                        Self.fourCharacterCode(
-                            CMFormatDescriptionGetMediaSubType(format.formatDescription)
-                        )
+                        Self.fourCharacterCode(CMFormatDescriptionGetMediaSubType(description))
                     )
                 )
+                let minRate = rates
+                    .compactMap { ($0.value(forKey: "minFrameRate") as? NSNumber)?.doubleValue }
+                    .min() ?? 0
+                let maxRate = rates
+                    .compactMap { ($0.value(forKey: "maxFrameRate") as? NSNumber)?.doubleValue }
+                    .max() ?? 0
+                out.put(.formatMinFramesPerSecond(Float(minRate)))
+                out.put(.formatMaxFramesPerSecond(Float(maxRate)))
                 out
-                    .put(.formatMinFramesPerSecond(Float(rates.map(\.minFrameRate)
-                            .min() ?? 0)))
+                    .put(.formatMultiCamSupported((format
+                            .value(forKey: "isMultiCamSupported") as? Bool) ?? false))
                 out
-                    .put(.formatMaxFramesPerSecond(Float(rates.map(\.maxFrameRate)
-                            .max() ?? 0)))
-                out.put(.formatMultiCamSupported(format.isMultiCamSupported))
-                out.put(.formatCount(UInt32(device.formats.count)))
-                out.put(.activeColorSpace(Self.named(device.activeColorSpace)))
-                out.put(.systemPressureLevel(device.systemPressureState.level.rawValue))
+                    .put(.formatCount(UInt32((device.value(forKey: "formats") as? [AnyObject])?
+                            .count ?? 0)))
+                out.put(.activeColorSpace(Self.named(colorSpace: colorSpace)))
+                if let level {
+                    out.put(.systemPressureLevel(level))
+                }
 
                 guard let path else {
                     return
@@ -98,41 +126,79 @@ final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
 
                 // Whether frames flow: requested pixel format vs. what the active format supports.
                 // `videoSettings` is nil when the app asked for the device-native format.
-                if let requested = path.output.videoSettings?[
-                    kCVPixelBufferPixelFormatTypeKey as String
-                ] as? UInt32 {
+                if let videoSettings = path.output.value(forKey: "videoSettings") as? [String: Any],
+                   let requested =
+                   (videoSettings[kCVPixelBufferPixelFormatTypeKey as String] as? NSNumber)?
+                       .uint32Value
+                {
                     out.put(.outputPixelFormat(Self.fourCharacterCode(requested)))
-                    out.put(
-                        .outputPixelFormatSupported(
-                            path.output
-                                .availableVideoPixelFormatTypes
-                                .contains(OSType(requested))
-                        )
-                    )
+                    let available = (path.output
+                        .value(forKey: "availableVideoCVPixelFormatTypes") as? [NSNumber])?
+                                            .map(\.uint32Value) ?? []
+                    out.put(.outputPixelFormatSupported(available.contains(requested)))
                 }
-                out.put(.videoRotationDegrees(Float(path.connection.videoRotationAngle)))
-                out.put(.videoMirrored(path.connection.isVideoMirrored))
+                let rotation = (path.connection.value(forKey: "videoRotationAngle") as? NSNumber)?
+                    .doubleValue ?? 0
+                out.put(.videoRotationDegrees(Float(rotation)))
+                out
+                    .put(
+                        .videoMirrored((
+                            path.connection.value(forKey: "isVideoMirrored") as? Bool
+                        ) ??
+                            false)
+                    )
             }
         }
     }
 
     private static func videoPath(
-        for input: AVCaptureDeviceInput,
-        in session: AVCaptureSession
-    ) -> (output: AVCaptureVideoDataOutput, connection: AVCaptureConnection)? {
-        for output in session.outputs.compactMap({ $0 as? AVCaptureVideoDataOutput }) {
-            guard let connection = output.connection(with: .video) else {
+        for input: AnyObject,
+        in session: AnyObject
+    ) -> (output: AnyObject, connection: AnyObject)? {
+        guard let outputs = session.value(forKey: "outputs") as? [AnyObject],
+              let videoOutputClass = objc_getClass("AVCaptureVideoDataOutput") as? AnyClass
+        else {
+            return nil
+        }
+
+        for output in outputs where output.isKind(of: videoOutputClass) {
+            guard let connection = Self.connection(of: output, mediaType: "vide") else {
                 continue
             }
 
-            let feeds = connection.inputPorts.contains { port in
-                (port.input as? AVCaptureDeviceInput) === input
+            let inputPorts = connection.value(forKey: "inputPorts") as? [AnyObject] ?? []
+            let feeds = inputPorts.contains { port in
+                (port.value(forKey: "input") as AnyObject?) === input
             }
             if feeds {
                 return (output, connection)
             }
         }
         return nil
+    }
+
+    /// `-connectionWithMediaType:` takes one object argument — `perform(_:with:)` reaches it
+    /// without importing AVFoundation for `AVMediaType.video`, execution-verified as `"vide"`.
+    private static func connection(of output: AnyObject, mediaType: String) -> AnyObject? {
+        output.perform(Selector(("connectionWithMediaType:")), with: mediaType as NSString)?
+            .takeUnretainedValue()
+    }
+
+    /// `CMFormatDescriptionRef` is `CM_BRIDGED_TYPE(id)` — bridgeable for an ARC cast, but its
+    /// raw ObjC type encoding is a C pointer, not `@`. `value(forKey: "formatDescription")`
+    /// crashes on-device with "this class is not key value coding-compliant for the key
+    /// formatDescription" because KVC's automatic accessor lookup refuses a non-object-encoded
+    /// return type — confirmed by running the hardware suite, not by reading the header. Reached
+    /// the way `PermissionProbe` reaches a class method: the raw IMP, cast to its C signature.
+    private static func formatDescription(of format: AnyObject) -> CMFormatDescription? {
+        let selector = Selector(("formatDescription"))
+        guard let method = class_getInstanceMethod(object_getClass(format), selector) else {
+            return nil
+        }
+
+        typealias Call = @convention(c) (AnyObject, Selector) -> Unmanaged<CMFormatDescription>?
+        let implementation = method_getImplementation(method)
+        return unsafeBitCast(implementation, to: Call.self)(format, selector)?.takeUnretainedValue()
     }
 
     private static func fourCharacterCode(_ code: UInt32) -> String {
@@ -148,22 +214,24 @@ final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
         return String(bytes.map { Character(UnicodeScalar($0)) })
     }
 
-    private static func named(_ position: AVCaptureDevice.Position) -> String {
-        switch position {
-        case .front: "front"
-        case .back: "back"
-        case .unspecified: "unspecified"
-        @unknown default: "unknown"
+    /// Raw `AVCaptureDevicePosition` values — `NS_ENUM(NSInteger, ...)`, unspecified/back/front.
+    private static func named(position raw: Int) -> String {
+        switch raw {
+        case 1: "back"
+        case 2: "front"
+        default: "unspecified"
         }
     }
 
-    private static func named(_ space: AVCaptureColorSpace) -> String {
-        switch space {
-        case .sRGB: "sRGB"
-        case .P3_D65: "P3_D65"
-        case .HLG_BT2020: "HLG_BT2020"
-        case .appleLog: "appleLog"
-        @unknown default: "unknown"
+    /// Raw `AVCaptureColorSpace` values — `NS_ENUM(NSInteger, ...)`, sRGB through appleLog2.
+    private static func named(colorSpace raw: Int) -> String {
+        switch raw {
+        case 0: "sRGB"
+        case 1: "P3_D65"
+        case 2: "HLG_BT2020"
+        case 3: "appleLog"
+        case 4: "appleLog2"
+        default: "unknown"
         }
     }
     #endif
@@ -175,64 +243,105 @@ final class CameraDeviceInventory: StreamingInstrument {
 
     #if os(iOS)
     /// Named, not from `allCases` (AVFoundation has none) — a later type is absent from any list.
-    private static let probed: [AVCaptureDevice.DeviceType] = [
-        .builtInWideAngleCamera,
-        .builtInUltraWideCamera,
-        .builtInTelephotoCamera,
-        .builtInDualCamera,
-        .builtInDualWideCamera,
-        .builtInTripleCamera,
-        .builtInTrueDepthCamera,
-        .builtInLiDARDepthCamera,
-        .continuityCamera,
-        .external,
+    private static let probed: [String] = [
+        "AVCaptureDeviceTypeBuiltInWideAngleCamera",
+        "AVCaptureDeviceTypeBuiltInUltraWideCamera",
+        "AVCaptureDeviceTypeBuiltInTelephotoCamera",
+        "AVCaptureDeviceTypeBuiltInDualCamera",
+        "AVCaptureDeviceTypeBuiltInDualWideCamera",
+        "AVCaptureDeviceTypeBuiltInTripleCamera",
+        "AVCaptureDeviceTypeBuiltInTrueDepthCamera",
+        "AVCaptureDeviceTypeBuiltInLiDARDepthCamera",
+        "AVCaptureDeviceTypeContinuityCamera",
+        "AVCaptureDeviceTypeExternal",
     ]
     #endif
 
     init() {}
 
     #if os(iOS)
-    private static func describe(_ set: Set<AVCaptureDevice>) -> String {
+    private static func describe(_ set: NSSet) -> String {
         set
-            .map { "\($0.deviceType.rawValue)@\(named($0.position))" }
+            .compactMap { $0 as AnyObject }
+            .map { device -> String in
+                let type = device.value(forKey: "deviceType") as? String ?? "unknown"
+                let position = (device.value(forKey: "position") as? NSNumber)?.intValue ?? 0
+                return "\(type)@\(named(position: position))"
+            }
             .sorted()
             .joined(separator: "+")
     }
 
-    private static func named(_ position: AVCaptureDevice.Position) -> String {
-        switch position {
-        case .front: "front"
-        case .back: "back"
-        case .unspecified: "unspecified"
-        @unknown default: "unknown"
+    private static func named(position raw: Int) -> String {
+        switch raw {
+        case 1: "back"
+        case 2: "front"
+        default: "unspecified"
         }
+    }
+
+    /// `+discoverySessionWithDeviceTypes:mediaType:position:`, a three-argument class factory —
+    /// beyond `perform`'s two-argument ceiling, reached the way `PermissionProbe` calls a class
+    /// method: the raw IMP, cast to its C signature.
+    private static func discoverySession(
+        _ discoveryClass: AnyClass,
+        deviceTypes: [String],
+        mediaType: String,
+        position: Int
+    ) -> AnyObject? {
+        let selector = Selector(("discoverySessionWithDeviceTypes:mediaType:position:"))
+        guard let method = class_getClassMethod(discoveryClass, selector) else {
+            return nil
+        }
+
+        typealias Call = @convention(c) (AnyClass, Selector, NSArray, NSString, Int)
+            -> Unmanaged<AnyObject>?
+        let implementation = method_getImplementation(method)
+        return unsafeBitCast(implementation, to: Call.self)(
+            discoveryClass,
+            selector,
+            deviceTypes as NSArray,
+            mediaType as NSString,
+            position
+        )?.takeUnretainedValue()
     }
     #endif
 
     func observe(_ context: Context) {
         #if os(iOS)
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: Self.probed,
-            mediaType: .video,
-            position: .unspecified
-        )
+        guard let discoveryClass = objc_getClass("AVCaptureDeviceDiscoverySession") as? AnyClass,
+              let discovery = Self.discoverySession(
+                  discoveryClass,
+                  deviceTypes: Self.probed,
+                  mediaType: "vide",
+                  position: 0
+              )
+        else {
+            return
+        }
 
-        for device in discovery.devices {
+        let devices = discovery.value(forKey: "devices") as? [AnyObject] ?? []
+        for device in devices {
+            let position = (device.value(forKey: "position") as? NSNumber)?.intValue ?? 0
+            let formats = device.value(forKey: "formats") as? [AnyObject] ?? []
+
             context.emit(.captureDevice) { out in
-                out.put(.deviceType(device.deviceType.rawValue))
-                out.put(.devicePosition(Self.named(device.position)))
-                out.put(.deviceUniqueId(device.uniqueID))
-                out.put(.formatCount(UInt32(device.formats.count)))
+                out.put(.deviceType(device.value(forKey: "deviceType") as? String ?? ""))
+                out.put(.devicePosition(Self.named(position: position)))
+                out.put(.deviceUniqueId(device.value(forKey: "uniqueID") as? String ?? ""))
+                out.put(.formatCount(UInt32(formats.count)))
                 out.put(
                     .formatMultiCamSupported(
-                        device.formats.contains { $0.isMultiCamSupported }
+                        formats
+                            .contains { ($0.value(forKey: "isMultiCamSupported") as? Bool) == true }
                     )
                 )
             }
         }
 
         // Which pairs the hardware can actually run at once — changes between phones.
-        for (index, set) in discovery.supportedMultiCamDeviceSets.enumerated() {
+        let multiCamSets = discovery.value(forKey: "supportedMultiCamDeviceSets") as? [NSSet] ?? []
+        for (index, set) in multiCamSets.enumerated() {
             context.emit(.multiCamSet) { out in
                 out.put(.multiCamSetIndex(UInt32(index)))
                 out.put(.multiCamSetMembers(Self.describe(set)))
@@ -279,25 +388,33 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
 
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)
+        guard let session = objc_getClass("AVCaptureSession") as? AnyClass,
+              let videoOutput = objc_getClass("AVCaptureVideoDataOutput") as? AnyClass
+        else {
+            return
+        }
+
         // Catches the delegate assignment — `addOutput` says nothing about an existing one.
-        hooks.catchChanges(
-            of: AVCaptureVideoDataOutput.self,
-            atCallTakingTwo: #selector(
-                AVCaptureVideoDataOutput.setSampleBufferDelegate(_:queue:)
-            ),
-            on: AVCaptureVideoDataOutput.self
+        hooks.announceSelf(
+            class: videoOutput,
+            atCallTakingTwo: Selector(("setSampleBufferDelegate:queue:")),
+            on: videoOutput
         )
-        hooks.catchBirths(
-            of: AVCaptureVideoDataOutput.self,
-            at: #selector(AVCaptureSession.addOutput(_:)),
-            on: AVCaptureSession.self
+        hooks.trackArgument(
+            class: videoOutput,
+            at: Selector(("addOutput:")),
+            on: session
         )
         #endif
     }
 
     func observe(_ context: Context) {
         #if os(iOS)
-        context.follow(AVCaptureVideoDataOutput.self) { [weak self] output, _ in
+        guard let videoOutput = objc_getClass("AVCaptureVideoDataOutput") as? AnyClass else {
+            return
+        }
+
+        context.follow(class: videoOutput) { [weak self] output, _ in
             self?.instrument(output, with: context)
         }
 
@@ -323,8 +440,8 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
     }
 
     #if os(iOS)
-    private func instrument(_ output: AVCaptureVideoDataOutput, with context: Context) {
-        guard let delegate = output.sampleBufferDelegate,
+    private func instrument(_ output: AnyObject, with context: Context) {
+        guard let delegate = output.value(forKey: "sampleBufferDelegate") as AnyObject?,
               let subject = object_getClass(delegate)
         else {
             return
@@ -374,8 +491,8 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
     }
 
     private func rebindIfDefined(
-        _ output: AVCaptureVideoDataOutput,
-        delegate: AVCaptureVideoDataOutputSampleBufferDelegate,
+        _ output: AnyObject,
+        delegate: AnyObject,
         subject: AnyClass
     ) {
         let wasDefined = guarded.withLock { $0.defined.contains(ObjectIdentifier(subject)) }
@@ -388,10 +505,10 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
 
     /// Re-setting the delegate re-enters this setter — guarded per output, not per class.
     private func rebind(
-        _ output: AVCaptureVideoDataOutput,
-        delegate: AVCaptureVideoDataOutputSampleBufferDelegate
+        _ output: AnyObject,
+        delegate: AnyObject
     ) {
-        guard let queue = output.sampleBufferCallbackQueue else {
+        guard let queue = output.value(forKey: "sampleBufferCallbackQueue") as AnyObject? else {
             return
         }
 
@@ -401,7 +518,11 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
             return
         }
 
-        output.setSampleBufferDelegate(delegate, queue: queue)
+        _ = output.perform(
+            Selector(("setSampleBufferDelegate:queue:")),
+            with: delegate,
+            with: queue
+        )
 
         guarded.withLock { $0.rebinding.remove(key) }
     }
@@ -458,30 +579,38 @@ final class CameraSessionConfiguration: StreamingInstrument, LoadTimeInstall {
 
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)
-        hooks.catchSelf(
-            of: AVCaptureSession.self,
-            atCallTaking: #selector(AVCaptureSession.addOutput(_:)),
-            on: AVCaptureSession.self
+        guard let session = objc_getClass("AVCaptureSession") as? AnyClass else {
+            return
+        }
+
+        hooks.trackSelf(
+            class: session,
+            atCallTaking: Selector(("addOutput:")),
+            on: session
         )
-        hooks.catchSelf(
-            of: AVCaptureSession.self,
-            at: #selector(AVCaptureSession.startRunning),
-            on: AVCaptureSession.self
+        hooks.trackSelf(
+            class: session,
+            at: Selector(("startRunning")),
+            on: session
         )
         #endif
     }
 
     func observe(_ context: Context) {
         #if os(iOS)
-        context.follow(AVCaptureSession.self) { [weak self] session, instance in
-            guard let self else {
+        guard let session = objc_getClass("AVCaptureSession") as? AnyClass else {
+            return
+        }
+
+        context.follow(class: session) { [weak self] session, instance in
+            guard let self, let sessionObject = session as? NSObject else {
                 return
             }
 
             // Emitted at attach and on every start/stop — a config that never runs still matters.
             self.observations.attach {
                 [
-                    Observation.attach(to: session, keyPath: "running") { [weak self] _ in
+                    Observation.attach(to: sessionObject, keyPath: "running") { [weak self] _ in
                         self?.report(session, instance: instance, into: context)
                     },
                 ]
@@ -496,27 +625,40 @@ final class CameraSessionConfiguration: StreamingInstrument, LoadTimeInstall {
 
     #if os(iOS)
     private func report(
-        _ session: AVCaptureSession,
+        _ session: AnyObject,
         instance: UInt32,
         into context: Context
     ) {
-        let connections = session.connections
-        let carrying = connections.filter { $0.isActive && $0.isEnabled }
+        let connections = session.value(forKey: "connections") as? [AnyObject] ?? []
+        let carrying = connections.filter {
+            (($0.value(forKey: "isActive") as? Bool) ?? false)
+                && (($0.value(forKey: "isEnabled") as? Bool) ?? false)
+        }
+        let inputs = session.value(forKey: "inputs") as? [AnyObject] ?? []
+        let outputs = session.value(forKey: "outputs") as? [AnyObject] ?? []
 
         context.emit { out in
             out.put(.instanceId(instance))
             out.put(.sessionClass(String(describing: type(of: session))))
-            out.put(.sessionPreset(session.sessionPreset.rawValue))
-            out.put(.inputCount(UInt32(session.inputs.count)))
-            out.put(.outputCount(UInt32(session.outputs.count)))
+            out.put(.sessionPreset(session.value(forKey: "sessionPreset") as? String ?? ""))
+            out.put(.inputCount(UInt32(inputs.count)))
+            out.put(.outputCount(UInt32(outputs.count)))
             out.put(.connectionCount(UInt32(connections.count)))
             out.put(.activeConnectionCount(UInt32(carrying.count)))
-            out.put(.sessionRunning(session.isRunning))
+            out.put(.sessionRunning((session.value(forKey: "isRunning") as? Bool) ?? false))
 
             // Multi-cam only: the number a session refuses to start, configured but not running.
-            if let multiCam = session as? AVCaptureMultiCamSession {
-                out.put(.hardwareCostRatio(multiCam.hardwareCost))
-                out.put(.systemPressureCostRatio(multiCam.systemPressureCost))
+            if let multiCamClass = objc_getClass("AVCaptureMultiCamSession") as? AnyClass,
+               session.isKind(of: multiCamClass)
+            {
+                if let hardwareCost = session.value(forKey: "hardwareCost") as? NSNumber {
+                    out.put(.hardwareCostRatio(hardwareCost.floatValue))
+                }
+                if let systemPressureCost = session
+                    .value(forKey: "systemPressureCost") as? NSNumber
+                {
+                    out.put(.systemPressureCostRatio(systemPressureCost.floatValue))
+                }
             }
         }
     }
@@ -535,23 +677,31 @@ final class CameraSessionState: StreamingInstrument, LoadTimeInstall {
 
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)
-        hooks.catchSelf(
-            of: AVCaptureSession.self,
-            atCallTaking: #selector(AVCaptureSession.addOutput(_:)),
-            on: AVCaptureSession.self
+        guard let session = objc_getClass("AVCaptureSession") as? AnyClass else {
+            return
+        }
+
+        hooks.trackSelf(
+            class: session,
+            atCallTaking: Selector(("addOutput:")),
+            on: session
         )
-        hooks.catchSelf(
-            of: AVCaptureSession.self,
-            at: #selector(AVCaptureSession.startRunning),
-            on: AVCaptureSession.self
+        hooks.trackSelf(
+            class: session,
+            at: Selector(("startRunning")),
+            on: session
         )
         #endif
     }
 
     func observe(_ context: Context) {
         #if os(iOS)
-        context.follow(AVCaptureSession.self) { [weak self] session, instance in
-            guard let self else {
+        guard let session = objc_getClass("AVCaptureSession") as? AnyClass else {
+            return
+        }
+
+        context.follow(class: session) { [weak self] session, instance in
+            guard let self, let sessionObject = session as? NSObject else {
                 return
             }
 
@@ -559,7 +709,7 @@ final class CameraSessionState: StreamingInstrument, LoadTimeInstall {
             self.observations.attach {
                 Self.observed.map { keyPath in
                     Observation.attach(
-                        to: session,
+                        to: sessionObject,
                         keyPath: keyPath,
                         initial: keyPath == Self.observed.first
                     ) { [weak self] _ in
@@ -578,14 +728,14 @@ final class CameraSessionState: StreamingInstrument, LoadTimeInstall {
     #if os(iOS)
     /// Session identity alongside state — an app with a preview and a capture session has two.
     private func report(
-        _ session: AVCaptureSession,
+        _ session: AnyObject,
         instance: UInt32,
         into context: Context
     ) {
         context.emit { out in
             out.put(.instanceId(instance))
-            out.put(.sessionRunning(session.isRunning))
-            out.put(.sessionInterrupted(session.isInterrupted))
+            out.put(.sessionRunning((session.value(forKey: "isRunning") as? Bool) ?? false))
+            out.put(.sessionInterrupted((session.value(forKey: "isInterrupted") as? Bool) ?? false))
         }
     }
     #endif
