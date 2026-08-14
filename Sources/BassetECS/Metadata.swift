@@ -77,11 +77,49 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
 
     /// One key a `Configurable` instrument's config JSON accepts — empty for every other one.
     public struct ConfigField: Codable, Sendable, Equatable {
-        public enum ValueType: String, Codable, Sendable {
-            case int
-            case double
+        /// The bound named here is the one instrument's own clamp reads — never a second copy.
+        public enum ValueType: Codable, Sendable, Equatable {
+            case int(range: ClosedRange<Int>? = nil)
+            case double(range: ClosedRange<Double>? = nil)
             case bool
-            case string
+            case string(maxLength: Int? = nil)
+
+            public var rendered: String {
+                switch self {
+                case .int(let range):
+                    range.map { "int \($0)" } ?? "int"
+                case .double(let range):
+                    range.map { "double \($0)" } ?? "double"
+                case .bool:
+                    "bool"
+                case .string(let maxLength):
+                    maxLength.map { "string, \($0) characters max" } ?? "string"
+                }
+            }
+
+            public var intRange: ClosedRange<Int>? {
+                guard case .int(let range) = self else {
+                    return nil
+                }
+
+                return range
+            }
+
+            public var doubleRange: ClosedRange<Double>? {
+                guard case .double(let range) = self else {
+                    return nil
+                }
+
+                return range
+            }
+
+            public var stringMaxLength: Int? {
+                guard case .string(let maxLength) = self else {
+                    return nil
+                }
+
+                return maxLength
+            }
         }
 
         public let key: String
@@ -353,7 +391,7 @@ public extension InstrumentID {
                 config: [
                     InstrumentMetadata.ConfigField(
                         key: "thresholdMs",
-                        type: .int,
+                        type: .int(range: 100...60000),
                         description: "How long the main thread must stay busy before this reports. Default 2000."
                     ),
                 ]
@@ -576,7 +614,7 @@ public extension InstrumentID {
                 config: [
                     InstrumentMetadata.ConfigField(
                         key: "windowSeconds",
-                        type: .int,
+                        type: .int(range: 1...30),
                         description: "How often thread CPU usage is sampled and reported. Default 1."
                     ),
                 ]
@@ -651,7 +689,7 @@ public extension InstrumentID {
                 config: [
                     InstrumentMetadata.ConfigField(
                         key: "subsystem",
-                        type: .string,
+                        type: .string(maxLength: 256),
                         description: "Only this subsystem's errors and faults. Default: every subsystem."
                     ),
                 ]
@@ -671,7 +709,7 @@ public extension InstrumentID {
                 config: [
                     InstrumentMetadata.ConfigField(
                         key: "subsystem",
-                        type: .string,
+                        type: .string(maxLength: 256),
                         description: "Only this subsystem's traffic. Default: every subsystem."
                     ),
                 ]
@@ -895,7 +933,7 @@ public extension InstrumentID {
                 config: [
                     InstrumentMetadata.ConfigField(
                         key: "intervalMs",
-                        type: .int,
+                        type: .int(range: 10...1000),
                         description: "How often the main thread's stack is sampled. Default 50."
                     ),
                 ]

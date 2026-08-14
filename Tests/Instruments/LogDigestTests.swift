@@ -1,4 +1,5 @@
 @testable import Basset
+import BassetECS
 import Foundation
 import OSLog
 import Testing
@@ -256,5 +257,24 @@ struct LogSubsystemFilterTests {
     @Test func logSubsystemsWithNoSubsystemReadsEverything() {
         let instrument = LogSubsystems(config: .init(subsystem: nil))
         #expect(instrument.reader.subsystems == [])
+    }
+
+    @Test func aBlankSubsystemReadsAsNoFilter() {
+        let instrument = LogFaults(config: .init(subsystem: ""))
+        #expect(instrument.reader.subsystems == [])
+    }
+
+    /// A caller cannot make one device hold an unbounded string just by naming a subsystem.
+    @Test func anOversizedSubsystemIsTruncatedRatherThanHeldInFull() throws {
+        let field = try #require(
+            InstrumentID.logFaults.metadata.config.first { $0.key == "subsystem" }
+        )
+        let maxLength = try #require(field.type.stringMaxLength)
+
+        let instrument = LogFaults(config: .init(subsystem: String(
+            repeating: "x",
+            count: maxLength * 2
+        )))
+        #expect(instrument.reader.subsystems == [String(repeating: "x", count: maxLength)])
     }
 }
