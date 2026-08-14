@@ -108,7 +108,7 @@ struct InstrumentShapeTests {
         }
     }
 
-    /// A schema an agent reads has to match what the type actually accepts, or it lies.
+    /// The schema a caller reads has to match what the type actually accepts, or it lies.
     @Test func aDeclaredConfigSchemaMatchesWhetherTheTypeIsConfigurable() {
         for registration in Instruments.all {
             let isConfigurable = registration.instrumentType is any Configurable.Type
@@ -120,10 +120,10 @@ struct InstrumentShapeTests {
         }
     }
 
-    /// Proves `defaultConfig` itself decodes cleanly — a bad default would refuse forever.
-    @Test func everyRegistrationBuildsWithoutSentConfigBeingRefused() {
+    /// Re-encodes and re-decodes `defaultConfig` through the same path a request's config takes.
+    @Test func everyRegistrationBuildsItsOwnDefaultConfigWithoutRefusingIt() {
         for registration in Instruments.all {
-            let (_, refused) = registration.build(nil)
+            let (_, refused) = registration.build(registration.defaultConfigJSON)
             #expect(!refused, "\(registration.name) refused its own default config")
         }
     }

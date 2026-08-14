@@ -170,3 +170,22 @@ struct HangWatchTests {
         #expect(state.busyStartedAt == nil)
     }
 }
+
+struct MainThreadHangConfigTests {
+    /// Unclamped, this threshold is 0 and the poll loop's sleep interval is 0 — a busy spin.
+    @Test func aZeroThresholdIsClampedRatherThanBusySpinning() {
+        let instrument = MainThreadHang(config: .init(thresholdMs: 0))
+        #expect(instrument.thresholdNanoseconds == 100000000)
+    }
+
+    /// Unclamped, `Int.max * 1_000_000` overflows `UInt64` and traps.
+    @Test func aHugeThresholdIsClampedRatherThanOverflowing() {
+        let instrument = MainThreadHang(config: .init(thresholdMs: .max))
+        #expect(instrument.thresholdNanoseconds == 60000000000)
+    }
+
+    @Test func anOrdinaryThresholdPassesThroughUnchanged() {
+        let instrument = MainThreadHang(config: .init(thresholdMs: 500))
+        #expect(instrument.thresholdNanoseconds == 500000000)
+    }
+}

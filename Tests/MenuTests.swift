@@ -2,7 +2,7 @@ import BassetECS
 import Testing
 
 struct MenuTests {
-    /// An agent reads this markdown to learn what a `-i name:key=value` token can set.
+    /// A caller reads this markdown to learn what a `-i name:key=value` token can set.
     @Test func aConfigurableInstrumentsMenuEntryListsItsSchema() {
         let entry = InstrumentID.mainThreadHang.menuEntry
         let rendered = entry.markdown()

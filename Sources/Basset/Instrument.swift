@@ -44,7 +44,8 @@ public protocol PlainInstrument: Instrument {
 }
 
 public protocol Configurable: Instrument {
-    associatedtype Config: Decodable & Sendable
+    /// `Encodable` too, so `defaultConfig` round-trips through the same decode a request uses.
+    associatedtype Config: Codable & Sendable
     static var defaultConfig: Config { get }
     init(config: Config)
 }
@@ -76,9 +77,13 @@ public struct Registration: @unchecked Sendable {
     /// Lets the host build ask for a description; the device build never reads this.
     let instrumentType: any Instrument.Type
 
+    /// `defaultConfig`, re-encoded — lets a host test prove it decodes, without knowing `Config`.
+    let defaultConfigJSON: Data?
+
     private init<I: Instrument>(
         _ type: I.Type,
         delivery: Delivery,
+        defaultConfigJSON: Data? = nil,
         build: @escaping @Sendable (Data?) -> (instrument: any Instrument, configRefused: Bool)
     ) {
         self.id = I.id
@@ -95,6 +100,7 @@ public struct Registration: @unchecked Sendable {
             self.installAtLoad = nil
         }
         self.instrumentType = I.self
+        self.defaultConfigJSON = defaultConfigJSON
     }
 
     public static func reading(_ type: (some Snapshotable & PlainInstrument).Type) -> Registration {
@@ -102,10 +108,15 @@ public struct Registration: @unchecked Sendable {
     }
 
     public static func reading<I: Snapshotable & Configurable>(_ type: I.Type) -> Registration {
-        Registration(type, delivery: .reading, build: { data in
-            let decoded = decodedConfig(data, defaultingTo: I.defaultConfig)
-            return (I(config: decoded.config), decoded.refused)
-        })
+        Registration(
+            type,
+            delivery: .reading,
+            defaultConfigJSON: try? JSONEncoder().encode(I.defaultConfig),
+            build: { data in
+                let decoded = decodedConfig(data, defaultingTo: I.defaultConfig)
+                return (I(config: decoded.config), decoded.refused)
+            }
+        )
     }
 
     public static func stream(_ type: (some Streamable & PlainInstrument).Type) -> Registration {
@@ -113,10 +124,15 @@ public struct Registration: @unchecked Sendable {
     }
 
     public static func stream<I: Streamable & Configurable>(_ type: I.Type) -> Registration {
-        Registration(type, delivery: .stream, build: { data in
-            let decoded = decodedConfig(data, defaultingTo: I.defaultConfig)
-            return (I(config: decoded.config), decoded.refused)
-        })
+        Registration(
+            type,
+            delivery: .stream,
+            defaultConfigJSON: try? JSONEncoder().encode(I.defaultConfig),
+            build: { data in
+                let decoded = decodedConfig(data, defaultingTo: I.defaultConfig)
+                return (I(config: decoded.config), decoded.refused)
+            }
+        )
     }
 
     public static func fault(_ type: (some Faultable & PlainInstrument).Type) -> Registration {
@@ -124,10 +140,15 @@ public struct Registration: @unchecked Sendable {
     }
 
     public static func fault<I: Faultable & Configurable>(_ type: I.Type) -> Registration {
-        Registration(type, delivery: .fault, build: { data in
-            let decoded = decodedConfig(data, defaultingTo: I.defaultConfig)
-            return (I(config: decoded.config), decoded.refused)
-        })
+        Registration(
+            type,
+            delivery: .fault,
+            defaultConfigJSON: try? JSONEncoder().encode(I.defaultConfig),
+            build: { data in
+                let decoded = decodedConfig(data, defaultingTo: I.defaultConfig)
+                return (I(config: decoded.config), decoded.refused)
+            }
+        )
     }
 }
 

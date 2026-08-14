@@ -129,6 +129,21 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         self.appStoreSafe = appStoreSafe
         self.config = config
     }
+
+    /// Custom only for `config`: older serialized metadata predates the field and lacks it.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        summary = try container.decode(String.self, forKey: .summary)
+        whenToUse = try container.decode(String.self, forKey: .whenToUse)
+        reveals = try container.decode([String].self, forKey: .reveals)
+        related = try container.decode([String].self, forKey: .related)
+        mechanism = try container.decode(Mechanism.self, forKey: .mechanism)
+        cadence = try container.decode(Cadence.self, forKey: .cadence)
+        observed = try container.decode(Observed.self, forKey: .observed)
+        overhead = try container.decode(Overhead.self, forKey: .overhead)
+        appStoreSafe = try container.decode(Bool.self, forKey: .appStoreSafe)
+        config = try container.decodeIfPresent([ConfigField].self, forKey: .config) ?? []
+    }
 }
 
 public extension InstrumentID {
