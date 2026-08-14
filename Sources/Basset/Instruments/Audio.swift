@@ -231,9 +231,9 @@ final class AudioRoute: StreamingInstrument {
                 out.put(.availableInputCount(UInt32(available.count)))
             }
             if let preferred = session.value(forKey: "preferredInput") as AnyObject?,
-               let preferredUID = preferred.value(forKey: "uid") as? String
+               let preferredUID = preferred.value(forKey: "UID") as? String
             {
-                let inputUID = input?.value(forKey: "uid") as? String
+                let inputUID = input?.value(forKey: "UID") as? String
                 out.put(.audioPreferredInputHonored(preferredUID == inputUID))
             }
             if let input, let inputPort {
