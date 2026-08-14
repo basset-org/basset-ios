@@ -38,31 +38,12 @@ public protocol Faultable: Instrument {
     func fault(_ kind: FaultKind, _ out: inout Readings)
 }
 
-public protocol SnapshotInstrument: Snapshotable {
+/// `init()` lives here, not on `Instrument`, so a `Configurable` instrument need not have one.
+public protocol PlainInstrument: Instrument {
     init()
 }
 
-public protocol StreamingInstrument: Streamable {
-    init()
-}
-
-public protocol FaultInstrument: Faultable {
-    init()
-}
-
-public protocol ConfigurableSnapshotInstrument: Snapshotable {
-    associatedtype Config: Decodable & Sendable
-    static var defaultConfig: Config { get }
-    init(config: Config)
-}
-
-public protocol ConfigurableStreamingInstrument: Streamable {
-    associatedtype Config: Decodable & Sendable
-    static var defaultConfig: Config { get }
-    init(config: Config)
-}
-
-public protocol ConfigurableFaultInstrument: Faultable {
+public protocol Configurable: Instrument {
     associatedtype Config: Decodable & Sendable
     static var defaultConfig: Config { get }
     init(config: Config)
@@ -116,33 +97,33 @@ public struct Registration: @unchecked Sendable {
         self.instrumentType = I.self
     }
 
-    public static func reading(_ type: (some SnapshotInstrument).Type) -> Registration {
+    public static func reading(_ type: (some Snapshotable & PlainInstrument).Type) -> Registration {
         Registration(type, delivery: .reading, build: { data in (type.init(), data != nil) })
     }
 
-    public static func reading<I: ConfigurableSnapshotInstrument>(_ type: I.Type) -> Registration {
+    public static func reading<I: Snapshotable & Configurable>(_ type: I.Type) -> Registration {
         Registration(type, delivery: .reading, build: { data in
             let decoded = decodedConfig(data, defaultingTo: I.defaultConfig)
             return (I(config: decoded.config), decoded.refused)
         })
     }
 
-    public static func stream(_ type: (some StreamingInstrument).Type) -> Registration {
+    public static func stream(_ type: (some Streamable & PlainInstrument).Type) -> Registration {
         Registration(type, delivery: .stream, build: { data in (type.init(), data != nil) })
     }
 
-    public static func stream<I: ConfigurableStreamingInstrument>(_ type: I.Type) -> Registration {
+    public static func stream<I: Streamable & Configurable>(_ type: I.Type) -> Registration {
         Registration(type, delivery: .stream, build: { data in
             let decoded = decodedConfig(data, defaultingTo: I.defaultConfig)
             return (I(config: decoded.config), decoded.refused)
         })
     }
 
-    public static func fault(_ type: (some FaultInstrument).Type) -> Registration {
+    public static func fault(_ type: (some Faultable & PlainInstrument).Type) -> Registration {
         Registration(type, delivery: .fault, build: { data in (type.init(), data != nil) })
     }
 
-    public static func fault<I: ConfigurableFaultInstrument>(_ type: I.Type) -> Registration {
+    public static func fault<I: Faultable & Configurable>(_ type: I.Type) -> Registration {
         Registration(type, delivery: .fault, build: { data in
             let decoded = decodedConfig(data, defaultingTo: I.defaultConfig)
             return (I(config: decoded.config), decoded.refused)

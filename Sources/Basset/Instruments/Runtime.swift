@@ -2,7 +2,7 @@ import BassetECS
 import Foundation
 
 /// Every thread's stack, as raw return addresses, taken only on a fault.
-final class ThreadSnapshot: FaultInstrument {
+final class ThreadSnapshot: Faultable, PlainInstrument {
     static let id: InstrumentID = .threadSnapshot
     static let entity = Entity.ID.thread
 
@@ -73,7 +73,7 @@ final class ThreadSnapshot: FaultInstrument {
 }
 
 /// Main thread work, sampled 20/sec — identical stacks collapse into one reading.
-final class StackSamples: StreamingInstrument {
+final class StackSamples: Streamable, PlainInstrument {
     /// A reference, not the mutex itself — noncopyable, so a closure can't capture it.
     private final class Samples: @unchecked Sendable {
         private let guarded: Mutex<StackWindow> = .init(.init())
@@ -265,7 +265,7 @@ struct StackWindow {
 }
 
 /// What's mapped into the process and what the app shipped; statics are invisible here.
-final class LinkedLibraries: SnapshotInstrument {
+final class LinkedLibraries: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .linkedLibraries
     static let entity = Entity.ID.binaryImage
 
@@ -334,7 +334,7 @@ final class LinkedLibraries: SnapshotInstrument {
 }
 
 /// Whether a watched method still runs its framework's own code, or was replaced.
-final class MethodOwners: SnapshotInstrument {
+final class MethodOwners: Snapshotable, PlainInstrument {
     /// An empty `image` means the address is a runtime-built trampoline, not a failure to look.
     struct Owner: Equatable {
         let className: String

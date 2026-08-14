@@ -1,7 +1,7 @@
 import BassetECS
 import Foundation
 
-final class ThreadCPUUsage: StreamingInstrument {
+final class ThreadCPUUsage: Streamable, PlainInstrument {
     private struct Consumed {
         let sample: ThreadSample
         let nanoseconds: UInt64
@@ -95,7 +95,7 @@ final class ThreadCPUUsage: StreamingInstrument {
     }
 }
 
-final class Wakeups: StreamingInstrument {
+final class Wakeups: Streamable, PlainInstrument {
     static let id: InstrumentID = .cpuWakeups
     static let entity = Entity.ID.process
 

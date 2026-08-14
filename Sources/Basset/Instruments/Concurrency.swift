@@ -84,7 +84,7 @@ enum Debugger {
 }
 
 /// Watched from its own thread — the surface unable to say how blocked it is, is the blocked one.
-final class MainThreadHang: StreamingInstrument {
+final class MainThreadHang: Streamable, PlainInstrument {
     static let id: InstrumentID = .mainThreadHang
     static let entity = Entity.ID.mainThread
 
@@ -170,7 +170,7 @@ final class MainThreadHang: StreamingInstrument {
 }
 
 /// Waits, not work: a block timestamped at submit and run, once per window, never backlogged.
-final class QueueLatency: StreamingInstrument, @unchecked Sendable {
+final class QueueLatency: Streamable, PlainInstrument, @unchecked Sendable {
     private struct State {
         var outstandingSince: MonotonicTime?
         var samples: [UInt64] = []
@@ -256,7 +256,7 @@ final class QueueLatency: StreamingInstrument, @unchecked Sendable {
 }
 
 /// Cheap half of the pair: what a thread is, from the kernel — not what it runs, no suspension.
-final class ThreadInventoryReading: SnapshotInstrument {
+final class ThreadInventoryReading: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .threadInventory
     static let entity = Entity.ID.thread
 

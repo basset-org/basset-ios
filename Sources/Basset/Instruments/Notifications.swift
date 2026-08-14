@@ -3,7 +3,7 @@ import Foundation
 import ObjectiveC
 
 /// Reached by name so UserNotifications is never linked, matching the rule `permissions` runs on.
-final class NotificationSettings: StreamingInstrument {
+final class NotificationSettings: Streamable, PlainInstrument {
     static let id: InstrumentID = .notificationSettings
     static let entity = Entity.ID.notificationSetting
 

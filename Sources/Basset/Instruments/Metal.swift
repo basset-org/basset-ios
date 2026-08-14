@@ -2,7 +2,7 @@ import BassetECS
 import Foundation
 
 /// Interval between presented drawables; never compared to another clock of unknown base.
-final class DrawablePresentation: StreamingInstrument {
+final class DrawablePresentation: Streamable, PlainInstrument {
     private enum Slot {
         static let requested: TallySlot = .init(0)
         static let unavailable: TallySlot = .init(1)

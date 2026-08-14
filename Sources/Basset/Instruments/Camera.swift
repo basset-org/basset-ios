@@ -7,7 +7,7 @@ import CoreVideo
 import ObjectiveC
 #endif
 
-final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
+final class CameraDeviceFormat: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraDeviceFormat
     static let entity = Entity.ID.captureDevice
 
@@ -237,7 +237,7 @@ final class CameraDeviceFormat: StreamingInstrument, LoadTimeInstall {
     #endif
 }
 
-final class CameraDeviceInventory: StreamingInstrument {
+final class CameraDeviceInventory: Streamable, PlainInstrument {
     static let id: InstrumentID = .cameraDeviceInventory
     static let entity = Entity.ID.captureDevice
 
@@ -353,7 +353,7 @@ final class CameraDeviceInventory: StreamingInstrument {
     func stopObserving() {}
 }
 
-final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
+final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
     private struct State {
         var instrumented: Set<ObjectIdentifier> = []
         /// Delegate classes this defined a callback on; every output on one needs rebinding.
@@ -569,7 +569,7 @@ final class CameraFrameDelivery: StreamingInstrument, LoadTimeInstall {
     #endif
 }
 
-final class CameraSessionConfiguration: StreamingInstrument, LoadTimeInstall {
+final class CameraSessionConfiguration: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraSessionConfiguration
     static let entity = Entity.ID.captureSession
 
@@ -665,7 +665,7 @@ final class CameraSessionConfiguration: StreamingInstrument, LoadTimeInstall {
     #endif
 }
 
-final class CameraSessionState: StreamingInstrument, LoadTimeInstall {
+final class CameraSessionState: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraSessionState
     static let entity = Entity.ID.captureSession
 

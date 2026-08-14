@@ -144,7 +144,7 @@ struct AudioCategoryOptionNames {
     }
 }
 
-final class AudioRoute: StreamingInstrument {
+final class AudioRoute: Streamable, PlainInstrument {
     static let id: InstrumentID = .audioRoute
     static let entity = Entity.ID.audioRoute
 

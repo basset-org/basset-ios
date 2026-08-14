@@ -80,9 +80,9 @@ struct InstrumentShapeTests {
     @Test func everyInstrumentDeclaresExactlyOneDeliveryClass() {
         for registration in Instruments.all {
             let declared = [
-                registration.instrumentType is any SnapshotInstrument.Type,
-                registration.instrumentType is any StreamingInstrument.Type,
-                registration.instrumentType is any FaultInstrument.Type,
+                registration.instrumentType is any Snapshotable.Type,
+                registration.instrumentType is any Streamable.Type,
+                registration.instrumentType is any Faultable.Type,
             ]
             .filter(\.self)
             .count
@@ -99,11 +99,11 @@ struct InstrumentShapeTests {
         for registration in Instruments.all {
             switch registration.delivery {
             case .reading:
-                #expect(registration.instrumentType is any SnapshotInstrument.Type)
+                #expect(registration.instrumentType is any Snapshotable.Type)
             case .stream:
-                #expect(registration.instrumentType is any StreamingInstrument.Type)
+                #expect(registration.instrumentType is any Streamable.Type)
             case .fault:
-                #expect(registration.instrumentType is any FaultInstrument.Type)
+                #expect(registration.instrumentType is any Faultable.Type)
             }
         }
     }

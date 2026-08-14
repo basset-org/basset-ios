@@ -3,7 +3,7 @@ import BassetECS
 import Foundation
 
 /// Activates an instrument for real so a test asserts the wiring, not what a `write` test checks.
-final class InstrumentHarness<Instrument: StreamingInstrument>: @unchecked Sendable {
+final class InstrumentHarness<Instrument: Streamable & PlainInstrument>: @unchecked Sendable {
     let instrument: Instrument
     /// Reachable so a test can seed what the load-time half would have caught.
     let registries: Registries = .init()

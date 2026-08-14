@@ -3,7 +3,7 @@ import Foundation
 import ObjectiveC
 
 /// Wraps CallKit callbacks rather than defining them: the CXAction argument still needs fulfilling.
-final class ProviderActions: StreamingInstrument, LoadTimeInstall {
+final class ProviderActions: Streamable, PlainInstrument, LoadTimeInstall {
     private struct State {
         var counts: [String: UInt64] = [:]
         var followed: [Int] = []

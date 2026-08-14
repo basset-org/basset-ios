@@ -3,7 +3,7 @@ import Foundation
 import ObjectiveC
 
 /// Defines `webViewWebContentProcessDidTerminate:` on the delegate when the app never wrote one.
-final class ContentProcessTermination: StreamingInstrument, LoadTimeInstall {
+final class ContentProcessTermination: Streamable, PlainInstrument, LoadTimeInstall {
     private struct State {
         var terminations: UInt64 = 0
         var followed: [Int] = []
