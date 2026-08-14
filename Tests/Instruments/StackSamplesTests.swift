@@ -311,4 +311,17 @@ struct StackSamplesConfigTests {
         let instrument = StackSamples(config: .init(intervalMs: 100))
         #expect(instrument.interval == 0.1)
     }
+
+    /// The clamp and the schema a caller reads before it must never quietly disagree.
+    @Test func theClampMatchesItsOwnDeclaredMetadataRange() throws {
+        let field = try #require(
+            InstrumentID.stackSamples.metadata.config.first { $0.key == "intervalMs" }
+        )
+        let range = try #require(field.type.intRange)
+
+        let lowest = StackSamples(config: .init(intervalMs: .min))
+        let highest = StackSamples(config: .init(intervalMs: .max))
+        #expect(lowest.interval == Double(range.lowerBound) / 1000)
+        #expect(highest.interval == Double(range.upperBound) / 1000)
+    }
 }

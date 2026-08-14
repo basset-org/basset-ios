@@ -8,7 +8,7 @@ struct MenuTests {
         let rendered = entry.markdown()
 
         #expect(rendered.contains("**Config**"))
-        #expect(rendered.contains("`thresholdMs` (int)"))
+        #expect(rendered.contains("`thresholdMs` (int 100...60000)"))
     }
 
     /// Nothing to set — the plain, common case reads as prose alone, no empty table.

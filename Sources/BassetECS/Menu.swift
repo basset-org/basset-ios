@@ -96,7 +96,7 @@ extension MenuEntry {
             out.append("")
             out.append("**Config** (`\(instrument):key=value,...`)")
             out.append(contentsOf: metadata.config.map {
-                "- `\($0.key)` (\($0.type.rawValue)): \($0.description)"
+                "- `\($0.key)` (\($0.type.rendered)): \($0.description)"
             })
         }
 

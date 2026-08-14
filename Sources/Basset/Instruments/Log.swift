@@ -134,7 +134,19 @@ struct LogTraffic {
 
 /// Shared by every `log.*` instrument that can be scoped to one subsystem instead of all of them.
 struct LogSubsystemFilter: Codable, Sendable {
+    /// Matches the maxLength declared on this field's `InstrumentMetadata.ConfigField`.
+    private static let maximumSubsystemLength = 256
+
     let subsystem: String?
+
+    /// A blank or oversized subsystem reads the same as none — never a crash, never unbounded.
+    var subsystems: [String] {
+        guard let subsystem, !subsystem.isEmpty else {
+            return []
+        }
+
+        return [String(subsystem.prefix(Self.maximumSubsystemLength))]
+    }
 }
 
 /// A message can carry what an app logged as public; token-shaped runs are scrubbed out.
@@ -149,10 +161,7 @@ final class LogFaults: Streamable, Configurable {
     let reader: LogStoreReader
 
     init(config: LogSubsystemFilter) {
-        reader = LogStoreReader(
-            subsystems: config.subsystem.map { [$0] } ?? [],
-            admitting: { $0.level.isDiagnostic }
-        )
+        reader = LogStoreReader(subsystems: config.subsystems, admitting: { $0.level.isDiagnostic })
     }
 
     static func write(
@@ -234,7 +243,7 @@ final class LogSubsystems: Streamable, Configurable {
     let reader: LogStoreReader
 
     init(config: LogSubsystemFilter) {
-        reader = LogStoreReader(subsystems: config.subsystem.map { [$0] } ?? [])
+        reader = LogStoreReader(subsystems: config.subsystems)
     }
 
     static func write(

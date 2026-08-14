@@ -1,4 +1,5 @@
 @testable import Basset
+import BassetECS
 import Foundation
 import Testing
 
@@ -187,5 +188,18 @@ struct MainThreadHangConfigTests {
     @Test func anOrdinaryThresholdPassesThroughUnchanged() {
         let instrument = MainThreadHang(config: .init(thresholdMs: 500))
         #expect(instrument.thresholdNanoseconds == 500000000)
+    }
+
+    /// The clamp and the schema a caller reads before it must never quietly disagree.
+    @Test func theClampMatchesItsOwnDeclaredMetadataRange() throws {
+        let field = try #require(
+            InstrumentID.mainThreadHang.metadata.config.first { $0.key == "thresholdMs" }
+        )
+        let range = try #require(field.type.intRange)
+
+        let lowest = MainThreadHang(config: .init(thresholdMs: .min))
+        let highest = MainThreadHang(config: .init(thresholdMs: .max))
+        #expect(lowest.thresholdNanoseconds == UInt64(range.lowerBound) * 1000000)
+        #expect(highest.thresholdNanoseconds == UInt64(range.upperBound) * 1000000)
     }
 }
