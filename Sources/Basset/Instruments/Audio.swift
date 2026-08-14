@@ -2,7 +2,7 @@ import BassetECS
 import Foundation
 
 #if os(iOS)
-import AVFoundation
+import ObjectiveC
 #endif
 
 /// Output port collapsed to the cases routing treats differently; raw port type sits beside it.
@@ -152,23 +152,219 @@ final class AudioRoute: StreamingInstrument {
 
     init() {}
 
+    #if os(iOS)
+    /// A zero-argument class method (`sharedInstance`) isn't `NSObject.perform`'s shape —
+    /// same low-level ObjC-runtime call `PermissionProbe` uses to reach a class method
+    /// without linking the framework that declares it.
+    private static func sharedInstance(_ sessionClass: AnyClass) -> AnyObject? {
+        let selector = Selector(("sharedInstance"))
+        guard let method = class_getClassMethod(sessionClass, selector) else {
+            return nil
+        }
+
+        typealias Call = @convention(c) (AnyClass, Selector) -> Unmanaged<AnyObject>?
+        let implementation = method_getImplementation(method)
+        return unsafeBitCast(implementation, to: Call.self)(sessionClass, selector)?
+            .takeUnretainedValue()
+    }
+
+    /// Never sets category, mode, override or active state — it cannot be the reason audio moved.
+    private func report(
+        _ session: AnyObject,
+        reason: String,
+        previousOutput: String?,
+        into context: Context
+    ) {
+        let route = session.value(forKey: "currentRoute") as AnyObject
+        let outputs = route.value(forKey: "outputs") as? [AnyObject] ?? []
+        let inputs = route.value(forKey: "inputs") as? [AnyObject] ?? []
+        let output = outputs.first
+        let input = inputs.first
+        let optionsRaw = (session.value(forKey: "categoryOptions") as? NSNumber)?.uintValue ?? 0
+        let category = session.value(forKey: "category") as? String ?? ""
+        let mode = session.value(forKey: "mode") as? String ?? ""
+        let outputPort = output?.value(forKey: "portType") as? String
+        let inputPort = input?.value(forKey: "portType") as? String
+
+        let inputFacts = AudioInputFacts(
+            input: Self.inputKind(of: inputPort),
+            categoryTakesInput: Self.admitsInput(category)
+        )
+        let facts = AudioRouteFacts(
+            output: Self.kind(of: outputPort),
+            recordsAndPlays: category == "AVAudioSessionCategoryPlayAndRecord",
+            modeImpliesSpeaker: mode == "AVAudioSessionModeVideoChat",
+            defaultToSpeaker: optionsRaw & 0x8 == 0x8
+        )
+
+        context.emit { out in
+            out.put(.changeReason(reason))
+            out.put(.audioRouteVerdict(AudioRouting.verdict(facts).rawValue))
+            out.put(.audioInputVerdict(AudioRouting.inputVerdict(inputFacts).rawValue))
+            out.put(.audioCategory(category))
+            out.put(.audioMode(mode))
+            out.put(.audioCategoryOptions(Self.optionNames.rendered(optionsRaw)))
+            if let volume = session.value(forKey: "outputVolume") as? Float {
+                out.put(.outputVolume(volume))
+            }
+            if let otherAudioPlaying = session.value(forKey: "isOtherAudioPlaying") as? Bool {
+                out.put(.otherAudioPlaying(otherAudioPlaying))
+            }
+            if let secondarySilenced = session
+                .value(forKey: "secondaryAudioShouldBeSilencedHint") as? Bool
+            {
+                out.put(.secondaryAudioSilenced(secondarySilenced))
+            }
+
+            if let outputPort {
+                out.put(.audioOutputPort(outputPort))
+                if let name = Self.reportableName(of: output, portType: outputPort) {
+                    out.put(.audioOutputName(name))
+                }
+            }
+            out.put(.audioOutputCount(UInt32(outputs.count)))
+            if let inputAvailable = session.value(forKey: "isInputAvailable") as? Bool {
+                out.put(.audioInputAvailable(inputAvailable))
+            }
+
+            if let available = session.value(forKey: "availableInputs") as? [AnyObject] {
+                out.put(.availableInputCount(UInt32(available.count)))
+            }
+            if let preferred = session.value(forKey: "preferredInput") as AnyObject?,
+               let preferredUID = preferred.value(forKey: "uid") as? String
+            {
+                let inputUID = input?.value(forKey: "uid") as? String
+                out.put(.audioPreferredInputHonored(preferredUID == inputUID))
+            }
+            if let input, let inputPort {
+                out.put(.audioInputPort(inputPort))
+                if Self.namesAreTheSystemsOwn(inputPort) {
+                    if let name = input.value(forKey: "portName") as? String {
+                        out.put(.audioInputName(name))
+                    }
+                    if let source = input.value(forKey: "selectedDataSource") as AnyObject?,
+                       let sourceName = source.value(forKey: "dataSourceName") as? String
+                    {
+                        out.put(.audioInputDataSource(sourceName))
+                        if let pattern = source.value(forKey: "selectedPolarPattern") as? String {
+                            out.put(.audioInputPolarPattern(pattern))
+                        }
+                        if let orientation = source.value(forKey: "orientation") as? String {
+                            out.put(.audioInputOrientation(orientation))
+                        }
+                    }
+                }
+            }
+            if let previousOutput {
+                out.put(.audioPreviousOutputPort(previousOutput))
+            }
+        }
+    }
+
+    /// Only built-in/wired port names are reported — an accessory's name is often a person's own.
+    private static func reportableName(of port: AnyObject?, portType: String) -> String? {
+        guard namesAreTheSystemsOwn(portType) else {
+            return nil
+        }
+
+        return port?.value(forKey: "portName") as? String
+    }
+
+    private static func namesAreTheSystemsOwn(_ portType: String) -> Bool {
+        [
+            "MicrophoneBuiltIn",
+            "Receiver",
+            "Speaker",
+            "Headphones",
+            "MicrophoneWired",
+            "LineIn",
+            "LineOut",
+        ].contains(portType)
+    }
+
+    private static func kind(of portType: String?) -> AudioOutputKind {
+        switch portType {
+        case "Receiver": .receiver
+        case "Speaker": .speaker
+        case "BluetoothHFP": .handsFree
+        case nil: .none
+        default: .accessory
+        }
+    }
+
+    /// The three categories that admit input; every other leaves the route without a microphone.
+    static func admitsInput(_ category: String) -> Bool {
+        category == "AVAudioSessionCategoryRecord"
+            || category == "AVAudioSessionCategoryPlayAndRecord"
+            || category == "AVAudioSessionCategoryMultiRoute"
+    }
+
+    private static func inputKind(of portType: String?) -> AudioInputKind {
+        switch portType {
+        case "MicrophoneBuiltIn": .builtIn
+        case "MicrophoneWired": .wiredHeadset
+        case "BluetoothHFP": .handsFree
+        case nil: .none
+        default: .accessory
+        }
+    }
+
+    private static func named(_ reason: UInt?) -> String {
+        switch reason {
+        case 1: "newDeviceAvailable"
+        case 2: "oldDeviceUnavailable"
+        case 3: "categoryChange"
+        case 4: "override"
+        case 6: "wakeFromSleep"
+        case 7: "noSuitableRouteForCategory"
+        case 8: "routeConfigurationChange"
+        default: "unknown"
+        }
+    }
+
+    static let optionNames: AudioCategoryOptionNames = .init(known: [
+        (0x1, "mixWithOthers"),
+        (0x2, "duckOthers"),
+        (0x4, "allowBluetoothHFP"),
+        (0x8, "defaultToSpeaker"),
+        (0x11, "interruptSpokenAudioAndMixWithOthers"),
+        (0x20, "allowBluetoothA2DP"),
+        (0x40, "allowAirPlay"),
+        (0x80, "overrideMutedMicrophoneInterruption"),
+    ])
+    #endif
+
     func observe(_ context: Context) {
         #if os(iOS)
-        report(reason: "initial", previousOutput: nil, into: context)
+        guard let sessionClass = objc_getClass("AVAudioSession") as? AnyClass,
+              let session = Self.sharedInstance(sessionClass)
+        else {
+            return
+        }
+
+        report(session, reason: "initial", previousOutput: nil, into: context)
 
         // No queue: hopping to main would read the route after it had already changed again.
         observer = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.routeChangeNotification,
+            forName: Notification.Name("AVAudioSessionRouteChangeNotification"),
             object: nil,
             queue: nil
         ) { [weak self] notification in
+            guard let self, let session = Self.sharedInstance(sessionClass) else {
+                return
+            }
+
             let info = notification.userInfo
-            let raw = info?[AVAudioSessionRouteChangeReasonKey] as? UInt
-            let previous = info?[AVAudioSessionRouteChangePreviousRouteKey]
-                as? AVAudioSessionRouteDescription
-            self?.report(
-                reason: Self.named(raw.flatMap(AVAudioSession.RouteChangeReason.init)),
-                previousOutput: previous?.outputs.first?.portType.rawValue,
+            let raw = info?["AVAudioSessionRouteChangeReasonKey"] as? UInt
+            let previousRoute = info?["AVAudioSessionRouteChangePreviousRouteKey"] as AnyObject?
+            let previousOutput = (previousRoute?.value(forKey: "outputs") as? [AnyObject])?
+                .first?
+                .value(forKey: "portType") as? String
+
+            self.report(
+                session,
+                reason: Self.named(raw),
+                previousOutput: previousOutput,
                 into: context
             )
         }
@@ -181,172 +377,4 @@ final class AudioRoute: StreamingInstrument {
         }
         observer = nil
     }
-
-    #if os(iOS)
-    /// Never sets category, mode, override or active state — it cannot be the reason audio moved.
-    private func report(
-        reason: String,
-        previousOutput: String?,
-        into context: Context
-    ) {
-        let session = AVAudioSession.sharedInstance()
-        let route = session.currentRoute
-        let output = route.outputs.first
-        let input = route.inputs.first
-        let options = session.categoryOptions
-        let category = session.category
-
-        let inputFacts = AudioInputFacts(
-            input: Self.inputKind(of: input?.portType),
-            categoryTakesInput: Self.admitsInput(category)
-        )
-        let facts = AudioRouteFacts(
-            output: Self.kind(of: output?.portType),
-            recordsAndPlays: session.category == .playAndRecord,
-            modeImpliesSpeaker: session.mode == .videoChat,
-            defaultToSpeaker: options.contains(.defaultToSpeaker)
-        )
-
-        context.emit { out in
-            out.put(.changeReason(reason))
-            out.put(.audioRouteVerdict(AudioRouting.verdict(facts).rawValue))
-            out.put(.audioInputVerdict(AudioRouting.inputVerdict(inputFacts).rawValue))
-            out.put(.audioCategory(category.rawValue))
-            out.put(.audioMode(session.mode.rawValue))
-            out.put(.audioCategoryOptions(Self.optionNames.rendered(options.rawValue)))
-            out.put(.outputVolume(session.outputVolume))
-            out.put(.otherAudioPlaying(session.isOtherAudioPlaying))
-            out.put(.secondaryAudioSilenced(session.secondaryAudioShouldBeSilencedHint))
-
-            if let output {
-                out.put(.audioOutputPort(output.portType.rawValue))
-                if let name = Self.reportableName(of: output) {
-                    out.put(.audioOutputName(name))
-                }
-            }
-            out.put(.audioOutputCount(UInt32(route.outputs.count)))
-            out.put(.audioInputAvailable(session.isInputAvailable))
-
-            if let available = session.availableInputs {
-                out.put(.availableInputCount(UInt32(available.count)))
-            }
-            if let preferred = session.preferredInput {
-                out.put(.audioPreferredInputHonored(preferred.uid == input?.uid))
-            }
-            if let input {
-                out.put(.audioInputPort(input.portType.rawValue))
-                if Self.namesAreTheSystemsOwn(input) {
-                    out.put(.audioInputName(input.portName))
-                    if let source = input.selectedDataSource {
-                        out.put(.audioInputDataSource(source.dataSourceName))
-                        if let pattern = source.selectedPolarPattern {
-                            out.put(.audioInputPolarPattern(pattern.rawValue))
-                        }
-                        if let orientation = source.orientation {
-                            out.put(.audioInputOrientation(orientation.rawValue))
-                        }
-                    }
-                }
-            }
-            if let previousOutput {
-                out.put(.audioPreviousOutputPort(previousOutput))
-            }
-        }
-    }
-
-    /// Only built-in/wired port names are reported — an accessory's name is often a person's own.
-    private static func reportableName(of port: AVAudioSessionPortDescription)
-        -> String?
-    {
-        namesAreTheSystemsOwn(port) ? port.portName : nil
-    }
-
-    private static func namesAreTheSystemsOwn(_ port: AVAudioSessionPortDescription) -> Bool {
-        switch port.portType {
-        case .builtInMic,
-             .builtInReceiver,
-             .builtInSpeaker,
-             .headphones,
-             .headsetMic,
-             .lineIn,
-             .lineOut:
-            true
-        default:
-            false
-        }
-    }
-
-    private static func kind(of port: AVAudioSession.Port?) -> AudioOutputKind {
-        guard let port else {
-            return .none
-        }
-
-        switch port {
-        case .builtInReceiver: return .receiver
-        case .builtInSpeaker: return .speaker
-        case .bluetoothHFP: return .handsFree
-        default: return .accessory
-        }
-    }
-
-    /// The three categories that admit input; every other leaves the route without a microphone.
-    static func admitsInput(_ category: AVAudioSession.Category) -> Bool {
-        category == .record || category == .playAndRecord || category == .multiRoute
-    }
-
-    private static func inputKind(of port: AVAudioSession.Port?) -> AudioInputKind {
-        guard let port else {
-            return .none
-        }
-
-        switch port {
-        case .builtInMic: return .builtIn
-        case .headsetMic: return .wiredHeadset
-        case .bluetoothHFP: return .handsFree
-        default: return .accessory
-        }
-    }
-
-    private static func named(_ reason: AVAudioSession.RouteChangeReason?) -> String {
-        switch reason {
-        case .newDeviceAvailable: "newDeviceAvailable"
-        case .oldDeviceUnavailable: "oldDeviceUnavailable"
-        case .categoryChange: "categoryChange"
-        case .override: "override"
-        case .wakeFromSleep: "wakeFromSleep"
-        case .noSuitableRouteForCategory: "noSuitableRouteForCategory"
-        case .routeConfigurationChange: "routeConfigurationChange"
-        case .none,
-             .unknown: "unknown"
-        @unknown default: "unknown"
-        }
-    }
-
-    static let optionNames: AudioCategoryOptionNames = .init(known: [
-        (AVAudioSession.CategoryOptions.mixWithOthers.rawValue, "mixWithOthers"),
-        (AVAudioSession.CategoryOptions.duckOthers.rawValue, "duckOthers"),
-        (handsFreeOption().rawValue, "allowBluetoothHFP"),
-        (AVAudioSession.CategoryOptions.defaultToSpeaker.rawValue, "defaultToSpeaker"),
-        (
-            AVAudioSession.CategoryOptions.interruptSpokenAudioAndMixWithOthers
-                .rawValue,
-            "interruptSpokenAudioAndMixWithOthers"
-        ),
-        (
-            AVAudioSession.CategoryOptions.allowBluetoothA2DP.rawValue,
-            "allowBluetoothA2DP"
-        ),
-        (AVAudioSession.CategoryOptions.allowAirPlay.rawValue, "allowAirPlay"),
-        (
-            AVAudioSession.CategoryOptions.overrideMutedMicrophoneInterruption.rawValue,
-            "overrideMutedMicrophoneInterruption"
-        ),
-    ])
-
-    /// Old spelling `allowBluetooth` compiles pre-rename too; reported under the current name.
-    @available(iOS, deprecated: 8.0)
-    private static func handsFreeOption() -> AVAudioSession.CategoryOptions {
-        .allowBluetooth
-    }
-    #endif
 }

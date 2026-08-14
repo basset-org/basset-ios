@@ -142,6 +142,22 @@ import Testing
 @objc private class ThreeArgFactorySubject: Maker {}
 @objc private class WrongKindSubject: Maker {}
 
+/// A class the `class:`-keyed hooks below reach only by its runtime `AnyClass`, never
+/// `Caught.self`.
+/// Swizzling is process-wide and permanent (see the note atop this file), so — same rule as
+/// every other subject here — each test below gets its own dedicated pair, never a shared one.
+@objc private class RuntimeCaughtSubjectA: NSObject {}
+@objc private class RuntimeBirthSubjectA: Subject {}
+@objc private class RuntimeCaughtSubjectB: NSObject {}
+@objc private class RuntimeUncaughtSubjectB: NSObject {}
+@objc private class RuntimeBirthSubjectB: Subject {}
+@objc private class RuntimeCaughtSubjectC: NSObject {}
+@objc private class RuntimeBirthSubjectC: Subject {}
+@objc private class RuntimeCaughtSubjectD: NSObject {}
+@objc private class RuntimeSelfBirthSubjectA: Subject {}
+@objc private class RuntimeSelfBirthSubjectB: Subject {}
+@objc private class RuntimeChangeSubject: TwoObjectSubject {}
+
 /// Emitted only on change — KVO fires on every set even when the state repeats.
 struct ChangeGatedEmissionTests {
     @Test func anUnchangedStateIsNotSentTwice() {
@@ -833,6 +849,136 @@ struct HookTableTests {
         subject.work()
 
         #expect(registries.registry(SelfBirthSubject.self).all.count == 1)
+    }
+}
+
+/// The `class:`-keyed twins Camera/Audio reach a framework class with instead of `of:` —
+/// same shapes, but the class only ever arrives as an `AnyClass`, the way `objc_getClass`
+/// hands one back, never as a compiled `Caught.self`.
+struct RuntimeClassHookTests {
+    @Test func aChokepointRegistersWhatPassesThroughIt() {
+        let registries = Registries()
+        let hooks = HookTable(swizzle: Swizzle(), registries: registries)
+
+        hooks.catchBirths(
+            class: RuntimeCaughtSubjectA.self,
+            at: #selector(Subject.accept(_:)),
+            on: RuntimeBirthSubjectA.self
+        )
+
+        let born = RuntimeCaughtSubjectA()
+        RuntimeBirthSubjectA().accept(born)
+
+        #expect(registries.registry(runtimeClass: RuntimeCaughtSubjectA.self).all.count == 1)
+    }
+
+    /// The class check is real, not a pass-through — an argument of the wrong kind is dropped.
+    @Test func anArgumentOfTheWrongKindIsNotCaught() {
+        let registries = Registries()
+        let hooks = HookTable(swizzle: Swizzle(), registries: registries)
+
+        hooks.catchBirths(
+            class: RuntimeCaughtSubjectB.self,
+            at: #selector(Subject.accept(_:)),
+            on: RuntimeBirthSubjectB.self
+        )
+
+        let wrongKind = RuntimeUncaughtSubjectB()
+        RuntimeBirthSubjectB().accept(wrongKind)
+
+        #expect(registries.registry(runtimeClass: RuntimeCaughtSubjectB.self).all.isEmpty)
+    }
+
+    @Test func aChokepointCanRegisterTheReceiverItself() {
+        let registries = Registries()
+        let hooks = HookTable(swizzle: Swizzle(), registries: registries)
+
+        hooks.catchSelf(
+            class: RuntimeSelfBirthSubjectA.self,
+            at: #selector(Subject.work),
+            on: RuntimeSelfBirthSubjectA.self
+        )
+
+        let subject = RuntimeSelfBirthSubjectA()
+        subject.work()
+
+        #expect(registries.registry(runtimeClass: RuntimeSelfBirthSubjectA.self).all.count == 1)
+    }
+
+    @Test func aReceiverIsCaughtAtACallTakingAnArgument() {
+        let registries = Registries()
+        let hooks = HookTable(swizzle: Swizzle(), registries: registries)
+
+        hooks.catchSelf(
+            class: RuntimeSelfBirthSubjectB.self,
+            atCallTaking: #selector(Subject.accept(_:)),
+            on: RuntimeSelfBirthSubjectB.self
+        )
+
+        let subject = RuntimeSelfBirthSubjectB()
+        subject.accept(Caught())
+
+        #expect(registries.registry(runtimeClass: RuntimeSelfBirthSubjectB.self).all.count == 1)
+    }
+
+    @Test func aChangeIsAnnouncedRatherThanAddedOnce() {
+        let registries = Registries()
+        let hooks = HookTable(swizzle: Swizzle(), registries: registries)
+
+        hooks.catchChanges(
+            class: RuntimeChangeSubject.self,
+            atCallTakingTwo: #selector(TwoObjectSubject.set(_:queue:)),
+            on: RuntimeChangeSubject.self
+        )
+
+        var seen = 0
+        registries.registry(runtimeClass: RuntimeChangeSubject.self)
+            .attachAndFollow { _, _ in seen += 1 }
+
+        let subject = RuntimeChangeSubject()
+        subject.set(Caught(), queue: Caught())
+        subject.set(Caught(), queue: Caught())
+
+        #expect(seen == 2, "announce re-notifies on every call, unlike catchSelf/catchBirths")
+    }
+
+    @Test func followReachesInstancesAlreadyCaughtAndOnesCaughtLater() {
+        let registries = Registries()
+        let hooks = HookTable(swizzle: Swizzle(), registries: registries)
+        let status = AtomicStatus()
+        status.activate()
+        let context = Context(
+            instrumentName: "test",
+            defaultEntity: .appLifecycle,
+            status: status,
+            swizzle: hooks.swizzle,
+            registries: registries,
+            timerQueue: DispatchQueue(label: "test.runtimeClass.follow"),
+            sink: { _ in }
+        )
+
+        hooks.catchBirths(
+            class: RuntimeCaughtSubjectC.self,
+            at: #selector(Subject.accept(_:)),
+            on: RuntimeBirthSubjectC.self
+        )
+        let before = RuntimeCaughtSubjectC()
+        RuntimeBirthSubjectC().accept(before)
+
+        var attached = [AnyObject]()
+        context.follow(class: RuntimeCaughtSubjectC.self) { object, _ in attached.append(object) }
+        #expect(attached.count == 1, "what was already caught")
+
+        RuntimeBirthSubjectC().accept(RuntimeCaughtSubjectC())
+        #expect(attached.count == 2, "and what arrives next")
+    }
+
+    @Test func aRuntimeRegistryIsKeyedByTheClassItTracks() {
+        let registries = Registries()
+        let first = registries.registry(runtimeClass: RuntimeCaughtSubjectD.self)
+        let second = registries.registry(runtimeClass: RuntimeCaughtSubjectD.self)
+
+        #expect(first === second)
     }
 }
 
