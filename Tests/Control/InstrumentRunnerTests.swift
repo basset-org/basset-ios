@@ -1408,7 +1408,7 @@ struct ConfigurableInstrumentTests {
     }
 
     /// `live` is a dictionary; only sorting by request id makes this a rule, not luck.
-    @Test func theNewerRequestsConfigWinsWhenTwoNameTheSameInstrument() {
+    @Test func theHighestRequestIdsConfigWinsWhenTwoNameTheSameInstrument() {
         let (subject, _) = runtime([.stream(FakeConfigurable.self)])
 
         subject.converge(

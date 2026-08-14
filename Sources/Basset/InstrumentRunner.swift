@@ -310,7 +310,7 @@ final class InstrumentRunner: @unchecked Sendable {
     private func convergeInstruments() {
         var wanted = [InstrumentID: Registration]()
         var configData = [InstrumentID: Data]()
-        // Ascending, so the newest request's config wins — `live` promises no order of its own.
+        // Ascending by requestId, so the highest wins — `live` promises no order of its own.
         for request in live.values.sorted(by: { $0.requestId < $1.requestId }) {
             for name in request.instruments {
                 guard let registration = byName[name],
