@@ -103,6 +103,19 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      # No Swift package resolves its own semver at runtime, so SDKVersion.current is what
+      # device.info reports it as — and it drifts silently unless something refuses the gap.
+      - name: Refuse a tag the source disagrees with
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          source=$(grep -oE 'static let current = "[^"]+"' Sources/Basset/SDKVersion.swift \
+            | grep -oE '"[^"]+"' | tr -d '"')
+          if [ "$source" != "$VERSION" ]; then
+            echo "::error::SDKVersion.current is \"$source\", but this release is $VERSION. Bump it in a PR and merge that first — device.info would otherwise report the wrong version for every capture this release makes."
+            exit 1
+          fi
+
       # Dispatching this workflow reads as a decision to release, not as a
       # request to find out whether main is green. The commit being tagged has
       # to have passed the same four contexts a merge requires, by name — a run

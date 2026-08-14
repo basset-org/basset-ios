@@ -15,6 +15,7 @@ final class DeviceInfo: Snapshotable, PlainInstrument {
         out.put(.appVersion(identity.appVersion))
         out.put(.buildConfiguration(identity.buildConfiguration))
         out.put(.deviceKind(identity.deviceKind))
+        out.put(.sdkVersion(SDKVersion.current))
         if let bundleId = identity.bundleId {
             out.put(.bundleId(bundleId))
         }

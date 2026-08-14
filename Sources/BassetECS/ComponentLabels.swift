@@ -23,6 +23,7 @@ public extension Component.ID {
         case .bundleId: "Bundle"
         case .buildConfiguration: "Build"
         case .deviceKind: "Running on"
+        case .sdkVersion: "SDK version"
         case .passCount: "Passes"
         case .totalNanoseconds: "Total (ns)"
         case .peakNanoseconds: "Slowest (ns)"
