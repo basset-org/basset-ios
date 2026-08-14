@@ -117,6 +117,7 @@ public final class Registries: @unchecked Sendable {
     private struct State {
         var byType: [ObjectIdentifier: AnyObject] = [:]
         var byDelegateOwner: [ObjectIdentifier: DelegateClasses] = [:]
+        var byRuntimeClass: [ObjectIdentifier: WeakRegistry<AnyObject>] = [:]
     }
 
     private let guarded: Mutex<State> = .init(State())
@@ -134,6 +135,22 @@ public final class Registries: @unchecked Sendable {
 
             let created = WeakRegistry<Tracked>()
             state.byType[key] = created
+            return created
+        }
+    }
+
+    /// The instance-tracking counterpart of `registry(_:)` for a class only known at
+    /// runtime — stored apart so a compile-time type and an `objc_getClass` lookup of the
+    /// same class can never collide, and so a caller here never gets back a typed instance.
+    public func registry(runtimeClass: AnyClass) -> WeakRegistry<AnyObject> {
+        guarded.withLock { state in
+            let key = ObjectIdentifier(runtimeClass)
+            if let existing = state.byRuntimeClass[key] {
+                return existing
+            }
+
+            let created = WeakRegistry<AnyObject>()
+            state.byRuntimeClass[key] = created
             return created
         }
     }

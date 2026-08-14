@@ -183,12 +183,12 @@ struct AudioRouteWiringTests {
 
     /// `multiRoute` admits input despite reading like a playback category from its name.
     @Test func everyCategoryIsSortedByWhetherItAdmitsInput() {
-        #expect(AudioRoute.admitsInput(.record))
-        #expect(AudioRoute.admitsInput(.playAndRecord))
-        #expect(AudioRoute.admitsInput(.multiRoute))
-        #expect(!AudioRoute.admitsInput(.playback))
-        #expect(!AudioRoute.admitsInput(.ambient))
-        #expect(!AudioRoute.admitsInput(.soloAmbient))
+        #expect(AudioRoute.admitsInput(AVAudioSession.Category.record.rawValue))
+        #expect(AudioRoute.admitsInput(AVAudioSession.Category.playAndRecord.rawValue))
+        #expect(AudioRoute.admitsInput(AVAudioSession.Category.multiRoute.rawValue))
+        #expect(!AudioRoute.admitsInput(AVAudioSession.Category.playback.rawValue))
+        #expect(!AudioRoute.admitsInput(AVAudioSession.Category.ambient.rawValue))
+        #expect(!AudioRoute.admitsInput(AVAudioSession.Category.soloAmbient.rawValue))
     }
 
     /// `playback` admits no input regardless of hardware — provable without a real device.

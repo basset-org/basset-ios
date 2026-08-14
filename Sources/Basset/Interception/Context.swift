@@ -102,6 +102,19 @@ public final class Context: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// The `follow<Tracked>` above for a class only known at runtime — never a compiled
+    /// type — so tracking a framework's instances never requires importing it.
+    public func follow(
+        class trackedClass: AnyClass,
+        _ attach: @escaping (AnyObject, UInt32) -> Void
+    ) {
+        let registry = registries.registry(runtimeClass: trackedClass)
+        let token = registry.attachAndFollow(attach)
+        lock.lock()
+        unfollows.append { registry.stopFollowing(token) }
+        lock.unlock()
+    }
+
     public func readings(_ entity: Entity.ID? = nil) -> Readings {
         Readings(
             entity: entity ?? defaultEntity,
