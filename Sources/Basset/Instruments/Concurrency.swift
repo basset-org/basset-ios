@@ -174,6 +174,8 @@ final class MainThreadHang: Streamable, Configurable {
             }
         }
         watching.name = QueueLabel.mainThreadHang
+        // Default QoS is what a hang starves first — this thread has to win that contention.
+        watching.qualityOfService = .userInteractive
         watching.start()
         watchdog = watching
     }

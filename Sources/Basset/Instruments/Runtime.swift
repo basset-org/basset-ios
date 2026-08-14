@@ -213,6 +213,8 @@ final class StackSamples: Streamable, Configurable {
             }
         }
         sampling.name = QueueLabel.stackSampler
+        // Default QoS is what a hang starves first — this thread has to win that contention.
+        sampling.qualityOfService = .userInteractive
         sampling.start()
         sampler = sampling
 
