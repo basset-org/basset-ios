@@ -208,6 +208,7 @@ public extension InstrumentID {
                 reveals: [
                     "which device model and OS produced the rest of the capture",
                     "whether the readings came from a debug build or a simulator",
+                    "which version of this SDK produced the capture",
                 ],
                 related: ["memory.footprint", "power.thermalState"],
                 mechanism: .statusRead,

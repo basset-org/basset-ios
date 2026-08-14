@@ -199,6 +199,7 @@ public extension Component.ID {
              .regionCode,
              .remoteAddress,
              .requestURL,
+             .sdkVersion,
              .serverVersion,
              .sessionClass,
              .sessionPreset,
