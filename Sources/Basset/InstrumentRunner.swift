@@ -39,7 +39,7 @@ protocol TransportOpener: Sendable {
 }
 
 struct FaultContributor {
-    let instrument: any FaultInstrument
+    let instrument: any Faultable
     let context: Context
 }
 
@@ -74,6 +74,8 @@ final class InstrumentRunner: @unchecked Sendable {
     private var live: [UInt64: BassetRequest] = [:]
     private var transports: [UInt64: Transport] = [:]
     private var active: Set<InstrumentID> = []
+    /// What each active instrument was actually built with — absent means no config sent.
+    private var activeConfig: [InstrumentID: Data] = [:]
     private var instances: [InstrumentID: any Instrument] = [:]
     private let faultLock: NSLock = .init()
     private var faultContributors: [FaultContributor] = []
@@ -308,7 +310,8 @@ final class InstrumentRunner: @unchecked Sendable {
     private func convergeInstruments() {
         var wanted = [InstrumentID: Registration]()
         var configData = [InstrumentID: Data]()
-        for request in live.values {
+        // Ascending, so the newest request's config wins — `live` promises no order of its own.
+        for request in live.values.sorted(by: { $0.requestId < $1.requestId }) {
             for name in request.instruments {
                 guard let registration = byName[name],
                       registration.isAvailableHere
@@ -326,7 +329,13 @@ final class InstrumentRunner: @unchecked Sendable {
         for id in active.subtracting(wanted.keys) {
             deactivate(id)
         }
+        // A running instrument does not pick up a changed config on its own; restart it.
+        for id in active.intersection(wanted.keys) where activeConfig[id] != configData[id] {
+            deactivate(id)
+            active.remove(id)
+        }
         for (id, registration) in wanted where !active.contains(id) {
+            activeConfig[id] = configData[id]
             activate(registration, config: configData[id])
         }
         active = Set(wanted.keys).intersection(instances.keys)
@@ -376,13 +385,13 @@ final class InstrumentRunner: @unchecked Sendable {
 
         // Gated on the registration: `threadSnapshot` also implements `reading`.
         if registration.delivery == .reading,
-           let snapshot = instrument as? any SnapshotInstrument
+           let snapshot = instrument as? any Snapshotable
         {
             var readings = context.readings()
             snapshot.reading(&readings)
             context.deliver(readings)
         }
-        if let streaming = instrument as? any StreamingInstrument {
+        if let streaming = instrument as? any Streamable {
             streaming.observe(context)
         }
     }
@@ -402,7 +411,7 @@ final class InstrumentRunner: @unchecked Sendable {
     private func rememberFaultContributors() {
         var contributors = [FaultContributor]()
         for id in active {
-            guard let instrument = instances[id] as? any FaultInstrument,
+            guard let instrument = instances[id] as? any Faultable,
                   let context = contexts[id]
             else {
                 continue
@@ -425,13 +434,14 @@ final class InstrumentRunner: @unchecked Sendable {
 
         statuses[id]?.deactivate()
         contexts[id]?.teardown()
-        if let streaming = instances[id] as? any StreamingInstrument {
+        if let streaming = instances[id] as? any Streamable {
             streaming.stopObserving()
         }
 
         statuses.removeValue(forKey: id)
         contexts.removeValue(forKey: id)
         instances.removeValue(forKey: id)
+        activeConfig.removeValue(forKey: id)
         rememberFaultContributors()
     }
 

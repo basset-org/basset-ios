@@ -110,6 +110,8 @@ struct BassetRequest: Codable, Equatable, Sendable {
 private enum JSONValue: Codable {
     case null
     case bool(Bool)
+    /// Tried before `number`: an integer past 2^53 loses precision going through `Double`.
+    case integer(Int64)
     case number(Double)
     case string(String)
     case array([JSONValue])
@@ -121,6 +123,8 @@ private enum JSONValue: Codable {
             self = .null
         } else if let value = try? container.decode(Bool.self) {
             self = .bool(value)
+        } else if let value = try? container.decode(Int64.self) {
+            self = .integer(value)
         } else if let value = try? container.decode(Double.self) {
             self = .number(value)
         } else if let value = try? container.decode(String.self) {
@@ -142,6 +146,7 @@ private enum JSONValue: Codable {
         switch self {
         case .null: try container.encodeNil()
         case .bool(let value): try container.encode(value)
+        case .integer(let value): try container.encode(value)
         case .number(let value): try container.encode(value)
         case .string(let value): try container.encode(value)
         case .array(let value): try container.encode(value)

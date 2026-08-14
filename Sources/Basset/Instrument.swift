@@ -24,42 +24,48 @@ public extension Instrument {
     }
 }
 
-public protocol SnapshotInstrument: Instrument {
-    init()
+/// What the runner dispatches to — plain and `Configurable` instruments both conform.
+public protocol Snapshotable: Instrument {
     func reading(_ out: inout Readings)
 }
 
-public protocol StreamingInstrument: Instrument {
-    init()
+public protocol Streamable: Instrument {
     func observe(_ context: Context)
     func stopObserving()
 }
 
-public protocol FaultInstrument: Instrument {
+public protocol Faultable: Instrument {
+    func fault(_ kind: FaultKind, _ out: inout Readings)
+}
+
+public protocol SnapshotInstrument: Snapshotable {
     init()
-    func fault(_ kind: FaultKind, _ out: inout Readings)
 }
 
-public protocol ConfigurableSnapshotInstrument: Instrument {
+public protocol StreamingInstrument: Streamable {
+    init()
+}
+
+public protocol FaultInstrument: Faultable {
+    init()
+}
+
+public protocol ConfigurableSnapshotInstrument: Snapshotable {
     associatedtype Config: Decodable & Sendable
     static var defaultConfig: Config { get }
     init(config: Config)
-    func reading(_ out: inout Readings)
 }
 
-public protocol ConfigurableStreamingInstrument: Instrument {
+public protocol ConfigurableStreamingInstrument: Streamable {
     associatedtype Config: Decodable & Sendable
     static var defaultConfig: Config { get }
     init(config: Config)
-    func observe(_ context: Context)
-    func stopObserving()
 }
 
-public protocol ConfigurableFaultInstrument: Instrument {
+public protocol ConfigurableFaultInstrument: Faultable {
     associatedtype Config: Decodable & Sendable
     static var defaultConfig: Config { get }
     init(config: Config)
-    func fault(_ kind: FaultKind, _ out: inout Readings)
 }
 
 public protocol LoadTimeInstall: Instrument {
@@ -111,7 +117,7 @@ public struct Registration: @unchecked Sendable {
     }
 
     public static func reading(_ type: (some SnapshotInstrument).Type) -> Registration {
-        Registration(type, delivery: .reading, build: { _ in (type.init(), false) })
+        Registration(type, delivery: .reading, build: { data in (type.init(), data != nil) })
     }
 
     public static func reading<I: ConfigurableSnapshotInstrument>(_ type: I.Type) -> Registration {
@@ -122,7 +128,7 @@ public struct Registration: @unchecked Sendable {
     }
 
     public static func stream(_ type: (some StreamingInstrument).Type) -> Registration {
-        Registration(type, delivery: .stream, build: { _ in (type.init(), false) })
+        Registration(type, delivery: .stream, build: { data in (type.init(), data != nil) })
     }
 
     public static func stream<I: ConfigurableStreamingInstrument>(_ type: I.Type) -> Registration {
@@ -133,7 +139,7 @@ public struct Registration: @unchecked Sendable {
     }
 
     public static func fault(_ type: (some FaultInstrument).Type) -> Registration {
-        Registration(type, delivery: .fault, build: { _ in (type.init(), false) })
+        Registration(type, delivery: .fault, build: { data in (type.init(), data != nil) })
     }
 
     public static func fault<I: ConfigurableFaultInstrument>(_ type: I.Type) -> Registration {

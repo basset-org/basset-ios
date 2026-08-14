@@ -146,6 +146,23 @@ struct DesiredStateDecodingTests {
         #expect(decoded == ["thresholdMs": 300])
     }
 
+    /// A `Double` round trip loses this exact value — Int64 carries it through untouched.
+    @Test func aLargeIntegerInConfigSurvivesExactly() throws {
+        let response = try decode(
+            """
+            {"device_token":"d","ingest_endpoint":"in","requests":[
+             {"request_id":1,"instruments":["ui.fps"],
+              "instrument_config":{"ui.fps":{"budgetNanoseconds":9007199254740993}},
+              "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
+            """
+        )
+
+        let request = try #require(response.requests.first)
+        let configData = try #require(request.instrumentConfig["ui.fps"])
+        let decoded = try JSONDecoder().decode([String: Int64].self, from: configData)
+        #expect(decoded == ["budgetNanoseconds": 9007199254740993])
+    }
+
     /// The field a build older than this one has never heard of — reads as if absent.
     @Test func aRequestWithNoInstrumentConfigFieldReadsAsEmpty() throws {
         let response = try decode(
