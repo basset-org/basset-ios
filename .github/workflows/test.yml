@@ -1,0 +1,123 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    # The name is a contract: branch protection requires `simulator (oldest)`
+    # and `simulator (newest)` by name, and a matrix that adds the runner to the
+    # generated name leaves those two contexts permanently unreported, which
+    # blocks every merge rather than failing anything.
+    name: simulator (${{ matrix.runtime }})
+    # Split by what each image carries rather than by speed. The six-core runner
+    # answers the two tests a shared one starves, and runs the suite in a third
+    # of the time — but its image ships no iOS 18 runtime at all, and the floor
+    # is what catches a decoder that works on the newest OS and returns nothing
+    # below it. So the oldest runtime stays on the image that has one.
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: oldest
+            runner: macos-15
+            sharedSimulator: "true"
+          - runtime: newest
+            runner: blacksmith-6vcpu-macos-26
+            sharedSimulator: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      # The deployment floor is what the catalog claims to support, and it is
+      # not what the newest installed runtime tests. A control-plane timestamp
+      # carrying six fractional digits parsed on iOS 26 and returned nil on
+      # 18.6, so every device below the runtime the tests happened to use
+      # decoded no requests at all and reported nothing — which reads exactly
+      # like a fleet nobody asked anything of.
+      #
+      # Chosen from what the image has rather than pinned, so an image that
+      # drops a runtime fails by testing a different version rather than by
+      # failing to find one.
+      - name: Choose a simulator
+        id: simulator
+        run: |
+          floor=$(sed -n 's/.*\.iOS(\.v\([0-9]*\)).*/\1/p' Package.swift)
+          udid=$(xcrun simctl list devices available --json | python3 -c "
+          import json, sys
+          floor = int('$floor')
+          want = '${{ matrix.runtime }}'
+          runtimes = json.load(sys.stdin)['devices']
+          usable = {}
+          for identifier, devices in runtimes.items():
+              if 'iOS' not in identifier or not devices:
+                  continue
+              version = identifier.rsplit('.', 1)[-1].removeprefix('iOS-')
+              major = int(version.split('-')[0])
+              if major >= floor:
+                  usable[tuple(int(part) for part in version.split('-'))] = devices[0]['udid']
+          if not usable:
+              sys.exit('no installed iOS runtime meets the %d floor' % floor)
+          key = min(usable) if want == 'oldest' else max(usable)
+          print('.'.join(str(part) for part in key), usable[key], sep='\t')
+          ")
+          echo "version=$(echo "$udid" | cut -f1)" >> "$GITHUB_OUTPUT"
+          echo "udid=$(echo "$udid" | cut -f2)" >> "$GITHUB_OUTPUT"
+
+      # An image that drops the old runtimes narrows the matrix without failing,
+      # which reads as a green run over a version nobody tested. The oldest job
+      # says which runtime it got and refuses one that is not old.
+      - name: Refuse a matrix that quietly narrowed
+        if: matrix.runtime == 'oldest'
+        run: |
+          major=$(echo "${{ steps.simulator.outputs.version }}" | cut -d. -f1)
+          floor=$(sed -n 's/.*\.iOS(\.v\([0-9]*\)).*/\1/p' Package.swift)
+          echo "oldest installed runtime: iOS ${{ steps.simulator.outputs.version }}, floor: iOS $floor"
+          if [ "$major" -gt "$((floor + 1))" ]; then
+            echo "::error::the oldest installed runtime is iOS $major against a floor of $floor, so this image tests none of the versions the floor exists for"
+            exit 1
+          fi
+
+      - name: Test on iOS ${{ steps.simulator.outputs.version }}
+        env:
+          TEST_RUNNER_BASSET_SHARED_SIMULATOR: ${{ matrix.sharedSimulator }}
+        run: |
+          xcodebuild test \
+            -scheme Basset-Package \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -resultBundlePath "${{ runner.temp }}/test.xcresult"
+
+      - name: Build for a device
+        run: |
+          xcodebuild build \
+            -scheme Basset \
+            -destination 'generic/platform=iOS' -quiet
+
+  # A data race in a library that runs inside somebody else's app is that app's
+  # crash, and the suite stayed green through three of them: the observer list
+  # a thunk walked while another thread freed it, the KVO registration two
+  # threads could remove twice, and the camera arrays a follower and the runner
+  # queue mutated at once. None of them failed a test. All of them failed here.
+  #
+  # ThreadWalkerTests is skipped rather than fixed. It suspends every thread in
+  # the process to walk their stacks, and a thread suspended while holding one
+  # of ThreadSanitizer's own runtime locks never gives it back — the suite
+  # deadlocks instead of failing. The mechanism it covers is exercised by the
+  # simulator jobs above.
+  #
+  # The suite, not the file it lives in: skipping by file name takes
+  # BinaryImageTests and ReadingsSiblingTests with it, and neither suspends
+  # anything.
+  races:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test under ThreadSanitizer
+        run: swift test --sanitize=thread --skip ThreadWalkerTests

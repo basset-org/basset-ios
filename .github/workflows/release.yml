@@ -1,0 +1,237 @@
+name: release
+
+# Swift Package Manager resolves a version from a git tag and nothing else —
+# there is no registry to publish to and no artifact to upload. So the release
+# is the tag, and everything below exists to refuse a tag that would resolve
+# into somebody's app and fail there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without a leading v (0.2.0, or 0.2.0-beta.1)"
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # macOS because the gate that matters builds a package for iOS, which needs
+    # xcodebuild and an iOS SDK.
+    runs-on: macos-15
+    steps:
+      # The whole history and every tag: the version check compares against the
+      # tags that exist, and release notes are generated from a range.
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Read the version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          # Dispatch offers a ref to run from, and this workflow releases main
+          # whatever is chosen. Refused rather than ignored: picking a branch
+          # and getting a release of something else is worse than being told no.
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            echo "::error::Releases are cut from main, but this run was dispatched from ${{ github.ref_name }}."
+            exit 1
+          fi
+
+          version="$INPUT_VERSION"
+          if ! echo "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$version' is not a semantic version. SwiftPM ignores a tag it cannot parse, so the release would exist on GitHub and be invisible to every resolver."
+            exit 1
+          fi
+
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::$tag already exists. A tag that moves changes what a resolved package means for anyone who already has it cached under that version."
+            exit 1
+          fi
+
+          # A version that does not sort above every released one is the failure
+          # `from:` hides: SwiftPM resolves the highest tag satisfying the
+          # range, so the new release is chosen by nobody and reports no error.
+          #
+          # Compared by semantic-version precedence rather than by `sort -V`,
+          # which is not the same order: `sort -V` places 0.2.0-beta.1 above
+          # 0.2.0, so it would wave through exactly the prerelease that no
+          # resolver can reach.
+          if ! previous=$(git tag -l 'v*' | sed 's/^v//' | python3 -c "
+          import sys
+
+          def precedence(version):
+              core, _, pre = version.partition('-')
+              release = tuple(int(part) for part in core.split('.'))
+              if not pre:
+                  return (release, (1,))
+              identifiers = tuple(
+                  (0, int(part), '') if part.isdigit() else (1, 0, part)
+                  for part in pre.split('.')
+              )
+              return (release, (0,) + identifiers)
+
+          candidate = '$version'
+          released = [line.strip() for line in sys.stdin if line.strip()]
+          reached = [v for v in released if precedence(v) >= precedence(candidate)]
+          if reached:
+              sys.exit('%s does not sort above the released %s, so no resolver would ever choose it.'
+                       % (candidate, max(reached, key=precedence)))
+          print(max(released, key=precedence) if released else '')
+          " 2>&1); then
+            echo "::error::$previous"
+            exit 1
+          fi
+
+          if [ -n "$previous" ]; then
+            echo "previous_tag=v$previous" >> "$GITHUB_OUTPUT"
+          fi
+
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # Dispatching this workflow reads as a decision to release, not as a
+      # request to find out whether main is green. The commit being tagged has
+      # to have passed the same four contexts a merge requires, by name — a run
+      # that never reported is as disqualifying as one that failed, and asking
+      # only "did anything fail" treats a missing job as a pass.
+      - name: Refuse a commit that is not green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          conclusions=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" --paginate \
+            --jq '.check_runs[] | "\(.name)=\(.conclusion)"')
+          echo "$conclusions"
+
+          for required in "races" "swiftformat --lint" "simulator (newest)" "simulator (oldest)"; do
+            if ! echo "$conclusions" | grep -qxF "$required=success"; then
+              echo "::error::$sha has no successful '$required'. Releasing it would tag a commit nothing verified."
+              exit 1
+            fi
+          done
+
+      # Everything above this point is also true of a package that no app can
+      # resolve. This is the step that finds that out, and it runs before the
+      # tag is public: the tag is created locally, a package that depends on
+      # this one by git URL is resolved against the clone on disk, and that
+      # package is built for iOS. A manifest that builds in place and fails as a
+      # dependency — a target path that only exists in a checkout, a setting
+      # SwiftPM rejects in a dependency — fails here rather than in the first
+      # app to type the version in.
+      - name: Prove the tag resolves as a dependency
+        run: |
+          git -c user.name=basset -c user.email=noreply@basset.dev \
+            tag -a "${{ steps.version.outputs.tag }}" \
+            -m "${{ steps.version.outputs.tag }}"
+
+          # Cloned to a directory named for the repository rather than depended
+          # on where it sits: SwiftPM takes a package's identity from the last
+          # component of its URL, so the name a target writes in `dependencies`
+          # is decided by the directory. Cloning makes that name the one an
+          # integrator will actually type instead of whatever the checkout was
+          # called.
+          source="$RUNNER_TEMP/basset-ios"
+          git clone --quiet "$GITHUB_WORKSPACE" "$source"
+
+          consumer="$RUNNER_TEMP/consumer"
+          mkdir -p "$consumer/Sources/Consumer"
+          cat > "$consumer/Package.swift" <<EOF
+          // swift-tools-version:6.0
+          import PackageDescription
+
+          let package = Package(
+              name: "Consumer",
+              platforms: [.iOS(.v17), .macOS(.v13)],
+              products: [.library(name: "Consumer", targets: ["Consumer"])],
+              dependencies: [
+                  .package(url: "file://$source", exact: "${{ steps.version.outputs.version }}"),
+              ],
+              targets: [
+                  .target(name: "Consumer", dependencies: [.product(name: "Basset", package: "basset-ios")]),
+              ]
+          )
+          EOF
+
+          cat > "$consumer/Sources/Consumer/Consumer.swift" <<'EOF'
+          import Basset
+
+          public func startBasset(apiKey: String, userId: String) {
+              Basset.start(apiKey: apiKey)
+              Basset.identify(userId: userId)
+              _ = Basset.currentState()
+          }
+          EOF
+
+          cd "$consumer"
+          xcodebuild build -scheme Consumer -destination 'generic/platform=iOS' -quiet
+
+      - name: Publish the tag
+        run: git push origin "${{ steps.version.outputs.tag }}"
+
+      # Generated from pull request titles, which already carry the scope they
+      # changed. The scopes an integrator acts on and the ones they do not are
+      # separated rather than filtered: a change to the test suite can still be
+      # the change that fixed what they hit, so nothing is dropped.
+      - name: Write the notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ steps.version.outputs.previous_tag }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ -n "$PREVIOUS_TAG" ]; then
+            generated=$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="$TAG" -f target_commitish=main -f previous_tag_name="$PREVIOUS_TAG" --jq .body)
+          else
+            generated=$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="$TAG" -f target_commitish=main --jq .body)
+          fi
+
+          echo "$generated" | python3 -c "
+          import re, sys
+
+          BUILD_SCOPES = {'ci', 'tests'}
+          changes, build, trailer = [], [], []
+          for line in sys.stdin.read().splitlines():
+              entry = re.match(r'\* ([a-z]+): ', line)
+              if line.startswith('**Full Changelog**'):
+                  trailer.append(line)
+              elif entry:
+                  (build if entry.group(1) in BUILD_SCOPES else changes).append(line)
+              elif line.startswith('*'):
+                  changes.append(line)
+
+          out = ['## Install', '', '\`\`\`swift', '.package(url: \"https://github.com/${{ github.repository }}\", from: \"$VERSION\")', '\`\`\`', '']
+          if changes:
+              out += ['## Changes', ''] + changes + ['']
+          if build:
+              out += ['## Build and tests', ''] + build + ['']
+          out += trailer
+          print('\n'.join(out))
+          " > "$RUNNER_TEMP/notes.md"
+
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --prerelease=${{ steps.version.outputs.prerelease }}

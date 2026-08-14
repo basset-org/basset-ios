@@ -1,0 +1,116 @@
+load("@rules_apple//apple:ios.bzl", "ios_unit_test")
+load("@rules_apple//apple/testing/default_runner:ios_test_runner.bzl", "ios_test_runner")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_swift//swift:swift.bzl", "swift_binary", "swift_library", "swift_test")
+load("@rules_swift//swift:swift_interop_hint.bzl", "swift_interop_hint")
+
+# The device library imports Network, UIKit and AVFoundation, so it cannot
+# compile off Apple platforms. Declaring that lets `bazel build //...` on a
+# Linux runner skip it instead of failing, while BassetECS below — pure Swift —
+# still builds everywhere.
+APPLE_ONLY = select({
+    "@platforms//os:ios": [],
+    "@platforms//os:macos": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
+# Lock-free atomics at the iOS 17 floor, below Synchronization.Atomic. A C11
+# header consumed as a Clang module rather than an experimental Swift feature that
+# an integrator's toolchain upgrade could withdraw. See Sources/Basset/Interception/Atomics.swift.
+cc_library(
+    name = "CBassetAtomics",
+    srcs = ["Sources/CBassetAtomics/shim.c"],
+    hdrs = ["Sources/CBassetAtomics/include/CBassetAtomics.h"],
+    aspect_hints = [":CBassetAtomics_interop"],
+    includes = ["Sources/CBassetAtomics/include"],
+)
+
+swift_interop_hint(
+    name = "CBassetAtomics_interop",
+    module_name = "CBassetAtomics",
+)
+
+swift_library(
+    name = "Basset",
+    srcs = glob(["Sources/Basset/**/*.swift"]),
+    module_name = "Basset",
+    target_compatible_with = APPLE_ONLY,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":BassetECS",
+        ":CBassetAtomics",
+    ],
+)
+
+# The wire vocabulary both halves speak: pure Swift, no Apple frameworks, so a
+# reader can decode a capture on any platform while the device library above
+# encodes against the same types rather than a second copy of them. An
+# `import UIKit` here fails the build, which is the point of the directory.
+swift_library(
+    name = "BassetECS",
+    srcs = glob(["Sources/BassetECS/**/*.swift"]),
+    module_name = "BassetECS",
+    visibility = ["//visibility:public"],
+)
+
+swift_binary(
+    name = "basset-demo",
+    srcs = glob(["Demo/**/*.swift"]),
+    target_compatible_with = APPLE_ONLY,
+    deps = [
+        ":Basset",
+        ":BassetECS",
+    ],
+)
+
+swift_library(
+    name = "BassetTestsLib",
+    testonly = True,
+    srcs = glob(
+        ["Tests/**/*.swift"],
+        exclude = ["Tests/ECS/**/*.swift"],
+    ),
+    tags = ["manual"],
+    target_compatible_with = APPLE_ONLY,
+    deps = [
+        ":Basset",
+        ":BassetECS",
+    ],
+)
+
+# The shape rules, the interception substrate against a controlled ObjC class,
+# and the desired-state diff are all host logic. Running them here is what gets
+# them into `bazel test //...` rather than behind a simulator boot.
+swift_test(
+    name = "sdk_test",
+    srcs = glob(
+        ["Tests/**/*.swift"],
+        exclude = ["Tests/ECS/**/*.swift"],
+    ),
+    target_compatible_with = APPLE_ONLY,
+    deps = [
+        ":Basset",
+        ":BassetECS",
+    ],
+)
+
+# A host test, not an ios_unit_test: the encoder/decoder pair is pure logic with
+# no simulator to need, and this is the test that keeps the two from drifting.
+swift_test(
+    name = "ecs_test",
+    srcs = glob(["Tests/ECS/**/*.swift"]),
+    deps = [":BassetECS"],
+)
+
+ios_test_runner(
+    name = "sim_runner",
+    device_type = "iPhone 16",
+    os_version = "26.4",
+)
+
+ios_unit_test(
+    name = "BassetTests",
+    minimum_os_version = "17.0",
+    runner = ":sim_runner",
+    deps = [":BassetTestsLib"],
+)

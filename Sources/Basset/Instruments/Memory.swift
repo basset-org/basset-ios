@@ -1,0 +1,87 @@
+import BassetECS
+import Foundation
+
+#if canImport(UIKit)
+import UIKit
+#endif
+
+final class MemoryFootprint: SnapshotInstrument {
+    static let id: InstrumentID = .memoryFootprint
+    static let entity = Entity.ID.process
+
+    init() {}
+
+    func reading(_ out: inout Readings) {
+        MemoryLedger.read()?.write(into: &out)
+    }
+}
+
+/// Watches both the system-wide Mach pressure source and app-scoped didReceiveMemoryWarning.
+final class MemoryPressure: StreamingInstrument {
+    static let id: InstrumentID = .memoryPressure
+    static let entity = Entity.ID.memoryPressure
+
+    private var source: DispatchSourceMemoryPressure?
+    private var observer: NSObjectProtocol?
+
+    init() {}
+
+    private static func level(of event: DispatchSource.MemoryPressureEvent) -> String {
+        if event.contains(.critical) {
+            return "critical"
+        }
+        if event.contains(.warning) {
+            return "warning"
+        }
+        return "normal"
+    }
+
+    func observe(_ context: Context) {
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: [
+            .normal,
+            .warning,
+            .critical,
+        ])
+        source.setEventHandler { [weak self, weak source] in
+            guard let source else {
+                return
+            }
+
+            self?.report(Self.level(of: source.data), scope: "system", context: context)
+        }
+        source.activate()
+        self.source = source
+
+        #if canImport(UIKit)
+        observer = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.report("warning", scope: "app", context: context)
+        }
+        #endif
+    }
+
+    func stopObserving() {
+        source?.cancel()
+        source = nil
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        observer = nil
+    }
+
+    /// Never `emitIfChanged`: each crossing gets its own footprint, even warning-critical-warning.
+    private func report(_ level: String, scope: String, context: Context) {
+        context.emit { out in
+            out.put(.memoryPressureLevel(level))
+            out.put(.memoryPressureScope(scope))
+            MemoryLedger.read()?.write(into: &out)
+        }
+        // Critical only: a thread walk on every warning would cost more than it explains.
+        if level == "critical" {
+            context.fault(.memoryPressure)
+        }
+    }
+}

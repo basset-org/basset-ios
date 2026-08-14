@@ -1,0 +1,31 @@
+public enum Domain: String, Codable, Sendable, CaseIterable {
+    case uikit
+    case render
+    case swiftui
+    case metal
+    case webkit
+    case camera
+    case audio
+    case playback
+    case imaging
+    case network
+    case bluetooth
+    case peer
+    case call
+    case notifications
+    case map
+    case extensions
+    case memory
+    case concurrency
+    case cpu
+    case power
+    case lifecycle
+    case storage
+    case permissions
+    case location
+    case sensors
+    case environment
+    case log
+    case runtime
+    case device
+}

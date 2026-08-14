@@ -1,0 +1,127 @@
+@testable import Basset
+import BassetECS
+import Foundation
+import Testing
+
+/// Derived from declaration alone, so these run host-side under `bazel test //...`.
+struct InstrumentShapeTests {
+    private var instrumentIdSnapshot: [UInt16] {
+        InstrumentID.allCases.map(\.rawValue).sorted()
+    }
+
+    private var componentIdSnapshot: [UInt16] {
+        Component.ID.allCases.map(\.rawValue).sorted()
+    }
+
+    private var entityIdSnapshot: [UInt16] {
+        Entity.ID.allCases.map(\.rawValue).sorted()
+    }
+
+    /// Checked per id, not per registration — an unbuildable instrument still counts.
+    @Test func domainMatchesTheFirstSegmentOfEveryName() {
+        for id in InstrumentID.allCases {
+            let prefix = id.name.split(separator: ".").first.map(String.init)
+            #expect(
+                prefix == id.domain.rawValue,
+                "\(id.name) is filed under \(id.domain.rawValue)"
+            )
+        }
+    }
+
+    @Test func everyNameIsAtLeastDomainAndSubject() {
+        for id in InstrumentID.allCases {
+            #expect(
+                id.name.split(separator: ".").count >= 2,
+                "\(id.name) needs a subject after its domain"
+            )
+        }
+    }
+
+    @Test func namesAreUniqueAcrossTheIdSpace() {
+        let names = InstrumentID.allCases.map(\.name)
+        #expect(Set(names).count == names.count)
+    }
+
+    /// Registration is unconditional; only the mechanism body is platform-gated.
+    @Test func everyIdInTheSpaceIsRegistered() {
+        #expect(Set(Instruments.all.map(\.id)) == Set(InstrumentID.allCases))
+    }
+
+    /// The enum and the registrations are one list read twice, kept in the same order.
+    @Test func registrationsAreInWireIdOrder() {
+        let ids = Instruments.all.map(\.id.rawValue)
+        #expect(ids == ids.sorted())
+    }
+
+    @Test func wireIdsAreUniqueAcrossTheCatalog() {
+        let ids = Instruments.all.map(\.id)
+        #expect(Set(ids).count == ids.count)
+    }
+
+    @Test func namesAreUniqueAcrossTheCatalog() {
+        let names = Instruments.all.map(\.name)
+        #expect(Set(names).count == names.count)
+    }
+
+    /// Two conformances is two answers — one instrument once suspended every thread.
+    @Test func everyInstrumentDeclaresExactlyOneDeliveryClass() {
+        for registration in Instruments.all {
+            let declared = [
+                registration.instrumentType is any SnapshotInstrument.Type,
+                registration.instrumentType is any StreamingInstrument.Type,
+                registration.instrumentType is any FaultInstrument.Type,
+            ]
+            .filter(\.self)
+            .count
+
+            #expect(
+                declared == 1,
+                "\(registration.name) conforms to \(declared) delivery protocols"
+            )
+        }
+    }
+
+    /// The other half: what the type implements must match what it registered.
+    @Test func theRegisteredDeliveryMatchesWhatTheTypeImplements() {
+        for registration in Instruments.all {
+            switch registration.delivery {
+            case .reading:
+                #expect(registration.instrumentType is any SnapshotInstrument.Type)
+            case .stream:
+                #expect(registration.instrumentType is any StreamingInstrument.Type)
+            case .fault:
+                #expect(registration.instrumentType is any FaultInstrument.Type)
+            }
+        }
+    }
+
+    /// iOS only — a Mac's major version means nothing to any instrument's floor.
+    @Test func noShippedInstrumentNeedsANewerOSThanThisOne() {
+        #if os(iOS)
+        for registration in Instruments.all {
+            #expect(
+                registration.availability.minIOS <= Availability.runningMajorVersion,
+                "\(registration.name) declares minIOS \(registration.availability.minIOS)"
+            )
+        }
+        #endif
+    }
+
+    /// The factory proves delivery at compile time; the id space repeats it for the menu.
+    @Test func theIdSpaceAgreesWithTheFactoryOnDelivery() {
+        for registration in Instruments.all {
+            #expect(
+                registration.delivery == registration.id.delivery,
+                "\(registration.name): registered \(registration.delivery.rawValue), id space says \(registration.id.delivery.rawValue)"
+            )
+        }
+    }
+
+    /// Grow-only ids — nothing removed or renumbered; duplicates already fail to compile.
+    @Test func idSpacesOnlyEverGrow() {
+        // Holes are retirements, never reissued (components: see retiredIdsStayReserved).
+        #expect(instrumentIdSnapshot == Array(1...21) + Array(23...39) + Array(42...54))
+        #expect(componentIdSnapshot == Array(1...225))
+        #expect(entityIdSnapshot == Array(0...32) + Array(35...46))
+    }
+}
