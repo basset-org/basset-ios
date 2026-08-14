@@ -294,3 +294,21 @@ struct StackSampleReadingTests {
         rendered(id, in: entity).flatMap(UInt64.init)
     }
 }
+
+struct StackSamplesConfigTests {
+    /// Unclamped, a 0ms interval sleeps for nothing and the sampling loop busy-spins.
+    @Test func aZeroIntervalIsClampedRatherThanBusySpinning() {
+        let instrument = StackSamples(config: .init(intervalMs: 0))
+        #expect(instrument.interval == 0.01)
+    }
+
+    @Test func aHugeIntervalIsClampedToASecond() {
+        let instrument = StackSamples(config: .init(intervalMs: .max))
+        #expect(instrument.interval == 1)
+    }
+
+    @Test func anOrdinaryIntervalPassesThroughUnchanged() {
+        let instrument = StackSamples(config: .init(intervalMs: 100))
+        #expect(instrument.interval == 0.1)
+    }
+}

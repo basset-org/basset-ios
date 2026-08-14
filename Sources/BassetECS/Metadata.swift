@@ -870,7 +870,14 @@ public extension InstrumentID {
                 ],
                 mechanism: .machCall,
                 cadence: .periodic,
-                overhead: .medium
+                overhead: .medium,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "intervalMs",
+                        type: .int,
+                        description: "How often the main thread's stack is sampled. Default 50."
+                    ),
+                ]
             )
         case .metalDrawablePresentation:
             InstrumentMetadata(

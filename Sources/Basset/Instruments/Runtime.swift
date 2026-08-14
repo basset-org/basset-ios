@@ -73,7 +73,11 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
 }
 
 /// Main thread work, sampled 20/sec — identical stacks collapse into one reading.
-final class StackSamples: Streamable, PlainInstrument {
+final class StackSamples: Streamable, Configurable {
+    struct Config: Codable, Sendable {
+        let intervalMs: Int
+    }
+
     /// A reference, not the mutex itself — noncopyable, so a closure can't capture it.
     private final class Samples: @unchecked Sendable {
         private let guarded: Mutex<StackWindow> = .init(.init())
@@ -97,13 +101,21 @@ final class StackSamples: Streamable, PlainInstrument {
     static let stacksPerWindow = 8
 
     /// Fast enough to catch a stall in several samples, slow enough to stay under budget.
-    private static let interval = 0.05
+    static let defaultConfig: Config = .init(intervalMs: 50)
+
+    /// Below the minimum, sampling burns CPU; above the maximum, a stall hides between samples.
+    private static let minimumIntervalMs = 10
+    private static let maximumIntervalMs = 1000
+
+    let interval: TimeInterval
 
     private let walker: ThreadWalker = .init()
     private let samples: Samples = .init()
     private var sampler: Thread?
 
-    init() {
+    init(config: Config) {
+        let clampedMs = min(max(config.intervalMs, Self.minimumIntervalMs), Self.maximumIntervalMs)
+        interval = Double(clampedMs) / 1000
         // Captured while the main thread still answers — before launch identifies it.
         MainThreadPort.capture()
     }
@@ -190,9 +202,9 @@ final class StackSamples: Streamable, PlainInstrument {
     }
 
     func observe(_ context: Context) {
-        let sampling = Thread { [walker, samples] in
+        let sampling = Thread { [walker, samples, interval] in
             while !Thread.current.isCancelled {
-                Thread.sleep(forTimeInterval: Self.interval)
+                Thread.sleep(forTimeInterval: interval)
                 guard context.isActive else {
                     continue
                 }
