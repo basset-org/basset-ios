@@ -1,7 +1,11 @@
 import BassetECS
 import Foundation
 
-final class ThreadCPUUsage: Streamable, PlainInstrument {
+final class ThreadCPUUsage: Streamable, Configurable {
+    struct Config: Codable, Sendable {
+        let windowSeconds: Int
+    }
+
     private struct Consumed {
         let sample: ThreadSample
         let nanoseconds: UInt64
@@ -9,15 +13,26 @@ final class ThreadCPUUsage: Streamable, PlainInstrument {
 
     static let id: InstrumentID = .cpuThreadUsage
     static let entity = Entity.ID.thread
+    static let defaultConfig: Config = .init(windowSeconds: 1)
 
     private static let ceiling = 32
+    /// Below the minimum a read spends the budget too fast; above it a spike ages out.
+    private static let minimumWindowSeconds = 1
+    private static let maximumWindowSeconds = 30
+
+    let windowSeconds: Int
 
     private let previous: Mutex<[UInt64: UInt64]> = .init([:])
 
-    init() {}
+    init(config: Config) {
+        windowSeconds = min(
+            max(config.windowSeconds, Self.minimumWindowSeconds),
+            Self.maximumWindowSeconds
+        )
+    }
 
     func observe(_ context: Context) {
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(windowSeconds)) { [weak self] out, window in
             guard let self else {
                 return
             }
