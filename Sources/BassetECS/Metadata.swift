@@ -912,6 +912,17 @@ public extension InstrumentID {
                 cadence: .continuous,
                 overhead: .low
             )
+        case .configRefused:
+            InstrumentMetadata(
+                summary: "basset reporting on itself: a request named config for an instrument this build could not read",
+                whenToUse: "a request that set config for an instrument behaves as if the config were never sent",
+                reveals: [
+                    "which instrument's config this build fell back to its own default for",
+                ],
+                related: [],
+                mechanism: .none,
+                cadence: .onChange
+            )
         }
     }
 }

@@ -134,6 +134,8 @@ private extension String {
 public extension Menu {
     static var current: Menu {
         Menu(instruments: InstrumentID.allCases
+            // basset reports on itself — never requestable, so never listed here.
+            .filter { $0.domain != .basset }
             .sorted { $0.rawValue < $1.rawValue }
             .map(\.menuEntry))
     }
