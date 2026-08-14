@@ -139,7 +139,7 @@ struct LogSubsystemFilter: Codable, Sendable {
 
     let subsystem: String?
 
-    /// A blank or oversized subsystem reads the same as none — never a crash, never unbounded.
+    /// A blank subsystem reads as none; an oversized value is truncated to stay bounded.
     var subsystems: [String] {
         guard let subsystem, !subsystem.isEmpty else {
             return []
