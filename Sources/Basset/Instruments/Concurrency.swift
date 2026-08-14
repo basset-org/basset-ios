@@ -84,12 +84,16 @@ enum Debugger {
 }
 
 /// Watched from its own thread — the surface unable to say how blocked it is, is the blocked one.
-final class MainThreadHang: Streamable, PlainInstrument {
+final class MainThreadHang: Streamable, Configurable {
+    struct Config: Decodable, Sendable {
+        let thresholdMs: Int
+    }
+
     static let id: InstrumentID = .mainThreadHang
     static let entity = Entity.ID.mainThread
+    /// 2s, Apple's own hang threshold.
+    static let defaultConfig: Config = .init(thresholdMs: 2000)
 
-    /// 2s to report (Apple's own hang threshold), polled 5x within it to bound how late it is.
-    private static let threshold: UInt64 = 2000000000
     private static let pollsPerThreshold: UInt64 = 5
 
     private let heartbeat: MainRunLoopHeartbeat
@@ -97,11 +101,12 @@ final class MainThreadHang: Streamable, PlainInstrument {
     private let clock: Clock
     private var watchdog: Thread?
 
-    convenience init() {
+    /// Polled 5x within the threshold, to bound how late a report can be.
+    convenience init(config: Config) {
         self.init(
             heartbeat: MainRunLoopHeartbeat(),
             clock: Clock(),
-            threshold: Self.threshold
+            threshold: UInt64(max(config.thresholdMs, 0)) * 1000000
         )
     }
 

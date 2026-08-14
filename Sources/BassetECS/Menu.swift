@@ -92,6 +92,14 @@ extension MenuEntry {
             out.append("| Related | \(Self.code(metadata.related)) |")
         }
 
+        if !metadata.config.isEmpty {
+            out.append("")
+            out.append("**Config** (`\(instrument):key=value,...`)")
+            out.append(contentsOf: metadata.config.map {
+                "- `\($0.key)` (\($0.type.rawValue)): \($0.description)"
+            })
+        }
+
         return out.joined(separator: "\n")
     }
 
