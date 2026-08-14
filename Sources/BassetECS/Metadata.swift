@@ -558,7 +558,7 @@ public extension InstrumentID {
             )
         case .cpuThreadUsage:
             InstrumentMetadata(
-                summary: "Which threads are burning CPU right now, and how much of the last second each took",
+                summary: "Which threads are burning CPU right now, and how much of the last window each took",
                 whenToUse: "the device is hot, the battery is draining, or the app is slow without being frozen — the question is what is spinning rather than what is stuck",
                 reveals: [
                     "CPU nanoseconds consumed per thread over the window just closed, highest first",
