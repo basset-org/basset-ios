@@ -68,7 +68,8 @@ public final class LogStoreReader: @unchecked Sendable {
     /// Enough to describe a burst without spending the whole reading budget on one flush.
     public static let defaultCeiling = 256
 
-    private let subsystems: [String]
+    let subsystems: [String]
+
     private let ceiling: Int
     private let admitting: @Sendable (LogRecord) -> Bool
     private let watermark: Mutex<Date>

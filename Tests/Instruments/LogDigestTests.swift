@@ -236,3 +236,25 @@ struct LogStoreReaderTests {
         #expect(cutShort, "the read stopped on its ceiling and did not say so")
     }
 }
+
+struct LogSubsystemFilterTests {
+    @Test func logFaultsScopesTheReaderToTheConfiguredSubsystem() {
+        let instrument = LogFaults(config: .init(subsystem: "com.example.foo"))
+        #expect(instrument.reader.subsystems == ["com.example.foo"])
+    }
+
+    @Test func logFaultsWithNoSubsystemReadsEverything() {
+        let instrument = LogFaults(config: .init(subsystem: nil))
+        #expect(instrument.reader.subsystems == [])
+    }
+
+    @Test func logSubsystemsScopesTheReaderToTheConfiguredSubsystem() {
+        let instrument = LogSubsystems(config: .init(subsystem: "com.example.foo"))
+        #expect(instrument.reader.subsystems == ["com.example.foo"])
+    }
+
+    @Test func logSubsystemsWithNoSubsystemReadsEverything() {
+        let instrument = LogSubsystems(config: .init(subsystem: nil))
+        #expect(instrument.reader.subsystems == [])
+    }
+}
