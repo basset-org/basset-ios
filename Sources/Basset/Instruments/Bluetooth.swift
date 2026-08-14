@@ -4,7 +4,7 @@ import ObjectiveC
 
 /// Rides an app-created `CBCentralManager`; constructing one would raise the usage prompt.
 /// Never reads a peripheral — its identifier, name, and service UUID are personal/health data.
-final class CentralState: StreamingInstrument, LoadTimeInstall {
+final class CentralState: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .bluetoothCentralState
     static let entity = Entity.ID.bluetoothCentral
 

@@ -6,7 +6,7 @@ import UIKit
 #endif
 
 /// Without this, backgrounded silence looks like nothing happened; emitted only on change.
-final class AppState: StreamingInstrument {
+final class AppState: Streamable, PlainInstrument {
     static let id: InstrumentID = .appStateChanges
     static let entity = Entity.ID.appLifecycle
 
@@ -80,7 +80,7 @@ final class AppState: StreamingInstrument {
 }
 
 /// Jetsam/watchdog kill via `SIGKILL`, no handler — written before death, read back next launch.
-final class LastRunEnded: StreamingInstrument {
+final class LastRunEnded: Streamable, PlainInstrument {
     static let id: InstrumentID = .lastRunEnded
     static let entity = Entity.ID.appExit
 

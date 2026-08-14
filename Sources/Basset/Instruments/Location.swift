@@ -3,7 +3,7 @@ import Foundation
 import ObjectiveC
 
 /// Catches a delegate missing `didUpdateLocations:` by swizzling the class, never a proxy.
-final class DelegateSilence: StreamingInstrument, LoadTimeInstall {
+final class DelegateSilence: Streamable, PlainInstrument, LoadTimeInstall {
     private struct State {
         var startedAt: MonotonicTime?
         var delivered: UInt64 = 0

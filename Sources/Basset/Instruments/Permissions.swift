@@ -6,7 +6,7 @@ import UIKit
 #endif
 
 /// Polls on foreground; no framework posts a change — Settings changes usually relaunch the app.
-final class PermissionChanges: StreamingInstrument {
+final class PermissionChanges: Streamable, PlainInstrument {
     static let id: InstrumentID = .permissionChanges
     static let entity = Entity.ID.permission
 
@@ -375,7 +375,7 @@ extension PermissionFinding {
 }
 
 /// Pairs status with the usage-description key: `notDetermined` with none declared crashes on ask.
-final class PermissionStatus: SnapshotInstrument {
+final class PermissionStatus: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .permissionStatus
     static let entity = Entity.ID.permission
 

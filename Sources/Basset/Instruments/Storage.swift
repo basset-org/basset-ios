@@ -2,7 +2,7 @@ import BassetECS
 import Foundation
 
 /// Core Data churn aggregated per flush window — catches mutations that never reach a save.
-final class CoreDataChanges: StreamingInstrument {
+final class CoreDataChanges: Streamable, PlainInstrument {
     private struct Tallied {
         var notifications: UInt64 = 0
         var inserted = 0
@@ -174,7 +174,7 @@ struct ManagedObjectContextFacts {
 }
 
 /// Save duration paired from will-save/did-save — both post on the thread doing the work.
-final class CoreDataSave: StreamingInstrument {
+final class CoreDataSave: Streamable, PlainInstrument {
     static let id: InstrumentID = .coreDataSave
     static let entity = Entity.ID.managedObjectContext
 

@@ -3,7 +3,7 @@ import Foundation
 import ObjectiveC
 
 /// Defines MKMapView's tile-loading callbacks when the app has none; never reads coordinates.
-final class TileLoading: StreamingInstrument, LoadTimeInstall {
+final class TileLoading: Streamable, PlainInstrument, LoadTimeInstall {
     private struct State {
         var completed: UInt64 = 0
         var failures: UInt64 = 0

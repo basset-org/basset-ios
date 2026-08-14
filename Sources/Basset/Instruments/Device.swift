@@ -1,7 +1,7 @@
 import BassetECS
 import Foundation
 
-final class DeviceInfo: SnapshotInstrument {
+final class DeviceInfo: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .deviceInfo
     static let entity = Entity.ID.device
 

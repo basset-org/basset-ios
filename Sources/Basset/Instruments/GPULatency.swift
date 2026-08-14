@@ -11,7 +11,7 @@ import UIKit
 #endif
 
 /// GPU busyness measured by trivial work and timing the wait — the SDK's one active instrument.
-final class GPULatency: StreamingInstrument {
+final class GPULatency: Streamable, PlainInstrument {
     enum Slot {
         static let submitted: TallySlot = .init(0)
         static let returned: TallySlot = .init(1)

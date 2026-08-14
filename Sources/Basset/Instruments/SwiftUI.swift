@@ -6,7 +6,7 @@ import UIKit
 #endif
 
 /// Change count on SwiftUI's display list — item count near 1 means UIKit-backed, not a loop.
-final class DisplayListChurn: StreamingInstrument {
+final class DisplayListChurn: Streamable, PlainInstrument {
     private struct Sample: Equatable {
         let itemCount: Int
         let seed: UInt32?
@@ -182,7 +182,7 @@ final class DisplayListChurn: StreamingInstrument {
 }
 
 /// Which SwiftUI screen appeared, by view and controller type — a title would be the user's.
-final class HostAppear: StreamingInstrument {
+final class HostAppear: Streamable, PlainInstrument {
     private struct State {
         var loadedAt: [ObjectIdentifier: UInt64] = [:]
         var identifiers: [ObjectIdentifier: UInt32] = [:]
@@ -290,7 +290,7 @@ final class HostAppear: StreamingInstrument {
 }
 
 /// Hosting-view layout timing — hook only counts; more induces AttributeGraph cycles.
-final class HostUpdates: StreamingInstrument, @unchecked Sendable {
+final class HostUpdates: Streamable, PlainInstrument, @unchecked Sendable {
     private struct Hooked {
         var classes: Set<ObjectIdentifier> = []
         var lastName: String?
@@ -421,7 +421,7 @@ final class HostUpdates: StreamingInstrument, @unchecked Sendable {
 }
 
 /// Sheets and modal screens presenting and dismissing, seen through the UIKit underneath.
-final class Presentation: StreamingInstrument {
+final class Presentation: Streamable, PlainInstrument {
     static let id: InstrumentID = .swiftUIPresentation
     static let entity = Entity.ID.swiftUIPresentation
 
@@ -563,7 +563,7 @@ struct RuntimeIssueDigest {
 }
 
 /// SwiftUI's undefined-behaviour faults, logged with or without a debugger attached.
-final class RuntimeIssues: StreamingInstrument {
+final class RuntimeIssues: Streamable, PlainInstrument {
     static let id: InstrumentID = .swiftUIRuntimeIssues
     static let entity = Entity.ID.swiftUIRuntimeIssue
 

@@ -5,7 +5,7 @@ import Foundation
 import UIKit
 #endif
 
-final class ViewControllerAppear: StreamingInstrument {
+final class ViewControllerAppear: Streamable, PlainInstrument {
     static let id: InstrumentID = .viewControllerAppear
     static let entity = Entity.ID.screen
 
@@ -31,7 +31,7 @@ final class ViewControllerAppear: StreamingInstrument {
     }
 }
 
-final class ViewLayoutPass: StreamingInstrument {
+final class ViewLayoutPass: Streamable, PlainInstrument {
     static let id: InstrumentID = .viewLayoutPass
     static let entity = Entity.ID.viewLayout
 
@@ -74,7 +74,7 @@ final class ViewLayoutPass: StreamingInstrument {
 }
 
 /// Touch begin/end/cancel are timestamped; `moved` events are counted once a second instead.
-final class WindowTouches: StreamingInstrument {
+final class WindowTouches: Streamable, PlainInstrument {
     private struct Moves {
         var count: UInt32 = 0
         var distancePoints: Double = 0

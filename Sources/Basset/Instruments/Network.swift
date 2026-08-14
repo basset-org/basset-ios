@@ -6,7 +6,7 @@ import Network
 #endif
 
 /// No interception — `NWPathMonitor` already reports every change on its own.
-final class PathTransitions: StreamingInstrument, @unchecked Sendable {
+final class PathTransitions: Streamable, PlainInstrument, @unchecked Sendable {
     #if canImport(Network)
     private struct Snapshot: Equatable {
         let interface: String
@@ -109,7 +109,7 @@ final class PathTransitions: StreamingInstrument, @unchecked Sendable {
 }
 
 /// What a `URLSession` was configured to allow, described off `taskMetrics`'s own hook.
-final class SessionConfiguration: StreamingInstrument {
+final class SessionConfiguration: Streamable, PlainInstrument {
     static let id: InstrumentID = .sessionConfiguration
     static let entity = Entity.ID.networkSession
 
@@ -186,7 +186,7 @@ final class SessionConfiguration: StreamingInstrument {
     func stopObserving() {}
 }
 
-final class TaskMetrics: StreamingInstrument, LoadTimeInstall {
+final class TaskMetrics: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .urlSessionTaskMetrics
     static let entity = Entity.ID.networkTask
 
@@ -680,7 +680,7 @@ enum TransactionConnection {
 #endif
 
 /// This build's ATS posture — debug exemptions don't apply in production.
-final class TransportSecurity: SnapshotInstrument {
+final class TransportSecurity: Snapshotable, PlainInstrument {
     /// Named rather than reported as raw `Info.plist` keys.
     private enum Relaxation: String, CaseIterable {
         case webContent = "NSAllowsArbitraryLoadsInWebContent"

@@ -5,7 +5,7 @@ import Foundation
 import UIKit
 #endif
 
-final class MemoryFootprint: SnapshotInstrument {
+final class MemoryFootprint: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .memoryFootprint
     static let entity = Entity.ID.process
 
@@ -17,7 +17,7 @@ final class MemoryFootprint: SnapshotInstrument {
 }
 
 /// Watches both the system-wide Mach pressure source and app-scoped didReceiveMemoryWarning.
-final class MemoryPressure: StreamingInstrument {
+final class MemoryPressure: Streamable, PlainInstrument {
     static let id: InstrumentID = .memoryPressure
     static let entity = Entity.ID.memoryPressure
 

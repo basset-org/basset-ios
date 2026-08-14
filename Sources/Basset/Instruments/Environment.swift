@@ -6,7 +6,7 @@ import UIKit
 #endif
 
 /// Named `AccessibilityFlags` — UIKit's own `AccessibilitySettings` would collide.
-final class AccessibilityFlags: StreamingInstrument {
+final class AccessibilityFlags: Streamable, PlainInstrument {
     static let id: InstrumentID = .accessibilitySettings
     static let entity = Entity.ID.deviceSetting
 
@@ -124,7 +124,7 @@ final class AccessibilityFlags: StreamingInstrument {
 }
 
 /// Text size the user chose, and whether it's one of the 5 accessibility sizes above normal.
-final class DynamicType: StreamingInstrument {
+final class DynamicType: Streamable, PlainInstrument {
     static let id: InstrumentID = .dynamicType
     static let entity = Entity.ID.deviceSetting
 
@@ -193,7 +193,7 @@ final class DynamicType: StreamingInstrument {
 }
 
 /// Language, region, calendar — reported as codes; display names would localise.
-final class LocaleSettings: SnapshotInstrument {
+final class LocaleSettings: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .localeSettings
     static let entity = Entity.ID.deviceSetting
 

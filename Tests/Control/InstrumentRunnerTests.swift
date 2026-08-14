@@ -135,7 +135,7 @@ private final class Recorder: @unchecked Sendable {
     }
 }
 
-private protocol FakeInstrument: StreamingInstrument {
+private protocol FakeInstrument: Streamable, PlainInstrument {
     var recorder: Recorder { get }
 }
 
@@ -176,7 +176,7 @@ private final class FakeThermal: FakeInstrument {
     @objc dynamic func work() {}
 }
 
-private final class FakeHooked: StreamingInstrument {
+private final class FakeHooked: Streamable, PlainInstrument {
     static let id: InstrumentID = .viewLayoutPass
     static let name = "uikit.view.layoutPass"
     static let domain: Domain = .uikit
@@ -195,7 +195,7 @@ private final class FakeHooked: StreamingInstrument {
 }
 
 /// The fault path — one instrument detects, the runtime asks whoever else is active.
-private final class FakeDetector: StreamingInstrument, @unchecked Sendable {
+private final class FakeDetector: Streamable, PlainInstrument, @unchecked Sendable {
     static let id: InstrumentID = .mainThreadHang
     static let name = "concurrency.mainThreadHang"
     static let domain: Domain = .concurrency
@@ -229,7 +229,7 @@ private final class FakeDetector: StreamingInstrument, @unchecked Sendable {
     }
 }
 
-private final class FakeContributor: FaultInstrument, @unchecked Sendable {
+private final class FakeContributor: Faultable, PlainInstrument, @unchecked Sendable {
     static let id: InstrumentID = .threadSnapshot
     static let name = "runtime.threadSnapshot"
     static let domain: Domain = .runtime
@@ -1299,7 +1299,7 @@ private struct FakeConfig: Decodable, Sendable, Equatable {
     let thresholdMs: Int
 }
 
-private final class FakeConfigurable: ConfigurableStreamingInstrument {
+private final class FakeConfigurable: Streamable, Configurable {
     static let id: InstrumentID = .queueLatency
     static let entity = Entity.ID.dispatchQueue
     static let defaultConfig: FakeConfig = .init(thresholdMs: 250)
@@ -1525,7 +1525,7 @@ private enum SlotProbe {
 }
 
 /// Declares more counters than default and writes the highest, like render.frame.pacing.
-private final class SlotHungry: StreamingInstrument {
+private final class SlotHungry: Streamable, PlainInstrument {
     static let id: InstrumentID = .framePacing
     static let entity = Entity.ID.displayUpdate
     static let tallySlots = 6
@@ -1541,7 +1541,7 @@ private final class SlotHungry: StreamingInstrument {
 }
 
 /// Declares nothing, so the shared default decides its slot count; writes both sides.
-private final class SlotDefaulting: StreamingInstrument {
+private final class SlotDefaulting: Streamable, PlainInstrument {
     static let id: InstrumentID = .memoryFootprint
     static let entity = Entity.ID.process
 

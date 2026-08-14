@@ -6,7 +6,7 @@ import UIKit
 #endif
 
 /// UIUpdateLink over CADisplayLink: unpaused CADisplayLink fires every vsync even when idle.
-final class FramePacing: StreamingInstrument {
+final class FramePacing: Streamable, PlainInstrument {
     private enum Slot {
         static let frames: TallySlot = .init(0)
         static let misses: TallySlot = .init(1)

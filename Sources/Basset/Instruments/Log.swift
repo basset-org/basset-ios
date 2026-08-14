@@ -133,7 +133,7 @@ struct LogTraffic {
 }
 
 /// A message can carry what an app logged as public; token-shaped runs are scrubbed out.
-final class LogFaults: StreamingInstrument {
+final class LogFaults: Streamable, PlainInstrument {
     static let id: InstrumentID = .logFaults
     static let entity = Entity.ID.logRecord
 
@@ -216,7 +216,7 @@ final class LogFaults: StreamingInstrument {
 }
 
 /// Who is logging and how much — no subsystem list exists, so this reads the process itself.
-final class LogSubsystems: StreamingInstrument {
+final class LogSubsystems: Streamable, PlainInstrument {
     static let id: InstrumentID = .logSubsystems
     static let entity = Entity.ID.logRecord
 
