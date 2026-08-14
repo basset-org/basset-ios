@@ -29,6 +29,11 @@ struct HangWatch {
 
     let threshold: UInt64
 
+    /// True exactly on the poll a debugger newly attaches — never repeated while it stays attached.
+    static func debuggerSuppressionBegan(was wasDebugged: Bool, is debugged: Bool) -> Bool {
+        debugged && !wasDebugged
+    }
+
     func step(_ state: inout State, _ poll: Poll) -> Verdict {
         // A hang ending backgrounded, suspended or debugged can't be measured, so nothing emits.
         guard !poll.debugged, poll.foreground, poll.overshoot < seconds(threshold) else {
@@ -134,6 +139,7 @@ final class MainThreadHang: Streamable, Configurable {
             1000000000
         let watching = Thread { [heartbeat, watch, clock] in
             var state = HangWatch.State()
+            var wasDebugged = false
 
             while !Thread.current.isCancelled {
                 let deadline = Date().addingTimeInterval(interval)
@@ -142,6 +148,14 @@ final class MainThreadHang: Streamable, Configurable {
                     continue
                 }
 
+                let debugged = Debugger.isAttached
+                if HangWatch.debuggerSuppressionBegan(was: wasDebugged, is: debugged) {
+                    context.emit { out in
+                        out.put(.mechanismStatus("suppressed: debugger attached"))
+                    }
+                }
+                wasDebugged = debugged
+
                 let verdict = watch.step(
                     &state,
                     HangWatch.Poll(
@@ -149,7 +163,7 @@ final class MainThreadHang: Streamable, Configurable {
                         now: clock.now(),
                         overshoot: Date().timeIntervalSince(deadline),
                         foreground: ApplicationPresence.isForeground,
-                        debugged: Debugger.isAttached
+                        debugged: debugged
                     )
                 )
 

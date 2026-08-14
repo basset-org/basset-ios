@@ -157,6 +157,13 @@ struct HangWatchTests {
         #expect(verdict == .quiet)
     }
 
+    @Test func debuggerSuppressionIsReportedOnceOnTheTransitionIn() {
+        #expect(HangWatch.debuggerSuppressionBegan(was: false, is: true))
+        #expect(!HangWatch.debuggerSuppressionBegan(was: true, is: true))
+        #expect(!HangWatch.debuggerSuppressionBegan(was: true, is: false))
+        #expect(!HangWatch.debuggerSuppressionBegan(was: false, is: false))
+    }
+
     /// A guard interrupting a hang leaves `began` with no `ended` — no unmeasured duration ships.
     @Test func aHangInterruptedByAGuardEndsSilently() {
         var state = HangWatch.State()
