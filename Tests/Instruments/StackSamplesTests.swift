@@ -158,6 +158,23 @@ struct StackWindowTests {
         #expect(window.samplesTaken == 0)
         #expect(window.withoutStack == 0)
     }
+
+    /// Carried from the sample that actually found the lock held, not read again later.
+    @Test func aLockFoundHeldAtTheTimeOfTheSampleIsRemembered() {
+        var window = StackWindow()
+
+        window.record(nil, exclusiveHeld: true)
+
+        #expect(window.lockTimedOut)
+    }
+
+    @Test func anUnreadableSampleWithTheLockFreeIsNotMistakenForATimeout() {
+        var window = StackWindow()
+
+        window.record(nil, exclusiveHeld: false)
+
+        #expect(window.lockTimedOut == false)
+    }
 }
 
 struct StackSampleReadingTests {
@@ -238,6 +255,20 @@ struct StackSampleReadingTests {
         #expect(readings.count == 1)
         #expect(rendered(.mechanismStatus, in: readings[0])?.contains("unavailable") == true)
         #expect(rendered(.sampleCount, in: readings[0]) == nil)
+    }
+
+    /// The window carries what the sampling thread saw — a flush reading the lock again, later
+    /// and off that thread, would usually find a genuinely timed-out holder already gone.
+    @Test func aWindowWhereTheLockWasFoundHeldReportsTheTimeoutRatherThanAMissingThread() {
+        var window = StackWindow()
+        window.record(nil, exclusiveHeld: true)
+
+        let readings = emit(window)
+
+        #expect(
+            rendered(.mechanismStatus, in: readings[0])
+                == "unavailable: another walk held the lock past its timeout"
+        )
     }
 
     @Test func moreDistinctStacksThanTheCapReportTheTruncation() {

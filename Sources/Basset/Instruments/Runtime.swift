@@ -92,8 +92,8 @@ final class StackSamples: Streamable, Configurable {
     private final class Samples: @unchecked Sendable {
         private let guarded: Mutex<StackWindow> = .init(.init())
 
-        func record(_ frames: [UInt64]?) {
-            guarded.withLock { $0.record(frames) }
+        func record(_ frames: [UInt64]?, exclusiveHeld: Bool = false) {
+            guarded.withLock { $0.record(frames, exclusiveHeld: exclusiveHeld) }
         }
 
         func close() -> StackWindow {
@@ -178,7 +178,7 @@ final class StackSamples: Streamable, Configurable {
             }
 
             out.put(.windowNanoseconds(elapsed.nanoseconds))
-            out.put(.mechanismStatus(Self.unreadableStatus()))
+            out.put(.mechanismStatus(Self.unreadableStatus(exclusiveHeld: closed.lockTimedOut)))
             return
         }
 
@@ -225,7 +225,13 @@ final class StackSamples: Streamable, Configurable {
                     continue
                 }
 
-                samples.record(walker.walkMainThread())
+                // Read here, on this thread, right after the walk — not later at flush, when
+                // a genuinely timed-out lock has usually already been released by its holder.
+                if let frames = walker.walkMainThread() {
+                    samples.record(frames)
+                } else {
+                    samples.record(nil, exclusiveHeld: ThreadWalker.exclusiveIsHeld())
+                }
             }
         }
         sampling.name = QueueLabel.stackSampler
@@ -261,6 +267,9 @@ struct StackWindow {
     private(set) var samplesTaken: UInt64 = 0
     private(set) var unreadable: UInt64 = 0
     private(set) var withoutStack: UInt64 = 0
+    /// Set from the sampling thread, right after a walk found the lock held — a flush reading it
+    /// later, off that thread, would catch the lock free again after a genuine timeout.
+    private(set) var lockTimedOut = false
 
     private var counted: [Int: SampledStack] = [:]
 
@@ -268,9 +277,12 @@ struct StackWindow {
         counted.values.sorted { $0.hits > $1.hits }
     }
 
-    mutating func record(_ frames: [UInt64]?) {
+    mutating func record(_ frames: [UInt64]?, exclusiveHeld: Bool = false) {
         guard let frames else {
             unreadable += 1
+            if exclusiveHeld {
+                lockTimedOut = true
+            }
             return
         }
 

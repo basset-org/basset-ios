@@ -33,7 +33,6 @@ struct RunRecord: Equatable {
         static let cleanExit = 64
         static let appVersionLength = 65
         static let appVersion = 66
-        static let appVersionCapacity = 30
         static let bootTime = 96
         static let isSimulator = 104
         static let debuggerAttached = 105
@@ -45,6 +44,8 @@ struct RunRecord: Equatable {
     static let magic: UInt32 = 0x42525231
     static let version: UInt16 = 2
     static let size = 137
+    /// A caller comparing a live version string against a stored one truncates to this too.
+    static let appVersionCapacity = 30
 
     var launchId: UInt64 = 0
     var startedAtMicroseconds: UInt64 = 0
@@ -122,7 +123,7 @@ struct RunRecord: Equatable {
             fromByteOffset: Offset.appVersionLength,
             as: UInt8.self
         ))
-        if length > 0, length <= Offset.appVersionCapacity {
+        if length > 0, length <= appVersionCapacity {
             let text = UnsafeRawBufferPointer(
                 start: bytes.advanced(by: Offset.appVersion),
                 count: length
@@ -207,7 +208,7 @@ struct RunRecord: Equatable {
             as: UInt8.self
         )
 
-        let text = Array(appVersion.utf8.prefix(Offset.appVersionCapacity))
+        let text = Array(appVersion.utf8.prefix(Self.appVersionCapacity))
         bytes.storeBytes(
             of: UInt8(text.count),
             toByteOffset: Offset.appVersionLength,

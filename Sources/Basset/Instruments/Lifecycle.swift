@@ -89,7 +89,8 @@ final class LastRunEnded: Streamable, PlainInstrument {
 
     private static let stampInterval: TimeInterval = 1
 
-    /// Build included — a TestFlight update can bump only `CFBundleVersion`.
+    /// Build included — a TestFlight update can bump only `CFBundleVersion`. Truncated to what
+    /// `RunRecord` can actually store, or a longer live value would never compare equal to it.
     fileprivate static var appVersion: String {
         let bundle = Bundle.main
         let short = bundle
@@ -99,7 +100,11 @@ final class LastRunEnded: Streamable, PlainInstrument {
         }
 
         let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
-        return build.isEmpty ? short : "\(short)+\(build)"
+        let combined = build.isEmpty ? short : "\(short)+\(build)"
+        return String(
+            decoding: combined.utf8.prefix(RunRecord.appVersionCapacity),
+            as: UTF8.self
+        )
     }
 
     fileprivate static var osVersion: String {
