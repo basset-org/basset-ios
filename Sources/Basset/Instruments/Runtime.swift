@@ -57,6 +57,7 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
         for stack in stacks.dropFirst() {
             out.also(Self.entity) { thread in describe(stack, into: &thread) }
         }
+        // A separate dimension, not nested under any one thread — its own root, not a fake parent.
         for image in BinaryImages.covering(stacks.flatMap(\.frames))
             where reportedImages.insert(image.uuid).inserted
         {
@@ -64,11 +65,15 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
                 entry.put(.imageName(image.name))
                 entry.put(.imageLoadAddress(image.loadAddress))
                 entry.put(.imageUUID(image.uuid))
+                entry.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             }
         }
     }
 
+    /// One thread among others, not nested under any of them — a flat list, so `parent` is
+    /// always the reading's own root.
     private func describe(_ stack: ThreadStack, into out: inout Readings) {
+        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         out.put(.threadIndex(UInt32(stack.index)))
         out.put(.threadName(stack.name))
         out.put(.threadIsMain(stack.isMain))
@@ -156,6 +161,7 @@ final class StackSamples: Streamable, Configurable {
         out.put(.unwindFailureCount(closed.withoutStack))
         out.put(.windowNanoseconds(elapsed.nanoseconds))
         out.put(.threadIsMain(true))
+        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         guard let stack else {
             return
         }
@@ -179,6 +185,7 @@ final class StackSamples: Streamable, Configurable {
 
             out.put(.windowNanoseconds(elapsed.nanoseconds))
             out.put(.mechanismStatus(Self.unreadableStatus(exclusiveHeld: closed.lockTimedOut)))
+            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 
@@ -202,6 +209,7 @@ final class StackSamples: Streamable, Configurable {
                 sibling.put(
                     .mechanismStatus("truncated: \(hottest.count - Self.stacksPerWindow) more")
                 )
+                sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             }
         }
 
@@ -213,6 +221,7 @@ final class StackSamples: Streamable, Configurable {
                 entry.put(.imageName(image.name))
                 entry.put(.imageLoadAddress(image.loadAddress))
                 entry.put(.imageUUID(image.uuid))
+                entry.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             }
         }
     }
@@ -322,6 +331,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
     ) {
         guard !images.isEmpty else {
             out.put(.mechanismStatus("unavailable: dyld listed no images"))
+            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 
@@ -331,6 +341,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
             // Nothing but the OS — the answer for an app with no linked dependencies.
             out.put(.occurrenceCount(UInt64(images.count)))
             out.put(.bundledImageCount(0))
+            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 
@@ -347,6 +358,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
 
         out.also(Self.entity) { sibling in
             sibling.put(.mechanismStatus("truncated: \(bundled.count - ceiling) more"))
+            sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         }
     }
 
@@ -363,6 +375,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
         out.put(.imageLoadAddress(image.loadAddress))
         out.put(.imageUUID(image.uuid))
         out.put(.imageTextBytes(image.size))
+        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
     }
 
     func reading(_ out: inout Readings) {
@@ -410,6 +423,7 @@ final class MethodOwners: Snapshotable, PlainInstrument {
     static func write(_ owners: [Owner], into out: inout Readings) {
         guard let first = owners.first else {
             out.put(.mechanismStatus("unavailable: none of the watched classes are loaded"))
+            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 
@@ -469,6 +483,7 @@ final class MethodOwners: Snapshotable, PlainInstrument {
         out.put(.methodName(owner.selector))
         out.put(.implementationInMappedImage(owner.isInMappedImage))
         out.put(.ownedByDeclaringImage(owner.isDeclaringImage))
+        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         // Absent, not empty — never a blank string to misread as an image.
         guard owner.isInMappedImage else {
             return

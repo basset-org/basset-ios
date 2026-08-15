@@ -237,6 +237,9 @@ public extension Component.ID {
         case .frameHeightPoints: "Height (pt)"
         case .runtimeClassName: "Runtime class"
         case .gestureRecognizerState: "Gesture state"
+        case .entityId: "Entity ID"
+        case .entityParent: "Parent ID"
+        case .nestedLevel: "Nesting depth"
         }
     }
 }

@@ -28,6 +28,14 @@ public struct Readings {
         record.add(component)
     }
 
+    /// `entityId`/`entityParent`/`nestedLevel` together, so a call site writes one line rather
+    /// than three. `parent` is `0` for a root — a reading can have more than one.
+    public mutating func putStructure(id: UInt32, parent: UInt32, level: UInt32) {
+        put(.entityId(id))
+        put(.entityParent(parent))
+        put(.nestedLevel(level))
+    }
+
     /// A second entity from the same firing — splits a thread snapshot's stacks apart.
     public mutating func also(_ entity: Entity.ID,
                               _ build: (inout Readings) -> Void)

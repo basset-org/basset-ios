@@ -86,15 +86,18 @@ final class AccessibilityFlags: Streamable, PlainInstrument {
         guard let first = enabled.first else {
             // Reported as a finding, not an empty reading — rules out this whole domain.
             out.put(.mechanismStatus("every accessibility setting is at its default"))
+            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 
         out.put(.settingName(first.name))
         out.put(.settingEnabled(true))
+        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         for setting in enabled.dropFirst() {
             out.also(Self.entity) { sibling in
                 sibling.put(.settingName(setting.name))
                 sibling.put(.settingEnabled(true))
+                sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             }
         }
     }

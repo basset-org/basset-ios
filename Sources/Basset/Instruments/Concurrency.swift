@@ -300,6 +300,7 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
     static func write(_ samples: [ThreadSample], into out: inout Readings) {
         guard let first = samples.first else {
             out.put(.mechanismStatus("unavailable: the task listed no threads"))
+            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 
@@ -320,6 +321,7 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
         out.also(Self.entity) { sibling in
             sibling.put(.occurrenceCount(UInt64(samples.count)))
             sibling.put(.mechanismStatus("truncated: \(samples.count - ceiling) more"))
+            sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         }
     }
 
@@ -345,6 +347,7 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
         // The pair only, no verdict — per-class base priorities aren't established on a phone.
         out.put(.threadPriority(sample.currentPriority))
         out.put(.threadRequestedQos(sample.requestedQos))
+        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
     }
 
     func reading(_ out: inout Readings) {

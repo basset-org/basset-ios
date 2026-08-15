@@ -40,6 +40,18 @@ struct TouchIdentifiersTests {
         #expect(ids.end(touch) == nil)
     }
 
+    /// `stopObserving` replaces the whole tracker with a fresh one — a local counter would
+    /// restart at 1 and collide with an id a touch begun before the stop is still carrying.
+    @Test func idsDoNotResetWhenTheTrackerIsReplaced() {
+        var before = TouchIdentifiers()
+        let earlier = before.begin(ObjectIdentifier(Probe()))
+
+        var after = TouchIdentifiers()
+        let later = after.begin(ObjectIdentifier(Probe()))
+
+        #expect(later > earlier)
+    }
+
     @Test func idsIncreaseAcrossManyTouches() {
         var ids = TouchIdentifiers()
         let assigned = (0 ..< 100).map { _ in ids.begin(ObjectIdentifier(Probe())) }

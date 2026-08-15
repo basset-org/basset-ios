@@ -78,12 +78,14 @@ final class ViewLayoutPass: Streamable, PlainInstrument {
 /// it's testable without a `UITouch`, which has no reachable initializer.
 struct TouchIdentifiers {
     private var assigned: [ObjectIdentifier: UInt32] = [:]
-    private var next: UInt32 = 0
 
+    /// Drawn from the process-wide counter, not a local one that `stopObserving` could reset
+    /// to zero — a touch begun before a stop and ended after a restart must not collide with
+    /// one a fresh activation assigns the same small number.
     mutating func begin(_ touch: ObjectIdentifier) -> UInt32 {
-        next &+= 1
-        assigned[touch] = next
-        return next
+        let id = EntityIdentity.next()
+        assigned[touch] = id
+        return id
     }
 
     /// `nil` only if `begin` was never called for this touch — teardown mid-gesture.
@@ -225,28 +227,33 @@ final class WindowTouches: Streamable, Configurable {
         let location = touch.location(in: nil)
         let key = ObjectIdentifier(touch)
 
-        let id: UInt32? =
+        // Pairs this touch's own began and ended/cancelled readings together — unrelated to
+        // entityId below, which names this one reading, not the physical touch across its
+        // lifecycle.
+        let touchId: UInt32? =
             if phase == .began {
                 touchIds.withLock { $0.begin(key) }
             } else {
                 touchIds.withLock { $0.end(key) }
             }
+        let id = EntityIdentity.next()
 
         context.emit { out in
             out.put(.touchPhase(Self.name(of: phase)))
             out.put(.activeTouchCount(UInt32(clamping: active)))
             out.put(.originXPoints(Double(location.x)))
             out.put(.originYPoints(Double(location.y)))
-            if let id {
-                out.put(.touchId(id))
+            if let touchId {
+                out.put(.touchId(touchId))
             }
+            out.putStructure(id: id, parent: 0, level: 0)
 
-            guard hierarchy, phase == .began, let id, let window = touch.window else {
+            guard hierarchy, phase == .began, let window = touch.window else {
                 return
             }
 
             out.also(.viewHierarchy) { hier in
-                ViewHierarchy.writeMatches(at: location, in: window, touchId: id, into: &hier)
+                ViewHierarchy.writeMatches(at: location, in: window, parent: id, into: &hier)
             }
         }
     }
@@ -268,6 +275,110 @@ final class ViewHierarchy: Snapshotable, Configurable {
         let y: Double
     }
 
+    #if canImport(UIKit)
+    /// One matched view, with its place in the *real* UI tree already resolved — `parent` is
+    /// another match's `id` (or the caller-supplied root parent for the window itself), never
+    /// invented, because a child only ever appears here when its own parent already matched.
+    private struct Match {
+        let view: UIView
+        let id: UInt32
+        let parent: UInt32
+        let level: UInt32
+    }
+
+    /// The on-demand config path: resolves the key window itself, since no touch supplies one.
+    static func write(at point: CGPoint, parent: UInt32, into out: inout Readings) {
+        guard let window = keyWindow() else {
+            out.put(.mechanismStatus("unavailable: no key window"))
+            out.putStructure(id: EntityIdentity.next(), parent: parent, level: 0)
+            return
+        }
+
+        writeMatches(at: point, in: window, parent: parent, into: &out)
+    }
+
+    /// The walk itself, against a caller-supplied root. `WindowTouches` calls this directly
+    /// with the touch's own window and its own `entityId` as `parent` — the only way to answer
+    /// "what got hit" without a round trip the hierarchy might not survive. Also reachable
+    /// directly against a constructed view tree, since a test bundle process has no key window
+    /// of its own.
+    static func writeMatches(
+        at point: CGPoint,
+        in root: UIView,
+        parent: UInt32,
+        into out: inout Readings
+    ) {
+        let hits = matches(at: point, in: root, parent: parent, level: 0)
+        guard let first = hits.first else {
+            out.put(.mechanismStatus("unavailable: nothing at that point"))
+            out.putStructure(id: EntityIdentity.next(), parent: parent, level: 0)
+            return
+        }
+
+        put(first, in: root, into: &out)
+        for match in hits.dropFirst().prefix(ceiling - 1) {
+            out.also(Self.entity) { sibling in put(match, in: root, into: &sibling) }
+        }
+
+        guard hits.count > ceiling else {
+            return
+        }
+
+        out.also(Self.entity) { sibling in
+            sibling.put(.mechanismStatus("truncated: \(hits.count - ceiling) more"))
+            sibling.putStructure(id: EntityIdentity.next(), parent: parent, level: 0)
+        }
+    }
+
+    /// `view.frame` is superview-relative — three levels deep that is not the window
+    /// coordinate space this instrument promises, so `bounds` is converted to `root` instead.
+    private static func put(_ match: Match, in root: UIView, into out: inout Readings) {
+        let inRoot = match.view.convert(match.view.bounds, to: root)
+        out.put(.runtimeClassName(String(describing: type(of: match.view))))
+        out.put(.originXPoints(Double(inRoot.origin.x)))
+        out.put(.originYPoints(Double(inRoot.origin.y)))
+        out.put(.frameWidthPoints(Double(inRoot.width)))
+        out.put(.frameHeightPoints(Double(inRoot.height)))
+        out.putStructure(id: match.id, parent: match.parent, level: match.level)
+    }
+
+    /// Depth first, front to back: a subview drawn later sits on top of an earlier one, so its
+    /// own matches — and the matches of everything drawn on top of it — lead the result. Ids
+    /// are assigned parent-before-child as the walk descends, independent of that emission
+    /// order, so a child's `parent` always names a real ancestor's own id.
+    private static func matches(
+        at point: CGPoint,
+        in view: UIView,
+        parent: UInt32,
+        level: UInt32
+    ) -> [Match] {
+        guard !view.isHidden, view.alpha > 0.01, view.bounds.contains(point) else {
+            return []
+        }
+
+        let match = Match(view: view, id: EntityIdentity.next(), parent: parent, level: level)
+        var found: [Match] = [match]
+        for subview in view.subviews.reversed() {
+            found = matches(
+                at: subview.convert(point, from: view),
+                in: subview,
+                parent: match.id,
+                level: level + 1
+            ) + found
+        }
+        return found
+    }
+
+    private static func keyWindow() -> UIWindow? {
+        HostApplication.shared?
+            .connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
+    }
+    #endif
+
     static let id: InstrumentID = .viewHierarchy
     static let entity = Entity.ID.viewHierarchy
 
@@ -286,101 +397,9 @@ final class ViewHierarchy: Snapshotable, Configurable {
         #endif
     }
 
-    #if canImport(UIKit)
-    /// The on-demand config path: resolves the key window itself, since no touch supplies one.
-    static func write(at point: CGPoint, touchId: UInt32?, into out: inout Readings) {
-        guard let window = keyWindow() else {
-            out.put(.mechanismStatus("unavailable: no key window"))
-            if let touchId {
-                out.put(.touchId(touchId))
-            }
-            return
-        }
-
-        writeMatches(at: point, in: window, touchId: touchId, into: &out)
-    }
-
-    /// The walk itself, against a caller-supplied root. `WindowTouches` calls this directly
-    /// with the touch's own window — the only way to answer "what got hit" without a round
-    /// trip the hierarchy might not survive. Also reachable directly against a constructed
-    /// view tree, since a test bundle process has no key window of its own.
-    static func writeMatches(
-        at point: CGPoint,
-        in root: UIView,
-        touchId: UInt32?,
-        into out: inout Readings
-    ) {
-        let hits = matches(at: point, in: root)
-        guard let first = hits.first else {
-            out.put(.mechanismStatus("unavailable: nothing at that point"))
-            if let touchId {
-                out.put(.touchId(touchId))
-            }
-            return
-        }
-
-        put(first, in: root, touchId: touchId, into: &out)
-        for view in hits.dropFirst().prefix(ceiling - 1) {
-            out.also(Self.entity) { sibling in
-                put(view, in: root, touchId: touchId, into: &sibling)
-            }
-        }
-
-        guard hits.count > ceiling else {
-            return
-        }
-
-        out.also(Self.entity) { sibling in
-            sibling.put(.mechanismStatus("truncated: \(hits.count - ceiling) more"))
-        }
-    }
-
-    /// `view.frame` is superview-relative — three levels deep that is not the window
-    /// coordinate space this instrument promises, so `bounds` is converted to `root` instead.
-    private static func put(
-        _ view: UIView,
-        in root: UIView,
-        touchId: UInt32?,
-        into out: inout Readings
-    ) {
-        let inRoot = view.convert(view.bounds, to: root)
-        out.put(.runtimeClassName(String(describing: type(of: view))))
-        out.put(.originXPoints(Double(inRoot.origin.x)))
-        out.put(.originYPoints(Double(inRoot.origin.y)))
-        out.put(.frameWidthPoints(Double(inRoot.width)))
-        out.put(.frameHeightPoints(Double(inRoot.height)))
-        if let touchId {
-            out.put(.touchId(touchId))
-        }
-    }
-
-    /// Depth first, front to back: a subview drawn later sits on top of an earlier one, so its
-    /// own matches — and the matches of everything drawn on top of it — lead the result.
-    private static func matches(at point: CGPoint, in view: UIView) -> [UIView] {
-        guard !view.isHidden, view.alpha > 0.01, view.bounds.contains(point) else {
-            return []
-        }
-
-        var found: [UIView] = [view]
-        for subview in view.subviews.reversed() {
-            found = matches(at: subview.convert(point, from: view), in: subview) + found
-        }
-        return found
-    }
-
-    private static func keyWindow() -> UIWindow? {
-        HostApplication.shared?
-            .connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .filter { $0.activationState == .foregroundActive }
-            .flatMap(\.windows)
-            .first { $0.isKeyWindow }
-    }
-    #endif
-
     func reading(_ out: inout Readings) {
         #if canImport(UIKit)
-        Self.write(at: point, touchId: nil, into: &out)
+        Self.write(at: point, parent: 0, into: &out)
         #endif
     }
 }
