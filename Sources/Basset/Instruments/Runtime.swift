@@ -131,12 +131,15 @@ final class StackSamples: Streamable, Configurable {
         MainThreadPort.capture()
     }
 
-    /// The two reasons need different fixes, so the status says which one it was.
+    /// Each reason needs a different fix, so the status says which one it was.
     static func unreadableStatus(
-        sanitizerLoaded: Bool = ThreadWalker.isThreadSanitizerLoaded
+        sanitizerLoaded: Bool = ThreadWalker.isThreadSanitizerLoaded,
+        exclusiveHeld: Bool = ThreadWalker.exclusiveIsHeld()
     ) -> String {
         if sanitizerLoaded {
             "unavailable: a thread sanitizer is loaded"
+        } else if exclusiveHeld {
+            "unavailable: another walk held the lock past its timeout"
         } else {
             "unavailable: no main thread has been identified"
         }

@@ -216,6 +216,18 @@ struct StackSampleReadingTests {
             == "unavailable: no main thread has been identified")
     }
 
+    /// A timed-out lock must not read as a missing main thread either — the main thread exists.
+    @Test func theUnreadableStatusNamesAHeldLockRatherThanAMissingMainThread() {
+        #expect(
+            StackSamples.unreadableStatus(sanitizerLoaded: false, exclusiveHeld: true)
+                == "unavailable: another walk held the lock past its timeout"
+        )
+        #expect(
+            StackSamples.unreadableStatus(sanitizerLoaded: true, exclusiveHeld: true)
+                == "unavailable: a thread sanitizer is loaded"
+        )
+    }
+
     /// No main thread to read is a broken mechanism, distinct from a quiet one.
     @Test func aWindowThatCouldNotReadTheMainThreadSaysSo() {
         var window = StackWindow()

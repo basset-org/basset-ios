@@ -89,9 +89,17 @@ final class LastRunEnded: Streamable, PlainInstrument {
 
     private static let stampInterval: TimeInterval = 1
 
+    /// Build included — a TestFlight update can bump only `CFBundleVersion`.
     fileprivate static var appVersion: String {
-        Bundle.main
+        let bundle = Bundle.main
+        let short = bundle
             .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        guard !short.isEmpty else {
+            return ""
+        }
+
+        let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        return build.isEmpty ? short : "\(short)+\(build)"
     }
 
     fileprivate static var osVersion: String {
@@ -374,8 +382,8 @@ struct RunEnding: Equatable {
         if record.cleanExit {
             return "clean"
         }
-        // Zero means this run predates the field; nothing to compare, not a same-boot claim.
-        if record.bootTimeMicroseconds > 0,
+        // Zero means the field predates this run or its sysctl failed; not a same-boot claim.
+        if record.bootTimeMicroseconds > 0, currentBootTimeMicroseconds > 0,
            record.bootTimeMicroseconds != currentBootTimeMicroseconds
         {
             return "reboot"
@@ -383,7 +391,11 @@ struct RunEnding: Equatable {
         if record.debuggerAttached {
             return "debuggerAttached"
         }
-        if !record.appVersion.isEmpty, record.appVersion != currentAppVersion {
+        // An empty current version means Bundle.main had none to read, not that every prior
+        // version differs from it.
+        if !record.appVersion.isEmpty, !currentAppVersion.isEmpty,
+           record.appVersion != currentAppVersion
+        {
             return "appUpdated"
         }
         if !record.osVersion.isEmpty, record.osVersion != currentOSVersion {

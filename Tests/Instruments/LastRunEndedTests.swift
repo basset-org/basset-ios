@@ -222,6 +222,26 @@ struct RunEndingTests {
         )
     }
 
+    /// A failed sysctl reads as zero, not as evidence every stamped boot time was a reboot.
+    @Test func aCurrentBootTimeThatFailedToReadIsNotClaimedAsARebootEitherWay() {
+        var record = healthy()
+        record.bootTimeMicroseconds = 111
+
+        #expect(
+            RunEnding(record, currentBootTimeMicroseconds: 0).reason == "unexpected"
+        )
+    }
+
+    /// No `CFBundleShortVersionString` to read is not evidence every stamped version differs.
+    @Test func anUnreadableCurrentAppVersionIsNotClaimedAsAnUpdateEitherWay() {
+        var record = healthy()
+        record.appVersion = "1.0.0"
+
+        #expect(
+            RunEnding(record, currentAppVersion: "").reason == "unexpected"
+        )
+    }
+
     @Test func aDebuggerAttachedAtTheLastStampOutranksTheMeasuredSignals() {
         var record = starved()
         record.debuggerAttached = true
