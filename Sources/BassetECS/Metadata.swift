@@ -618,7 +618,7 @@ public extension InstrumentID {
                     InstrumentMetadata.ConfigField(
                         key: "windowSeconds",
                         type: .int(range: 1...30),
-                        description: "How often thread CPU usage is sampled and reported. Default 1."
+                        description: "How often thread CPU usage is sampled and reported. Default 5."
                     ),
                 ]
             )

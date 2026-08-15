@@ -269,12 +269,36 @@ struct StackSampleReadingTests {
         #expect(readings.contains { rendered(.imageUUID, in: $0) == executable.uuid })
     }
 
+    /// A binary's identity cannot change mid-launch, so a second window owes nothing new.
+    @Test func anImageAlreadyReportedByThisInstrumentIsNotReportedAgain() throws {
+        let executable = try #require(BinaryImages.mainExecutable())
+        let instrument = StackSamples(config: StackSamples.defaultConfig)
+        let elapsed = Context.FlushWindow(nanoseconds: 1000000000)
+
+        var firstWindow = StackWindow()
+        firstWindow.record([executable.loadAddress])
+        var firstOut = Readings(entity: StackSamples.entity, instrumentName: StackSamples.name)
+        instrument.write(firstWindow, over: elapsed, into: &firstOut)
+
+        var secondWindow = StackWindow()
+        secondWindow.record([executable.loadAddress])
+        var secondOut = Readings(entity: StackSamples.entity, instrumentName: StackSamples.name)
+        instrument.write(secondWindow, over: elapsed, into: &secondOut)
+
+        #expect(([firstOut.sealed()] + firstOut.sealedSiblings())
+            .contains { $0.id == .binaryImage })
+        #expect(
+            ([secondOut.sealed()] + secondOut.sealedSiblings())
+                .contains { $0.id == .binaryImage } == false
+        )
+    }
+
     private func emit(_ window: StackWindow) -> [Entity] {
         var out = Readings(
             entity: StackSamples.entity,
             instrumentName: StackSamples.name
         )
-        StackSamples.write(
+        StackSamples(config: StackSamples.defaultConfig).write(
             window,
             over: Context.FlushWindow(nanoseconds: 1000000000),
             into: &out
