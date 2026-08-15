@@ -87,20 +87,23 @@ struct ViewHierarchyWalkTests {
             .contains("truncated") == true)
     }
 
-    /// A naive prefix truncation can cut a match while keeping one of its own descendants —
-    /// the descendant's `entityParent` would then name a row this reading never emits.
+    /// Every flat child's `parent` is the root — which a naive prefix cut drops, since the
+    /// walk emits the root itself last. Genuinely truncated (`root.subviews.count` alone
+    /// clears the ceiling), unlike a single nested chain, where closing one match's ancestors
+    /// closes the whole chain and nothing is ever truncated.
     @Test func everyKeptRowsParentResolvesToAnEmittedEntityIdEvenWhenTruncated() {
         let root = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
-        var cursor = root
         for _ in 0 ..< (ViewHierarchy.ceiling + 10) {
-            let child = UIView(frame: cursor.bounds)
-            cursor.addSubview(child)
-            cursor = child
+            root.addSubview(UIView(frame: root.bounds))
         }
 
         let hits = rows(at: CGPoint(x: 5, y: 5), in: root)
-        let emittedIds = Set(hits.compactMap { value(.entityId, in: $0) })
 
+        #expect(hits.last
+            .flatMap { value(.mechanismStatus, in: $0) }?
+            .contains("truncated") == true)
+
+        let emittedIds = Set(hits.compactMap { value(.entityId, in: $0) })
         for entity in hits {
             guard let parentId = value(.entityParent, in: entity), parentId != "0" else {
                 continue
