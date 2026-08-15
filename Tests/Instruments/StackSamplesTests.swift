@@ -265,10 +265,11 @@ struct StackSampleReadingTests {
 
         let readings = emit(window)
 
-        #expect(
-            rendered(.mechanismStatus, in: readings[0])
-                == "unavailable: another walk held the lock past its timeout"
-        )
+        // A sanitizer still outranks it live, same as everywhere else this status is read.
+        let expected = ThreadWalker.isThreadSanitizerLoaded
+            ? "unavailable: a thread sanitizer is loaded"
+            : "unavailable: another walk held the lock past its timeout"
+        #expect(rendered(.mechanismStatus, in: readings[0]) == expected)
     }
 
     @Test func moreDistinctStacksThanTheCapReportTheTruncation() {
