@@ -241,12 +241,12 @@ final class WindowTouches: Streamable, Configurable {
                 out.put(.touchId(id))
             }
 
-            guard hierarchy, phase == .began, let id else {
+            guard hierarchy, phase == .began, let id, let window = touch.window else {
                 return
             }
 
             out.also(.viewHierarchy) { hier in
-                ViewHierarchy.write(at: location, touchId: id, into: &hier)
+                ViewHierarchy.writeMatches(at: location, in: window, touchId: id, into: &hier)
             }
         }
     }
@@ -287,19 +287,23 @@ final class ViewHierarchy: Snapshotable, Configurable {
     }
 
     #if canImport(UIKit)
-    /// Shared with `WindowTouches`, which calls this inline at a touch's own location — the
-    /// only way to answer "what got hit" without a round trip the hierarchy might not survive.
+    /// The on-demand config path: resolves the key window itself, since no touch supplies one.
     static func write(at point: CGPoint, touchId: UInt32?, into out: inout Readings) {
         guard let window = keyWindow() else {
             out.put(.mechanismStatus("unavailable: no key window"))
+            if let touchId {
+                out.put(.touchId(touchId))
+            }
             return
         }
 
         writeMatches(at: point, in: window, touchId: touchId, into: &out)
     }
 
-    /// The walk itself, apart from finding the key window — reachable directly against a
-    /// constructed view tree, since a test bundle process has no key window of its own.
+    /// The walk itself, against a caller-supplied root. `WindowTouches` calls this directly
+    /// with the touch's own window — the only way to answer "what got hit" without a round
+    /// trip the hierarchy might not survive. Also reachable directly against a constructed
+    /// view tree, since a test bundle process has no key window of its own.
     static func writeMatches(
         at point: CGPoint,
         in root: UIView,
@@ -315,9 +319,11 @@ final class ViewHierarchy: Snapshotable, Configurable {
             return
         }
 
-        put(first, touchId: touchId, into: &out)
+        put(first, in: root, touchId: touchId, into: &out)
         for view in hits.dropFirst().prefix(ceiling - 1) {
-            out.also(Self.entity) { sibling in put(view, touchId: touchId, into: &sibling) }
+            out.also(Self.entity) { sibling in
+                put(view, in: root, touchId: touchId, into: &sibling)
+            }
         }
 
         guard hits.count > ceiling else {
@@ -329,12 +335,20 @@ final class ViewHierarchy: Snapshotable, Configurable {
         }
     }
 
-    private static func put(_ view: UIView, touchId: UInt32?, into out: inout Readings) {
+    /// `view.frame` is superview-relative — three levels deep that is not the window
+    /// coordinate space this instrument promises, so `bounds` is converted to `root` instead.
+    private static func put(
+        _ view: UIView,
+        in root: UIView,
+        touchId: UInt32?,
+        into out: inout Readings
+    ) {
+        let inRoot = view.convert(view.bounds, to: root)
         out.put(.runtimeClassName(String(describing: type(of: view))))
-        out.put(.originXPoints(Double(view.frame.origin.x)))
-        out.put(.originYPoints(Double(view.frame.origin.y)))
-        out.put(.frameWidthPoints(Double(view.frame.width)))
-        out.put(.frameHeightPoints(Double(view.frame.height)))
+        out.put(.originXPoints(Double(inRoot.origin.x)))
+        out.put(.originYPoints(Double(inRoot.origin.y)))
+        out.put(.frameWidthPoints(Double(inRoot.width)))
+        out.put(.frameHeightPoints(Double(inRoot.height)))
         if let touchId {
             out.put(.touchId(touchId))
         }

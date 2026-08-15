@@ -1012,7 +1012,7 @@ public extension InstrumentID {
                     "a cancelled touch, which is what a scroll view stealing a tap looks like from the outside and the usual reason a button appears not to work",
                     "drag movement as a per-second total rather than as a reading per movement, because a drag delivers those by the hundred and no capture is worth spending on them",
                     "each touch's own location, and an id shared with the hierarchy reading `hierarchy` pairs with it, so the two can be found again together",
-                    "which view was hit, only when `hierarchy` is set, and only for the touch that began — not for every touch, and not for a gesture that recognizes without one",
+                    "every view under it, only when `hierarchy` is set, and only for the touch that began — not for every touch, and not for a gesture that recognizes without one",
                 ],
                 related: [
                     "uikit.viewController.appear",
@@ -1075,10 +1075,11 @@ public extension InstrumentID {
             )
         case .viewHierarchy:
             InstrumentMetadata(
-                summary: "Every view whose frame contains a point, topmost first, with its class and frame",
+                summary: "Every view whose bounds contain a point, topmost first, with its class and frame",
                 whenToUse: "a tap looks like it landed on the wrong view, or the layout at a point needs confirming without a screenshot",
                 reveals: [
-                    "each view at the point, front to back, named by its own class and its frame in the key window's coordinate space",
+                    "every view at the point, front to back, named by its own class and its frame in the key window's coordinate space — not the one view a real hit-test would pick",
+                    "views a real hit-test would skip: interaction disabled, or a decorative layer stacked on top of a real control — since those are exactly the overlaps this instrument exists to catch",
                     "the same coordinate space uikit.window.touches reports a touch's location in, so a touch's own reading supplies the point directly",
                     "nothing about a window other than the key window, and nothing continuously — this is one walk per request, not a hook",
                 ],
