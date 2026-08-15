@@ -16,6 +16,10 @@ struct RunRecordTests {
         written.pressureLevel = .critical
         written.cleanExit = true
         written.appVersion = "4.2.0"
+        written.bootTimeMicroseconds = 1700000000000000
+        written.isSimulator = true
+        written.debuggerAttached = true
+        written.osVersion = "18.4.0"
 
         #expect(roundTrip(written) == written)
     }
@@ -109,7 +113,10 @@ struct RunRecordFileTests {
         #expect(previous.launchId == 7)
         #expect(previous.memoryAvailableBytes == 2000000)
         #expect(previous.appVersion == "1.2.3")
-        #expect(RunEnding(previous).reason == "ownMemoryLimit")
+        #expect(
+            RunEnding(previous, currentAppVersion: previous.appVersion).reason
+                == "ownMemoryLimit"
+        )
     }
 
     /// Opening the file replaces the previous record — a third launch reads the second run.
@@ -195,6 +202,65 @@ struct RunEndingTests {
 
         #expect(RunEnding(background).reason == "reclaimedWhileBackgrounded")
         #expect(RunEnding(healthy()).reason == "unexpected")
+    }
+
+    /// A stale hang reading from before shutdown must not outrank the reboot that explains it.
+    @Test func aDifferentBootTimeIsAReboot() {
+        var record = starved()
+        record.bootTimeMicroseconds = 111
+
+        #expect(
+            RunEnding(record, currentBootTimeMicroseconds: 222).reason == "reboot"
+        )
+    }
+
+    /// Zero means the field predates this run — nothing to compare, so it must not read as a
+    /// reboot.
+    @Test func aRecordWithNoStampedBootTimeIsNotClaimedAsARebootEitherWay() {
+        #expect(
+            RunEnding(healthy(), currentBootTimeMicroseconds: 222).reason == "unexpected"
+        )
+    }
+
+    @Test func aDebuggerAttachedAtTheLastStampOutranksTheMeasuredSignals() {
+        var record = starved()
+        record.debuggerAttached = true
+
+        #expect(RunEnding(record).reason == "debuggerAttached")
+    }
+
+    @Test func anAppVersionThatChangedSinceIsWhyTheOldRunEnded() {
+        var record = healthy()
+        record.appVersion = "1.0.0"
+
+        #expect(
+            RunEnding(record, currentAppVersion: "1.1.0").reason == "appUpdated"
+        )
+    }
+
+    @Test func anOSVersionThatChangedSinceIsWhyTheOldRunEnded() {
+        var record = healthy()
+        record.osVersion = "17.0.0"
+
+        #expect(
+            RunEnding(record, currentOSVersion: "18.0.0").reason == "osUpdated"
+        )
+    }
+
+    /// Xcode's Stop button kills a simulator app directly — not the watchdog or jetsam.
+    @Test func aForegroundSimulatorRunWithNoMeasuredCauseWasLikelyStoppedByHand() {
+        var record = healthy()
+        record.isSimulator = true
+
+        #expect(RunEnding(record).reason == "simulatorStopped")
+    }
+
+    @Test func aBackgroundedSimulatorRunIsStillReadAsRoutineReclaim() {
+        var record = healthy()
+        record.appState = .background
+        record.isSimulator = true
+
+        #expect(RunEnding(record).reason == "reclaimedWhileBackgrounded")
     }
 
     @Test func theRunDurationIsOnlyOfferedWhenItIsPositive() {

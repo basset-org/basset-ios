@@ -4,6 +4,9 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(Darwin)
+import Darwin
+#endif
 
 /// Without this, backgrounded silence looks like nothing happened; emitted only on change.
 final class AppState: Streamable, PlainInstrument {
@@ -86,9 +89,34 @@ final class LastRunEnded: Streamable, PlainInstrument {
 
     private static let stampInterval: TimeInterval = 1
 
-    private static var appVersion: String {
+    fileprivate static var appVersion: String {
         Bundle.main
             .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
+    fileprivate static var osVersion: String {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+    }
+
+    fileprivate static var isSimulator: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// `kern.boottime` — differs from the last run's own copy only if the device rebooted since.
+    fileprivate static var bootTimeMicroseconds: UInt64 {
+        var boottime = timeval()
+        var size = MemoryLayout<timeval>.stride
+        var name: [Int32] = [CTL_KERN, KERN_BOOTTIME]
+        guard sysctl(&name, 2, &boottime, &size, nil, 0) == 0 else {
+            return 0
+        }
+
+        return UInt64(boottime.tv_sec) * 1000000 + UInt64(boottime.tv_usec)
     }
 
     private let heartbeat: MainRunLoopHeartbeat = .init()
@@ -150,6 +178,9 @@ final class LastRunEnded: Streamable, PlainInstrument {
         record.recordedAtMicroseconds = record.startedAtMicroseconds
         record.appState = ApplicationPresence.isForeground ? .foreground : .background
         record.appVersion = Self.appVersion
+        record.osVersion = Self.osVersion
+        record.isSimulator = Self.isSimulator
+        record.bootTimeMicroseconds = Self.bootTimeMicroseconds
         return record
     }
 
@@ -248,6 +279,7 @@ final class LastRunEnded: Streamable, PlainInstrument {
             $0?.stamp { record in
                 record.recordedAtMicroseconds = Entity.microsecondsSinceEpoch()
                 record.mainUnresponsiveNanoseconds = unresponsive
+                record.debuggerAttached = Debugger.isAttached
                 guard let ledger else {
                     return
                 }
@@ -311,7 +343,12 @@ struct RunEnding: Equatable {
         return overflowed ? nil : nanoseconds
     }
 
-    init(_ record: RunRecord) {
+    init(
+        _ record: RunRecord,
+        currentBootTimeMicroseconds: UInt64 = LastRunEnded.bootTimeMicroseconds,
+        currentAppVersion: String = LastRunEnded.appVersion,
+        currentOSVersion: String = LastRunEnded.osVersion
+    ) {
         self.record = record
         state =
             switch record.appState {
@@ -319,13 +356,38 @@ struct RunEnding: Equatable {
             case .background: "background"
             case .unknown: "unknown"
             }
-        reason = Self.reason(for: record)
+        reason = Self.reason(
+            for: record,
+            currentBootTimeMicroseconds: currentBootTimeMicroseconds,
+            currentAppVersion: currentAppVersion,
+            currentOSVersion: currentOSVersion
+        )
     }
 
     /// Ordered by specificity, not frequency — a stuck main thread outranks low headroom.
-    private static func reason(for record: RunRecord) -> String {
+    private static func reason(
+        for record: RunRecord,
+        currentBootTimeMicroseconds: UInt64,
+        currentAppVersion: String,
+        currentOSVersion: String
+    ) -> String {
         if record.cleanExit {
             return "clean"
+        }
+        // Zero means this run predates the field; nothing to compare, not a same-boot claim.
+        if record.bootTimeMicroseconds > 0,
+           record.bootTimeMicroseconds != currentBootTimeMicroseconds
+        {
+            return "reboot"
+        }
+        if record.debuggerAttached {
+            return "debuggerAttached"
+        }
+        if !record.appVersion.isEmpty, record.appVersion != currentAppVersion {
+            return "appUpdated"
+        }
+        if !record.osVersion.isEmpty, record.osVersion != currentOSVersion {
+            return "osUpdated"
         }
         if record.mainUnresponsiveNanoseconds >= watchdogThreshold {
             return "watchdog"
@@ -337,6 +399,10 @@ struct RunEnding: Equatable {
         }
         if record.pressureLevel == .critical, pressureWasCurrent(in: record) {
             return "systemMemoryPressure"
+        }
+        // Xcode's Stop button sends SIGKILL directly — no watchdog or jetsam involved.
+        if record.isSimulator, record.appState == .foreground {
+            return "simulatorStopped"
         }
         // Backgrounded apps stop routinely and silently; nothing routine ends a foreground run.
         return record.appState == .background ? "reclaimedWhileBackgrounded" : "unexpected"

@@ -62,6 +62,21 @@ struct ThreadWalkerTests {
         )
     }
 
+    /// A stack that filled the cap may have run deeper — a reader can't tell without this flag.
+    @Test func truncationIsFlaggedExactlyWhenAStackFillsTheFrameCap() {
+        MainThreadPort.capture()
+        let walker = ThreadWalker()
+
+        let stacks = walker.walk()
+        guard !emptyOnlyBecauseTheProcessIsCrowded(stacks) else {
+            return
+        }
+
+        for stack in stacks {
+            #expect(stack.truncated == (stack.frames.count == ThreadWalker.maxFrames))
+        }
+    }
+
     /// On the main actor — off it, `capture()` only queues the read, racing the walk it sets up.
     @Test func theMainThreadIsMarked() async {
         await MainActor.run { MainThreadPort.capture() }
@@ -156,6 +171,29 @@ struct ThreadSnapshotRefusalTests {
                     == "unavailable: a thread sanitizer is loaded"
             )
         }
+    }
+
+    /// A timed-out lock is why the walk refused, so no thread count may overrule it either.
+    @Test func aHeldLockIsTheReasonWhateverTheCountSays() {
+        for liveThreads in [nil, 4, ThreadWalker.maxThreads + 130] {
+            #expect(
+                ThreadSnapshot.refusal(
+                    liveThreads: liveThreads,
+                    sanitizerLoaded: false,
+                    exclusiveHeld: true
+                ) == "unavailable: another walk held the lock past its timeout"
+            )
+        }
+    }
+
+    @Test func aLoadedSanitizerOutranksAHeldLock() {
+        #expect(
+            ThreadSnapshot.refusal(
+                liveThreads: 4,
+                sanitizerLoaded: true,
+                exclusiveHeld: true
+            ) == "unavailable: a thread sanitizer is loaded"
+        )
     }
 }
 

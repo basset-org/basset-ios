@@ -249,6 +249,18 @@ struct LogSubsystemFilterTests {
         #expect(instrument.reader.subsystems == [])
     }
 
+    /// A fault that fired right before the request was made is exactly what closes the gap.
+    @Test func logFaultsStartsBeforeItActivatesRatherThanAtActivation() {
+        let instrument = LogFaults(config: .init(subsystem: nil))
+        #expect(instrument.reader.since < Date().addingTimeInterval(-60))
+    }
+
+    /// Traffic is about what is happening now, not what already happened before the request.
+    @Test func logSubsystemsStartsAtActivationRatherThanBeforeIt() {
+        let instrument = LogSubsystems(config: .init(subsystem: nil))
+        #expect(instrument.reader.since > Date().addingTimeInterval(-1))
+    }
+
     @Test func logSubsystemsScopesTheReaderToTheConfiguredSubsystem() {
         let instrument = LogSubsystems(config: .init(subsystem: "com.example.foo"))
         #expect(instrument.reader.subsystems == ["com.example.foo"])

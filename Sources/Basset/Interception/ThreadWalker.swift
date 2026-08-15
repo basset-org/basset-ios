@@ -6,6 +6,8 @@ public struct ThreadStack: Sendable {
     public let name: String
     public let isMain: Bool
     public let frames: [UInt64]
+    /// True when the walk hit `ThreadWalker.maxFrames` — the stack likely ran deeper than this.
+    public let truncated: Bool
 }
 
 /// Suspends every thread; between suspend and resume nothing may allocate or take a lock.
@@ -19,6 +21,9 @@ public final class ThreadWalker: @unchecked Sendable {
 
     /// Static, process-wide — two concurrent walks can suspend each other and deadlock.
     private static let exclusive: NSLock = .init()
+
+    /// Longer than any legitimate walk takes; bounds a stuck holder instead of blocking forever.
+    private static let exclusiveTimeout: TimeInterval = 2
 
     public init() {}
 
@@ -44,6 +49,16 @@ public final class ThreadWalker: @unchecked Sendable {
         }
 
         return Int(count)
+    }
+
+    /// Read right after an empty walk — a lock freed since then reads as free either way.
+    public static func exclusiveIsHeld() -> Bool {
+        guard exclusive.try() else {
+            return true
+        }
+
+        exclusive.unlock()
+        return false
     }
 
     // Nothing below this line may allocate: it runs with the process suspended.
@@ -152,8 +167,10 @@ public final class ThreadWalker: @unchecked Sendable {
         guard !Self.isThreadSanitizerLoaded else {
             return []
         }
+        guard Self.exclusive.lock(before: Date().addingTimeInterval(Self.exclusiveTimeout)) else {
+            return []
+        }
 
-        Self.exclusive.lock()
         defer { Self.exclusive.unlock() }
         return walkExclusively()
     }
@@ -174,8 +191,10 @@ public final class ThreadWalker: @unchecked Sendable {
         guard main != walking else {
             return nil
         }
+        guard Self.exclusive.lock(before: Date().addingTimeInterval(Self.exclusiveTimeout)) else {
+            return nil
+        }
 
-        Self.exclusive.lock()
         defer { Self.exclusive.unlock() }
 
         var frames = [UInt64]()
@@ -261,7 +280,8 @@ public final class ThreadWalker: @unchecked Sendable {
                             index: index,
                             name: names[index],
                             isMain: main != 0 && threads[index] == main,
-                            frames: Array(buffer[start ..< (start + taken[index])])
+                            frames: Array(buffer[start ..< (start + taken[index])]),
+                            truncated: taken[index] == Self.maxFrames
                         )
                     )
                 }

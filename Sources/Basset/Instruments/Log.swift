@@ -157,11 +157,18 @@ final class LogFaults: Streamable, Configurable {
 
     private static let subjectsPerFlush = 24
 
+    /// Wide enough to catch a fault the report that triggered this request is already about.
+    private static let retroactiveWindow: TimeInterval = 300
+
     /// Refused while scanning, not after — a chatty subsystem would crowd out real faults.
     let reader: LogStoreReader
 
     init(config: LogSubsystemFilter) {
-        reader = LogStoreReader(subsystems: config.subsystems, admitting: { $0.level.isDiagnostic })
+        reader = LogStoreReader(
+            subsystems: config.subsystems,
+            since: Date().addingTimeInterval(-Self.retroactiveWindow),
+            admitting: { $0.level.isDiagnostic }
+        )
     }
 
     static func write(

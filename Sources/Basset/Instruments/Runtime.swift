@@ -21,10 +21,14 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
 
     static func refusal(
         liveThreads: Int?,
-        sanitizerLoaded: Bool = ThreadWalker.isThreadSanitizerLoaded
+        sanitizerLoaded: Bool = ThreadWalker.isThreadSanitizerLoaded,
+        exclusiveHeld: Bool = ThreadWalker.exclusiveIsHeld()
     ) -> String {
         guard !sanitizerLoaded else {
             return "unavailable: a thread sanitizer is loaded"
+        }
+        guard !exclusiveHeld else {
+            return "unavailable: another walk held the lock past its timeout"
         }
         guard let liveThreads else {
             return "unavailable: the thread list could not be read"
@@ -71,6 +75,9 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
         // Innermost first — arrival order is stack order, nothing needs numbering.
         for frame in stack.frames {
             out.put(.frameAddress(frame))
+        }
+        if stack.truncated {
+            out.put(.mechanismStatus("truncated: stack cut at \(ThreadWalker.maxFrames) frames"))
         }
     }
 }

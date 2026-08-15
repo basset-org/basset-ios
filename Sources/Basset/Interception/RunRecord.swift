@@ -34,11 +34,17 @@ struct RunRecord: Equatable {
         static let appVersionLength = 65
         static let appVersion = 66
         static let appVersionCapacity = 30
+        static let bootTime = 96
+        static let isSimulator = 104
+        static let debuggerAttached = 105
+        static let osVersionLength = 106
+        static let osVersion = 107
+        static let osVersionCapacity = 30
     }
 
     static let magic: UInt32 = 0x42525231
-    static let version: UInt16 = 1
-    static let size = 96
+    static let version: UInt16 = 2
+    static let size = 137
 
     var launchId: UInt64 = 0
     var startedAtMicroseconds: UInt64 = 0
@@ -53,6 +59,13 @@ struct RunRecord: Equatable {
     var pressureLevel: PressureLevel = .unknown
     var cleanExit = false
     var appVersion = ""
+    /// The boot that was active when this run started — a different one next launch means a
+    /// reboot happened, not a crash.
+    var bootTimeMicroseconds: UInt64 = 0
+    var isSimulator = false
+    /// Refreshed on every stamp, unlike the boot or app version — a debugger can attach mid-run.
+    var debuggerAttached = false
+    var osVersion = ""
 
     static func decode(_ bytes: UnsafeRawPointer) -> RunRecord? {
         guard bytes.loadUnaligned(fromByteOffset: Offset.magic, as: UInt32.self) == magic,
@@ -115,6 +128,31 @@ struct RunRecord: Equatable {
                 count: length
             )
             record.appVersion = String(decoding: text, as: UTF8.self)
+        }
+
+        record.bootTimeMicroseconds = bytes.loadUnaligned(
+            fromByteOffset: Offset.bootTime,
+            as: UInt64.self
+        )
+        record.isSimulator = bytes.loadUnaligned(
+            fromByteOffset: Offset.isSimulator,
+            as: UInt8.self
+        ) != 0
+        record.debuggerAttached = bytes.loadUnaligned(
+            fromByteOffset: Offset.debuggerAttached,
+            as: UInt8.self
+        ) != 0
+
+        let osLength = Int(bytes.loadUnaligned(
+            fromByteOffset: Offset.osVersionLength,
+            as: UInt8.self
+        ))
+        if osLength > 0, osLength <= Offset.osVersionCapacity {
+            let text = UnsafeRawBufferPointer(
+                start: bytes.advanced(by: Offset.osVersion),
+                count: osLength
+            )
+            record.osVersion = String(decoding: text, as: UTF8.self)
         }
         return record
     }
@@ -179,6 +217,36 @@ struct RunRecord: Equatable {
             bytes.storeBytes(
                 of: byte,
                 toByteOffset: Offset.appVersion + index,
+                as: UInt8.self
+            )
+        }
+
+        bytes.storeBytes(
+            of: bootTimeMicroseconds,
+            toByteOffset: Offset.bootTime,
+            as: UInt64.self
+        )
+        bytes.storeBytes(
+            of: isSimulator ? 1 : 0,
+            toByteOffset: Offset.isSimulator,
+            as: UInt8.self
+        )
+        bytes.storeBytes(
+            of: debuggerAttached ? 1 : 0,
+            toByteOffset: Offset.debuggerAttached,
+            as: UInt8.self
+        )
+
+        let osText = Array(osVersion.utf8.prefix(Offset.osVersionCapacity))
+        bytes.storeBytes(
+            of: UInt8(osText.count),
+            toByteOffset: Offset.osVersionLength,
+            as: UInt8.self
+        )
+        for (index, byte) in osText.enumerated() {
+            bytes.storeBytes(
+                of: byte,
+                toByteOffset: Offset.osVersion + index,
                 as: UInt8.self
             )
         }
