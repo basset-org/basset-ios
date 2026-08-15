@@ -45,6 +45,15 @@ struct HookShape: Equatable {
     static let voidThreeObjects: HookShape = .init(
         name: "voidThreeObjects", arguments: 5, returns: "v", firstArgument: "@"
     )
+    /// `-sendAction:to:forEvent:` — its first argument is a `SEL`, not an object.
+    static let sendActionCallback: HookShape = .init(
+        name: "sendActionCallback", arguments: 5, returns: "v", firstArgument: ":"
+    )
+    /// `-setState:` — an `NS_ENUM(NSInteger, ...)` argument, encoded `q` on the 64-bit-only
+    /// runtime this package's iOS 17 floor guarantees.
+    static let voidInteger: HookShape = .init(
+        name: "voidInteger", arguments: 3, returns: "v", firstArgument: "q"
+    )
     static let timingVoid: HookShape = .init(
         name: "timingVoid", arguments: 2, returns: "v", firstArgument: nil
     )
@@ -205,6 +214,37 @@ private final class HookSite {
             ) -> Void).self
         )
         original(receiver, selector, first, second, third)
+    }
+
+    func callChained(
+        _ receiver: AnyObject,
+        _ action: Selector,
+        _ target: AnyObject?,
+        _ event: AnyObject?
+    ) {
+        guard let chained else {
+            return
+        }
+
+        let original = unsafeBitCast(
+            chained,
+            to: (@convention(c) (
+                AnyObject, Selector, Selector, AnyObject?, AnyObject?
+            ) -> Void).self
+        )
+        original(receiver, selector, action, target, event)
+    }
+
+    func callChained(_ receiver: AnyObject, _ integer: Int) {
+        guard let chained else {
+            return
+        }
+
+        let original = unsafeBitCast(
+            chained,
+            to: (@convention(c) (AnyObject, Selector, Int) -> Void).self
+        )
+        original(receiver, selector, integer)
     }
 
     func callChained(
@@ -437,6 +477,46 @@ public final class Swizzle: @unchecked Sendable {
                     (observer.body as? (
                         AnyObject, AnyObject?, AnyObject?, AnyObject?
                     ) -> Void)?(receiver, first, second, third)
+                }
+            }
+            return imp_implementationWithBlock(block)
+        }
+    }
+
+    /// `-sendAction:to:forEvent:` — which control fired and where the action was sent.
+    public func after(
+        _ target: AnyClass?,
+        _ selector: Selector,
+        takingSelectorAndTwoObjects: Void,
+        _ observer: @escaping (AnyObject, Selector, AnyObject?, AnyObject?) -> Void
+    ) -> SwizzleOutcome {
+        install(target, selector, shape: .sendActionCallback, observer: observer) { site in
+            let block: @convention(block) (
+                AnyObject, Selector, AnyObject?, AnyObject?
+            ) -> Void = { receiver, action, target, event in
+                site.callChained(receiver, action, target, event)
+                for observer in site.observers {
+                    (observer.body as? (
+                        AnyObject, Selector, AnyObject?, AnyObject?
+                    ) -> Void)?(receiver, action, target, event)
+                }
+            }
+            return imp_implementationWithBlock(block)
+        }
+    }
+
+    /// `-setState:` — not declared in `UIGestureRecognizer`'s public header.
+    public func after(
+        _ target: AnyClass?,
+        _ selector: Selector,
+        takingInteger: Void,
+        _ observer: @escaping (AnyObject, Int) -> Void
+    ) -> SwizzleOutcome {
+        install(target, selector, shape: .voidInteger, observer: observer) { site in
+            let block: @convention(block) (AnyObject, Int) -> Void = { receiver, value in
+                site.callChained(receiver, value)
+                for observer in site.observers {
+                    (observer.body as? (AnyObject, Int) -> Void)?(receiver, value)
                 }
             }
             return imp_implementationWithBlock(block)

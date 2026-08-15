@@ -141,7 +141,6 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
     public let cadence: Cadence
     public let observed: Observed
     public let overhead: Overhead
-    public let appStoreSafe: Bool
     public let config: [ConfigField]
 
     public init(
@@ -153,7 +152,6 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         cadence: Cadence,
         observed: Observed = .thisRun,
         overhead: Overhead = .negligible,
-        appStoreSafe: Bool = true,
         config: [ConfigField] = []
     ) {
         self.summary = summary
@@ -164,7 +162,6 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         self.cadence = cadence
         self.observed = observed
         self.overhead = overhead
-        self.appStoreSafe = appStoreSafe
         self.config = config
     }
 
@@ -179,7 +176,6 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         cadence = try container.decode(Cadence.self, forKey: .cadence)
         observed = try container.decode(Observed.self, forKey: .observed)
         overhead = try container.decode(Overhead.self, forKey: .overhead)
-        appStoreSafe = try container.decode(Bool.self, forKey: .appStoreSafe)
         config = try container.decodeIfPresent([ConfigField].self, forKey: .config) ?? []
     }
 }
@@ -1015,16 +1011,97 @@ public extension InstrumentID {
                     "how many fingers were down at that instant, which is the only way a multi-touch gesture can be told from a sequence of taps",
                     "a cancelled touch, which is what a scroll view stealing a tap looks like from the outside and the usual reason a button appears not to work",
                     "drag movement as a per-second total rather than as a reading per movement, because a drag delivers those by the hundred and no capture is worth spending on them",
-                    "nothing about which view was hit, which needs a hit-test read this instrument does not perform",
+                    "each touch's own location, and an id shared with the hierarchy reading `hierarchy` pairs with it, so the two can be found again together",
+                    "which view was hit, only when `hierarchy` is set, and only for the touch that began — not for every touch, and not for a gesture that recognizes without one",
                 ],
                 related: [
                     "uikit.viewController.appear",
                     "concurrency.mainThreadHang",
                     "render.frame.pacing",
+                    "uikit.view.hierarchy",
+                    "uikit.control.action",
+                    "uikit.gesture.state",
                 ],
                 mechanism: .swizzle,
                 cadence: .continuous,
-                overhead: .low
+                overhead: .low,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "hierarchy",
+                        type: .bool,
+                        description: "Walk the view hierarchy at a touch's own location the " +
+                            "instant it begins, and attach it to that touch's reading by a " +
+                            "shared id. Off by default — this is the O(views) walk `uikit." +
+                            "view.hierarchy`'s own metadata explains, paid on `.began` only, " +
+                            "not on every touch."
+                    ),
+                ]
+            )
+        case .controlAction:
+            InstrumentMetadata(
+                summary: "Every control action UIKit sent, and which class received it",
+                whenToUse: "a button appears to do nothing, or the question is whether a tap ever reached a target's action method at all",
+                reveals: [
+                    "the action selector UIKit sent and the class of the object it was sent to, for every control event in the app",
+                    "nothing when the target is nil, which is a control configured with no handler rather than a failure to observe one",
+                    "nothing about the touch that led to it — pair with uikit.window.touches for where and when",
+                ],
+                related: [
+                    "uikit.window.touches",
+                    "uikit.gesture.state",
+                    "runtime.methodOwners",
+                ],
+                mechanism: .swizzle,
+                cadence: .continuous,
+                overhead: .negligible
+            )
+        case .gestureState:
+            InstrumentMetadata(
+                summary: "Every gesture recognizer's state transition, and which class it belongs to",
+                whenToUse: "a gesture is suspected of never recognizing, or the question is whether a pan, tap or swipe recognizer ever began at all",
+                reveals: [
+                    "each state a gesture recognizer transitioned through — possible, began, changed, ended, cancelled, failed — and the recognizer's own class",
+                    "a recognizer that enters .began and then .cancelled, which is what another recognizer or a scroll view winning the gesture looks like from here",
+                    "every gesture recognizer that transitions, including ones the app never added — UIKit attaches its own to ordinary views for system interactions, and a reading naming one of those is not a bug in the app being read",
+                    "nothing if this build's UIKit ever removes the underlying selector: the hook is on `setState:`, which UIKit does not declare in its public header, and the install fails soft rather than crashing when it can't find it",
+                ],
+                related: [
+                    "uikit.window.touches",
+                    "uikit.control.action",
+                ],
+                mechanism: .swizzle,
+                cadence: .continuous,
+                overhead: .negligible
+            )
+        case .viewHierarchy:
+            InstrumentMetadata(
+                summary: "Every view whose frame contains a point, topmost first, with its class and frame",
+                whenToUse: "a tap looks like it landed on the wrong view, or the layout at a point needs confirming without a screenshot",
+                reveals: [
+                    "each view at the point, front to back, named by its own class and its frame in the key window's coordinate space",
+                    "the same coordinate space uikit.window.touches reports a touch's location in, so a touch's own reading supplies the point directly",
+                    "nothing about a window other than the key window, and nothing continuously — this is one walk per request, not a hook",
+                ],
+                related: [
+                    "uikit.window.touches",
+                    "uikit.viewController.appear",
+                ],
+                mechanism: .statusRead,
+                cadence: .once,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "x",
+                        type: .double(),
+                        description: "The point's x coordinate, in the key window's own " +
+                            "coordinate space. Default 0."
+                    ),
+                    InstrumentMetadata.ConfigField(
+                        key: "y",
+                        type: .double(),
+                        description: "The point's y coordinate, in the key window's own " +
+                            "coordinate space. Default 0."
+                    ),
+                ]
             )
         case .configRefused:
             InstrumentMetadata(

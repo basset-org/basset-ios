@@ -50,6 +50,9 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
     case linkedLibraries = 52
     case methodOwners = 53
     case windowTouches = 54
+    case controlAction = 55
+    case gestureState = 56
+    case viewHierarchy = 57
     case configRefused = 0xff00
 
     public var name: String {
@@ -105,6 +108,9 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .linkedLibraries: "runtime.linkedLibraries"
         case .methodOwners: "runtime.methodOwners"
         case .windowTouches: "uikit.window.touches"
+        case .controlAction: "uikit.control.action"
+        case .gestureState: "uikit.gesture.state"
+        case .viewHierarchy: "uikit.view.hierarchy"
         case .configRefused: "basset.configRefused"
         }
     }
@@ -162,6 +168,9 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .linkedLibraries: .runtime
         case .methodOwners: .runtime
         case .windowTouches: .uikit
+        case .controlAction: .uikit
+        case .gestureState: .uikit
+        case .viewHierarchy: .uikit
         case .configRefused: .basset
         }
     }
@@ -220,6 +229,9 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .linkedLibraries: .reading
         case .methodOwners: .reading
         case .windowTouches: .stream
+        case .controlAction: .stream
+        case .gestureState: .stream
+        case .viewHierarchy: .reading
         // Never activated: basset emits this itself, outside the registration table.
         case .configRefused: .reading
         }

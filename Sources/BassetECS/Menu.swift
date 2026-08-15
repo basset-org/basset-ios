@@ -117,9 +117,6 @@ extension MenuEntry {
         if !simulator {
             notes.append("hardware only, no simulator")
         }
-        if !metadata.appStoreSafe {
-            notes.append("not App Store safe")
-        }
         return notes.joined(separator: ", ")
     }
 

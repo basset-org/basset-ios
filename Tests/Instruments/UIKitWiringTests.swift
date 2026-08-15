@@ -102,5 +102,59 @@ struct UIKitSwizzleWiringTests {
         let named = harness.value(.viewControllerClass, in: harness.waitForReading())
         #expect(named != "UIViewController")
     }
+
+    /// Unlike a touch, `sendAction:to:for:` is callable directly — no synthetic `UITouch` needed.
+    @Test func aRealSendActionIsReportedByTargetAndSelector() {
+        final class Target: NSObject {
+            @objc func handleTap() {}
+        }
+
+        let harness = InstrumentHarness<ControlAction>()
+        harness.start()
+        defer { harness.stop() }
+
+        let control = UIControl()
+        let target = Target()
+        control.sendAction(#selector(Target.handleTap), to: target, for: nil)
+
+        let reading = harness.waitForReading()
+        #expect(harness.value(.methodName, in: reading) == "handleTap")
+        #expect(harness.value(.methodClass, in: reading)?.contains("Target") == true)
+    }
+
+    /// A control with no target is a control configured with no handler — nothing to report.
+    @Test func sendActionWithNoTargetReportsTheSelectorAndNoClass() {
+        let harness = InstrumentHarness<ControlAction>()
+        harness.start()
+        defer { harness.stop() }
+
+        let control = UIControl()
+        control.sendAction(#selector(NSObject.description), to: nil, for: nil)
+
+        let reading = harness.waitForReading()
+        #expect(harness.value(.methodName, in: reading) == "description")
+        #expect(reading?.components.contains { $0.id == .methodClass } != true)
+    }
+
+    /// A custom `UIGestureRecognizer` setting its own `state` is standard Swift practice — this
+    /// exercises the real `setState:` call `GestureState` hooks, not just the selector's existence.
+    @Test func aRecognizerEnteringItsOwnStateIsReported() {
+        final class ProbeRecognizer: UIGestureRecognizer {
+            func begin() {
+                state = .began
+            }
+        }
+
+        let harness = InstrumentHarness<GestureState>()
+        harness.start()
+        defer { harness.stop() }
+
+        let recognizer = ProbeRecognizer()
+        recognizer.begin()
+
+        let reading = harness.waitForReading()
+        #expect(harness.value(.gestureRecognizerState, in: reading) == "began")
+        #expect(harness.value(.runtimeClassName, in: reading)?.contains("ProbeRecognizer") == true)
+    }
 }
 #endif
