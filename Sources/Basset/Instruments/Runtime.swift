@@ -50,6 +50,7 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
         let stacks = walker.walk()
         guard let first = stacks.first else {
             out.put(.mechanismStatus(Self.refusal()))
+            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 

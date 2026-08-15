@@ -87,6 +87,29 @@ struct ViewHierarchyWalkTests {
             .contains("truncated") == true)
     }
 
+    /// A naive prefix truncation can cut a match while keeping one of its own descendants —
+    /// the descendant's `entityParent` would then name a row this reading never emits.
+    @Test func everyKeptRowsParentResolvesToAnEmittedEntityIdEvenWhenTruncated() {
+        let root = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        var cursor = root
+        for _ in 0 ..< (ViewHierarchy.ceiling + 10) {
+            let child = UIView(frame: cursor.bounds)
+            cursor.addSubview(child)
+            cursor = child
+        }
+
+        let hits = rows(at: CGPoint(x: 5, y: 5), in: root)
+        let emittedIds = Set(hits.compactMap { value(.entityId, in: $0) })
+
+        for entity in hits {
+            guard let parentId = value(.entityParent, in: entity), parentId != "0" else {
+                continue
+            }
+
+            #expect(emittedIds.contains(parentId))
+        }
+    }
+
     private func rows(at point: CGPoint, in root: UIView, parent: UInt32 = 0) -> [Entity] {
         var out = Readings(entity: .viewHierarchy, instrumentName: InstrumentID.viewHierarchy.name)
         ViewHierarchy.writeMatches(at: point, in: root, parent: parent, into: &out)

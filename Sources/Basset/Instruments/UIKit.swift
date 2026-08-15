@@ -309,25 +309,48 @@ final class ViewHierarchy: Snapshotable, Configurable {
         into out: inout Readings
     ) {
         let hits = matches(at: point, in: root, parent: parent, level: 0)
-        guard let first = hits.first else {
+        guard !hits.isEmpty else {
             out.put(.mechanismStatus("unavailable: nothing at that point"))
             out.putStructure(id: EntityIdentity.next(), parent: parent, level: 0)
             return
         }
 
-        put(first, in: root, into: &out)
-        for match in hits.dropFirst().prefix(ceiling - 1) {
+        let (kept, omitted) = selectWithinCeiling(hits)
+
+        put(kept[0], in: root, into: &out)
+        for match in kept.dropFirst() {
             out.also(Self.entity) { sibling in put(match, in: root, into: &sibling) }
         }
 
-        guard hits.count > ceiling else {
+        guard omitted > 0 else {
             return
         }
 
         out.also(Self.entity) { sibling in
-            sibling.put(.mechanismStatus("truncated: \(hits.count - ceiling) more"))
+            sibling.put(.mechanismStatus("truncated: \(omitted) more"))
             sibling.putStructure(id: EntityIdentity.next(), parent: parent, level: 0)
         }
+    }
+
+    /// `ceiling` matches, plus every kept match's ancestor chain up to one already kept — the
+    /// ceiling alone can cut a match whose `entityParent` names a row further down this same
+    /// list, and a row naming a parent this reading never emits is worse than emitting a few
+    /// more than the ceiling asks for.
+    private static func selectWithinCeiling(_ hits: [Match]) -> (kept: [Match], omitted: Int) {
+        let indexById = Dictionary(uniqueKeysWithValues: hits.enumerated().map { ($1.id, $0) })
+        var keptIndices = Set<Int>()
+
+        for (index, match) in hits.enumerated() where keptIndices.count < ceiling {
+            keptIndices.insert(index)
+            var parentId = match.parent
+            while let parentIndex = indexById[parentId], !keptIndices.contains(parentIndex) {
+                keptIndices.insert(parentIndex)
+                parentId = hits[parentIndex].parent
+            }
+        }
+
+        let kept = keptIndices.sorted().map { hits[$0] }
+        return (kept, hits.count - kept.count)
     }
 
     /// `view.frame` is superview-relative — three levels deep that is not the window
