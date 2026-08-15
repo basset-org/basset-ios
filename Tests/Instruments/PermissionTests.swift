@@ -145,7 +145,10 @@ struct PermissionStatusTests {
         var out = readings()
         PermissionStatus.write([], into: &out)
 
-        #expect(out.componentsWritten == [.mechanismStatus])
+        #expect(
+            out.componentsWritten ==
+                [.mechanismStatus, .entityId, .entityParent, .nestedLevel]
+        )
     }
 
     @Test func eachFindingBecomesItsOwnReading() {

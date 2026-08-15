@@ -25,6 +25,7 @@ final class NotificationSettings: Streamable, PlainInstrument {
     static func write(_ settings: NotificationSettingsReading, into out: inout Readings) {
         guard let status = settings.authorizationStatus else {
             out.put(.mechanismStatus("unavailable: this app does not use notifications"))
+            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 
@@ -36,6 +37,9 @@ final class NotificationSettings: Streamable, PlainInstrument {
             out.put(.previewVisibility(previews))
         }
 
+        let root = EntityIdentity.next()
+        out.putStructure(id: root, parent: 0, level: 0)
+
         // Only the switches not enabled; an app with everything on needs no rows.
         let withheld = settings.switches.filter { $0.state != "enabled" }
         out.put(.occurrenceCount(UInt64(withheld.count)))
@@ -43,6 +47,7 @@ final class NotificationSettings: Streamable, PlainInstrument {
             out.also(Self.entity) { sibling in
                 sibling.put(.notificationSetting(setting.name))
                 sibling.put(.settingState(setting.state))
+                sibling.putStructure(id: EntityIdentity.next(), parent: root, level: 1)
             }
         }
     }

@@ -104,6 +104,8 @@ public extension Component.ID {
 
         case .deviceId,
              .deviceUniqueId,
+             .entityId,
+             .entityParent,
              .instanceId,
              .instrument,
              .launchId,
@@ -192,6 +194,7 @@ public extension Component.ID {
              .minimumTLSVersion,
              .multiCamSetMembers,
              .negotiatedProtocol,
+             .nestedLevel,
              .notificationSetting,
              .originXPoints,
              .originYPoints,

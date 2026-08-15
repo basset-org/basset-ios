@@ -191,6 +191,7 @@ final class LogFaults: Streamable, Configurable {
         out.also(entity) { sibling in
             sibling.put(.windowNanoseconds(window.nanoseconds))
             sibling.put(.mechanismStatus("truncated: \(digest.omitted) more"))
+            sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         }
     }
 
@@ -206,6 +207,7 @@ final class LogFaults: Streamable, Configurable {
         out.put(.logMessage(subject.message))
         out.put(.logLevel(subject.level.rawValue))
         out.put(.occurrenceCount(subject.count))
+        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
     }
 
     func observe(_ context: Context) {
@@ -215,6 +217,7 @@ final class LogFaults: Streamable, Configurable {
             case .unavailable(let reason):
                 out.put(.windowNanoseconds(window.nanoseconds))
                 out.put(.mechanismStatus("unavailable: \(reason)"))
+                out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             case .read(let records, let cutShort):
                 let digest = LogDigest(records, ceiling: Self.subjectsPerFlush)
                 guard !digest.isEmpty else {
@@ -231,6 +234,7 @@ final class LogFaults: Streamable, Configurable {
                     sibling.put(
                         .mechanismStatus("read stopped on its ceiling; more unread")
                     )
+                    sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
                 }
             }
         }
@@ -274,6 +278,7 @@ final class LogSubsystems: Streamable, Configurable {
             sibling.put(.windowNanoseconds(window.nanoseconds))
             sibling.put(.occurrenceCount(traffic.total))
             sibling.put(.mechanismStatus("truncated: \(traffic.omitted) more"))
+            sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         }
     }
 
@@ -286,6 +291,7 @@ final class LogSubsystems: Streamable, Configurable {
         out.put(.logSubsystem(source.subsystem))
         out.put(.logCategory(source.category))
         out.put(.occurrenceCount(source.count))
+        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         // Apart from the total — ten thousand notices and one fault are opposite findings.
         if source.diagnostics > 0 {
             out.put(.detail("diagnostics: \(source.diagnostics)"))
@@ -298,6 +304,7 @@ final class LogSubsystems: Streamable, Configurable {
             case .unavailable(let reason):
                 out.put(.windowNanoseconds(window.nanoseconds))
                 out.put(.mechanismStatus("unavailable: \(reason)"))
+                out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             case .read(let records, let cutShort):
                 let traffic = LogTraffic(records, ceiling: Self.sourcesPerFlush)
                 guard !traffic.isEmpty else {
@@ -315,6 +322,7 @@ final class LogSubsystems: Streamable, Configurable {
                     sibling.put(
                         .mechanismStatus("read stopped on its ceiling; more unread")
                     )
+                    sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
                 }
             }
         }

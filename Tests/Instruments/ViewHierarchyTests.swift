@@ -48,15 +48,29 @@ struct ViewHierarchyWalkTests {
         #expect(rows(at: CGPoint(x: 5, y: 5), in: outer).count == 1)
     }
 
-    @Test func theTouchIdIsCarriedOnEveryRow() {
+    @Test func theCallerSuppliedParentIsCarriedOnTheRootRow() {
         let outer = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
         let inner = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
         outer.addSubview(inner)
 
-        let hits = rows(at: CGPoint(x: 5, y: 5), in: outer, touchId: 42)
+        let hits = rows(at: CGPoint(x: 5, y: 5), in: outer, parent: 42)
 
         #expect(hits.count == 2)
-        #expect(hits.allSatisfy { value(.touchId, in: $0) == "42" })
+        #expect(value(.entityParent, in: hits[1]) == "42")
+        #expect(value(.nestedLevel, in: hits[1]) == "0")
+    }
+
+    @Test func aNestedMatchPointsAtItsAncestorsEntityId() {
+        let outer = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        let inner = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        outer.addSubview(inner)
+
+        let hits = rows(at: CGPoint(x: 5, y: 5), in: outer)
+
+        #expect(hits.count == 2)
+        let outerId = value(.entityId, in: hits[1])
+        #expect(value(.entityParent, in: hits[0]) == outerId)
+        #expect(value(.nestedLevel, in: hits[0]) == "1")
     }
 
     @Test func moreThanTheCeilingIsTruncatedWithACount() {
@@ -73,9 +87,35 @@ struct ViewHierarchyWalkTests {
             .contains("truncated") == true)
     }
 
-    private func rows(at point: CGPoint, in root: UIView, touchId: UInt32? = nil) -> [Entity] {
+    /// Every flat child's `parent` is the root — which a naive prefix cut drops, since the
+    /// walk emits the root itself last. Genuinely truncated (`root.subviews.count` alone
+    /// clears the ceiling), unlike a single nested chain, where closing one match's ancestors
+    /// closes the whole chain and nothing is ever truncated.
+    @Test func everyKeptRowsParentResolvesToAnEmittedEntityIdEvenWhenTruncated() {
+        let root = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        for _ in 0 ..< (ViewHierarchy.ceiling + 10) {
+            root.addSubview(UIView(frame: root.bounds))
+        }
+
+        let hits = rows(at: CGPoint(x: 5, y: 5), in: root)
+
+        #expect(hits.last
+            .flatMap { value(.mechanismStatus, in: $0) }?
+            .contains("truncated") == true)
+
+        let emittedIds = Set(hits.compactMap { value(.entityId, in: $0) })
+        for entity in hits {
+            guard let parentId = value(.entityParent, in: entity), parentId != "0" else {
+                continue
+            }
+
+            #expect(emittedIds.contains(parentId))
+        }
+    }
+
+    private func rows(at point: CGPoint, in root: UIView, parent: UInt32 = 0) -> [Entity] {
         var out = Readings(entity: .viewHierarchy, instrumentName: InstrumentID.viewHierarchy.name)
-        ViewHierarchy.writeMatches(at: point, in: root, touchId: touchId, into: &out)
+        ViewHierarchy.writeMatches(at: point, in: root, parent: parent, into: &out)
         return [out.sealed()] + out.sealedSiblings()
     }
 
