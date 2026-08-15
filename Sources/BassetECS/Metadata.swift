@@ -1043,6 +1043,7 @@ public extension InstrumentID {
                 whenToUse: "a button appears to do nothing, or the question is whether a tap ever reached a target's action method at all",
                 reveals: [
                     "the action selector UIKit sent and the class of the object it was sent to, for every control event in the app",
+                    "UIKit's own internal actions on a control, not only the app's own — a UIButton sends itself selectors like _buttonDown: and _buttonUp: through this same funnel for its highlight state, so an app's own action is one reading among several rather than the only one",
                     "nothing when the target is nil, which is a control configured with no handler rather than a failure to observe one",
                     "nothing about the touch that led to it — pair with uikit.window.touches for where and when",
                 ],
