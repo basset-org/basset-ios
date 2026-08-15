@@ -225,13 +225,12 @@ final class StackSamples: Streamable, Configurable {
                     continue
                 }
 
-                // Read here, on this thread, right after the walk — not later at flush, when
-                // a genuinely timed-out lock has usually already been released by its holder.
-                if let frames = walker.walkMainThread() {
-                    samples.record(frames)
-                } else {
-                    samples.record(nil, exclusiveHeld: ThreadWalker.exclusiveIsHeld())
-                }
+                // Reported by the walk itself, not read again later at flush, when a genuinely
+                // timed-out lock has usually already been released by its holder — and not read
+                // here either, which could just as well catch an unrelated walk's lock.
+                var lockTimedOut = false
+                let frames = walker.walkMainThread(reportingLockTimeout: &lockTimedOut)
+                samples.record(frames, exclusiveHeld: lockTimedOut)
             }
         }
         sampling.name = QueueLabel.stackSampler

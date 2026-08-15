@@ -163,6 +163,19 @@ public final class ThreadWalker: @unchecked Sendable {
         return String(cString: buffer)
     }
 
+    private static func unwindSuspended(_ main: thread_t) -> [UInt64] {
+        var frames = [UInt64]()
+        withUnsafeTemporaryAllocation(of: UInt64.self, capacity: Self.maxFrames) { buffer in
+            // ── Nothing from here to the resume may allocate. ──
+            thread_suspend(main)
+            let taken = Self.unwind(main, into: buffer)
+            thread_resume(main)
+            // ── Running again; Swift objects are safe to build. ──
+            frames = Array(buffer[0 ..< taken])
+        }
+        return frames
+    }
+
     public func walk() -> [ThreadStack] {
         guard !Self.isThreadSanitizerLoaded else {
             return []
@@ -177,6 +190,14 @@ public final class ThreadWalker: @unchecked Sendable {
 
     /// Refused before the lock — a waiting main thread could deadlock its own resume.
     public func walkMainThread() -> [UInt64]? {
+        var ignored = false
+        return walkMainThread(reportingLockTimeout: &ignored)
+    }
+
+    /// Same walk, but says whether the refusal was specifically the lock timing out — set only
+    /// at that guard, so a caller can't blame it for a refusal that never reached the lock.
+    public func walkMainThread(reportingLockTimeout lockTimedOut: inout Bool) -> [UInt64]? {
+        lockTimedOut = false
         guard !Self.isThreadSanitizerLoaded else {
             return nil
         }
@@ -192,21 +213,12 @@ public final class ThreadWalker: @unchecked Sendable {
             return nil
         }
         guard Self.exclusive.lock(before: Date().addingTimeInterval(Self.exclusiveTimeout)) else {
+            lockTimedOut = true
             return nil
         }
 
         defer { Self.exclusive.unlock() }
-
-        var frames = [UInt64]()
-        withUnsafeTemporaryAllocation(of: UInt64.self, capacity: Self.maxFrames) { buffer in
-            // ── Nothing from here to the resume may allocate. ──
-            thread_suspend(main)
-            let taken = Self.unwind(main, into: buffer)
-            thread_resume(main)
-            // ── Running again; Swift objects are safe to build. ──
-            frames = Array(buffer[0 ..< taken])
-        }
-        return frames
+        return Self.unwindSuspended(main)
     }
 
     private func walkExclusively() -> [ThreadStack] {

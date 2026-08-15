@@ -47,6 +47,17 @@ struct MainThreadWalkTests {
         #expect(ThreadWalker().walkMainThread() == nil)
     }
 
+    /// Refused before ever reaching the lock — an unrelated walk holding it must not be blamed.
+    @Test @MainActor func aRefusalBeforeTheLockNeverReportsItAsTimedOut() {
+        MainThreadPort.capture()
+        var lockTimedOut = true
+
+        let frames = ThreadWalker().walkMainThread(reportingLockTimeout: &lockTimedOut)
+
+        #expect(frames == nil)
+        #expect(lockTimedOut == false)
+    }
+
     /// A full walk and a sample share a lock; a failure here is a hang, not a wrong answer.
     @Test func samplingConcurrentlyWithAFullWalkFinishes() async {
         await MainActor.run { MainThreadPort.capture() }
