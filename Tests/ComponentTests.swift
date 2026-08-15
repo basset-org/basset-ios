@@ -214,6 +214,13 @@ struct ComponentTests {
             (.touchesMovedCount(0), .touchesMovedCount),
             (.dragDistancePoints(0), .dragDistancePoints),
             (.maximumSimultaneousTouchCount(0), .maximumSimultaneousTouchCount),
+            (.touchId(0), .touchId),
+            (.originXPoints(0), .originXPoints),
+            (.originYPoints(0), .originYPoints),
+            (.frameWidthPoints(0), .frameWidthPoints),
+            (.frameHeightPoints(0), .frameHeightPoints),
+            (.runtimeClassName(""), .runtimeClassName),
+            (.gestureRecognizerState(""), .gestureRecognizerState),
         ]
 
         for (component, expected) in all {

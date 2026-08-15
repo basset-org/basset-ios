@@ -48,6 +48,9 @@ public struct Entity: Equatable, Sendable {
         case gpu = 44
         case method = 45
         case touches = 46
+        case controlAction = 47
+        case gestureRecognizer = 48
+        case viewHierarchy = 49
         case instrumentConfig = 0xff00
     }
 

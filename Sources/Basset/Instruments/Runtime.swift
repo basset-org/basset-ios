@@ -395,12 +395,12 @@ final class MethodOwners: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .methodOwners
     static let entity = Entity.ID.method
 
-    /// Appearance and layout are absent — basset hooks those itself and would self-report.
+    /// Appearance, layout and control actions are absent — basset hooks those itself and would
+    /// self-report.
     static let watched: [(className: String, selector: String)] = [
         ("UIViewController", "viewWillAppear:"),
         ("UIViewController", "viewWillDisappear:"),
         ("UIApplication", "sendEvent:"),
-        ("UIControl", "sendAction:to:forEvent:"),
         ("UIWindow", "makeKeyAndVisible"),
         ("NSObject", "forwardInvocation:"),
     ]

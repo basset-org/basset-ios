@@ -387,6 +387,13 @@ public struct Component: Equatable, Sendable {
         case delegateDurationNanoseconds = 226
         case delegateDurationPeakNanoseconds = 227
         case sdkVersion = 228
+        case touchId = 229
+        case originXPoints = 230
+        case originYPoints = 231
+        case frameWidthPoints = 232
+        case frameHeightPoints = 233
+        case runtimeClassName = 234
+        case gestureRecognizerState = 235
     }
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.
@@ -836,6 +843,25 @@ public extension Component {
     ) }
     static func maximumSimultaneousTouchCount(_ value: UInt32) -> Component { .init(
         .maximumSimultaneousTouchCount,
+        value
+    ) }
+    static func touchId(_ value: UInt32) -> Component { .init(.touchId, value) }
+    static func originXPoints(_ value: Double) -> Component { .init(.originXPoints, value) }
+    static func originYPoints(_ value: Double) -> Component { .init(.originYPoints, value) }
+    static func frameWidthPoints(_ value: Double) -> Component { .init(
+        .frameWidthPoints,
+        value
+    ) }
+    static func frameHeightPoints(_ value: Double) -> Component { .init(
+        .frameHeightPoints,
+        value
+    ) }
+    static func runtimeClassName(_ value: String) -> Component { .init(
+        .runtimeClassName,
+        value
+    ) }
+    static func gestureRecognizerState(_ value: String) -> Component { .init(
+        .gestureRecognizerState,
         value
     ) }
 }

@@ -230,6 +230,13 @@ public extension Component.ID {
         case .touchesMovedCount: "Touch moves"
         case .dragDistancePoints: "Drag distance (pt)"
         case .maximumSimultaneousTouchCount: "Most fingers at once"
+        case .touchId: "Touch id"
+        case .originXPoints: "X (pt)"
+        case .originYPoints: "Y (pt)"
+        case .frameWidthPoints: "Width (pt)"
+        case .frameHeightPoints: "Height (pt)"
+        case .runtimeClassName: "Runtime class"
+        case .gestureRecognizerState: "Gesture state"
         }
     }
 }

@@ -43,8 +43,10 @@ public extension Component.ID {
              .formatWidthPixels,
              .fps,
              .frameBudgetNanoseconds,
+             .frameHeightPoints,
              .framesDeliveredCount,
              .framesDroppedCount,
+             .frameWidthPoints,
              .gpuExecutionNanoseconds,
              .gpuExecutionPeakNanoseconds,
              .gpuWaitNanoseconds,
@@ -106,6 +108,7 @@ public extension Component.ID {
              .instrument,
              .launchId,
              .threadIdentifier,
+             .touchId,
              .userId:
             .correlation
 
@@ -166,6 +169,7 @@ public extension Component.ID {
              .exceptionDomain,
              .exitReason,
              .formatPixelFormat,
+             .gestureRecognizerState,
              .hostKind,
              .hostNavigationTitle,
              .hostRootViewType,
@@ -189,6 +193,8 @@ public extension Component.ID {
              .multiCamSetMembers,
              .negotiatedProtocol,
              .notificationSetting,
+             .originXPoints,
+             .originYPoints,
              .osVersion,
              .outputPixelFormat,
              .permissionSubject,
@@ -199,6 +205,7 @@ public extension Component.ID {
              .regionCode,
              .remoteAddress,
              .requestURL,
+             .runtimeClassName,
              .sdkVersion,
              .serverVersion,
              .sessionClass,

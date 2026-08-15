@@ -51,6 +51,9 @@ public enum Instruments {
         .reading(LinkedLibraries.self),
         .reading(MethodOwners.self),
         .stream(WindowTouches.self),
+        .stream(ControlAction.self),
+        .stream(GestureState.self),
+        .reading(ViewHierarchy.self),
     ]
 
     public static func named(_ name: String) -> Registration? {
