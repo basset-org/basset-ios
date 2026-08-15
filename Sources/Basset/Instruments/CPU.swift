@@ -13,7 +13,7 @@ final class ThreadCPUUsage: Streamable, Configurable {
 
     static let id: InstrumentID = .cpuThreadUsage
     static let entity = Entity.ID.thread
-    static let defaultConfig: Config = .init(windowSeconds: 1)
+    static let defaultConfig: Config = .init(windowSeconds: 5)
 
     private static let ceiling = 32
     /// Below the minimum a read spends the budget too fast; above it a spike ages out.

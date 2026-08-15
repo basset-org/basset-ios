@@ -7,6 +7,7 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
     static let entity = Entity.ID.thread
 
     private let walker: ThreadWalker = .init()
+    private var reportedImages: Set<String> = []
 
     init() {
         // Captured while the main thread still answers — needed after it stops.
@@ -52,7 +53,9 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
         for stack in stacks.dropFirst() {
             out.also(Self.entity) { thread in describe(stack, into: &thread) }
         }
-        for image in BinaryImages.covering(stacks.flatMap(\.frames)) {
+        for image in BinaryImages.covering(stacks.flatMap(\.frames))
+            where reportedImages.insert(image.uuid).inserted
+        {
             out.also(.binaryImage) { entry in
                 entry.put(.imageName(image.name))
                 entry.put(.imageLoadAddress(image.loadAddress))
@@ -112,6 +115,7 @@ final class StackSamples: Streamable, Configurable {
     private let walker: ThreadWalker = .init()
     private let samples: Samples = .init()
     private var sampler: Thread?
+    private var reportedImages: Set<String> = []
 
     init(config: Config) {
         let clampedMs = min(max(config.intervalMs, Self.minimumIntervalMs), Self.maximumIntervalMs)
@@ -128,54 +132,6 @@ final class StackSamples: Streamable, Configurable {
             "unavailable: a thread sanitizer is loaded"
         } else {
             "unavailable: no main thread has been identified"
-        }
-    }
-
-    static func write(
-        _ closed: StackWindow,
-        over elapsed: Context.FlushWindow,
-        into out: inout Readings
-    ) {
-        guard closed.samplesTaken > 0 else {
-            guard closed.unreadable > 0 else {
-                return
-            }
-
-            out.put(.windowNanoseconds(elapsed.nanoseconds))
-            out.put(.mechanismStatus(unreadableStatus()))
-            return
-        }
-
-        let hottest = closed.hottest
-        guard let first = hottest.first else {
-            // Reported, not dropped — silence here would read as an idle app.
-            put(nil, in: closed, over: elapsed, into: &out)
-            return
-        }
-
-        put(first, in: closed, over: elapsed, into: &out)
-        for stack in hottest.dropFirst().prefix(stacksPerWindow - 1) {
-            out.also(entity) { sibling in
-                put(stack, in: closed, over: elapsed, into: &sibling)
-            }
-        }
-
-        if hottest.count > stacksPerWindow {
-            out.also(entity) { sibling in
-                sibling.put(.windowNanoseconds(elapsed.nanoseconds))
-                sibling.put(
-                    .mechanismStatus("truncated: \(hottest.count - stacksPerWindow) more")
-                )
-            }
-        }
-
-        let reported = hottest.prefix(stacksPerWindow).flatMap(\.frames)
-        for image in BinaryImages.covering(reported) {
-            out.also(.binaryImage) { entry in
-                entry.put(.imageName(image.name))
-                entry.put(.imageLoadAddress(image.loadAddress))
-                entry.put(.imageUUID(image.uuid))
-            }
         }
     }
 
@@ -201,6 +157,56 @@ final class StackSamples: Streamable, Configurable {
         }
     }
 
+    func write(
+        _ closed: StackWindow,
+        over elapsed: Context.FlushWindow,
+        into out: inout Readings
+    ) {
+        guard closed.samplesTaken > 0 else {
+            guard closed.unreadable > 0 else {
+                return
+            }
+
+            out.put(.windowNanoseconds(elapsed.nanoseconds))
+            out.put(.mechanismStatus(Self.unreadableStatus()))
+            return
+        }
+
+        let hottest = closed.hottest
+        guard let first = hottest.first else {
+            // Reported, not dropped — silence here would read as an idle app.
+            Self.put(nil, in: closed, over: elapsed, into: &out)
+            return
+        }
+
+        Self.put(first, in: closed, over: elapsed, into: &out)
+        for stack in hottest.dropFirst().prefix(Self.stacksPerWindow - 1) {
+            out.also(Self.entity) { sibling in
+                Self.put(stack, in: closed, over: elapsed, into: &sibling)
+            }
+        }
+
+        if hottest.count > Self.stacksPerWindow {
+            out.also(Self.entity) { sibling in
+                sibling.put(.windowNanoseconds(elapsed.nanoseconds))
+                sibling.put(
+                    .mechanismStatus("truncated: \(hottest.count - Self.stacksPerWindow) more")
+                )
+            }
+        }
+
+        let reported = hottest.prefix(Self.stacksPerWindow).flatMap(\.frames)
+        for image in BinaryImages.covering(reported)
+            where reportedImages.insert(image.uuid).inserted
+        {
+            out.also(.binaryImage) { entry in
+                entry.put(.imageName(image.name))
+                entry.put(.imageLoadAddress(image.loadAddress))
+                entry.put(.imageUUID(image.uuid))
+            }
+        }
+    }
+
     func observe(_ context: Context) {
         let sampling = Thread { [walker, samples, interval] in
             while !Thread.current.isCancelled {
@@ -223,7 +229,7 @@ final class StackSamples: Streamable, Configurable {
                 return
             }
 
-            Self.write(self.samples.close(), over: elapsed, into: &out)
+            self.write(self.samples.close(), over: elapsed, into: &out)
         }
     }
 

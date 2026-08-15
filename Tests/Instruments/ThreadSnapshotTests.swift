@@ -181,6 +181,51 @@ struct SanitizedWalkTests {
     }
 }
 
+/// Shares `ThreadWalkerTests`'s reason for serializing: each fault suspends every thread.
+@Suite(
+    .serialized,
+    .disabled(
+        if: ThreadWalker.isThreadSanitizerLoaded,
+        "the walker refuses to suspend threads while a sanitizer is loaded"
+    )
+)
+struct ThreadSnapshotFaultTests {
+    /// A binary already reported by this instrument owes nothing new on a later fault,
+    /// even though a later walk can legitimately touch threads the first one didn't.
+    @Test func anImageAlreadyReportedByThisInstrumentIsNotReportedAgain() {
+        MainThreadPort.capture()
+        let instrument = ThreadSnapshot()
+
+        var first = Readings(
+            entity: ThreadSnapshot.entity,
+            instrumentName: "runtime.threadSnapshot"
+        )
+        instrument.fault(.hang, &first)
+        let firstImages = imageUUIDs(in: first)
+        guard !firstImages.isEmpty else {
+            return
+        }
+
+        var second = Readings(
+            entity: ThreadSnapshot.entity,
+            instrumentName: "runtime.threadSnapshot"
+        )
+        instrument.fault(.hang, &second)
+
+        #expect(firstImages.isDisjoint(with: imageUUIDs(in: second)))
+    }
+
+    private func imageUUIDs(in readings: Readings) -> Set<String> {
+        Set(
+            readings.sealedSiblings()
+                .filter { $0.id == .binaryImage }
+                .compactMap { entity in
+                    entity.components.first { $0.id == .imageUUID }?.value.rendered
+                }
+        )
+    }
+}
+
 struct BinaryImageTests {
     @Test func theMainExecutableNamesItsBuildAndWhereItLanded() throws {
         let executable = try #require(BinaryImages.mainExecutable())
