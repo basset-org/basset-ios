@@ -69,6 +69,8 @@ public final class LogStoreReader: @unchecked Sendable {
     public static let defaultCeiling = 256
 
     let subsystems: [String]
+    /// The starting position, not the watermark — that moves; this stays put for a caller to check.
+    let since: Date
 
     private let ceiling: Int
     private let admitting: @Sendable (LogRecord) -> Bool
@@ -82,6 +84,7 @@ public final class LogStoreReader: @unchecked Sendable {
         admitting: @escaping @Sendable (LogRecord) -> Bool = { _ in true }
     ) {
         self.subsystems = subsystems
+        self.since = since
         self.ceiling = ceiling
         self.admitting = admitting
         watermark = .init(since)

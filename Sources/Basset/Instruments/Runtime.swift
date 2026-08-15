@@ -21,10 +21,14 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
 
     static func refusal(
         liveThreads: Int?,
-        sanitizerLoaded: Bool = ThreadWalker.isThreadSanitizerLoaded
+        sanitizerLoaded: Bool = ThreadWalker.isThreadSanitizerLoaded,
+        exclusiveHeld: Bool = ThreadWalker.exclusiveIsHeld()
     ) -> String {
         guard !sanitizerLoaded else {
             return "unavailable: a thread sanitizer is loaded"
+        }
+        guard !exclusiveHeld else {
+            return "unavailable: another walk held the lock past its timeout"
         }
         guard let liveThreads else {
             return "unavailable: the thread list could not be read"
@@ -72,6 +76,9 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
         for frame in stack.frames {
             out.put(.frameAddress(frame))
         }
+        if stack.truncated {
+            out.put(.mechanismStatus("truncated: stack cut at \(ThreadWalker.maxFrames) frames"))
+        }
     }
 }
 
@@ -85,8 +92,8 @@ final class StackSamples: Streamable, Configurable {
     private final class Samples: @unchecked Sendable {
         private let guarded: Mutex<StackWindow> = .init(.init())
 
-        func record(_ frames: [UInt64]?) {
-            guarded.withLock { $0.record(frames) }
+        func record(_ frames: [UInt64]?, exclusiveHeld: Bool = false) {
+            guarded.withLock { $0.record(frames, exclusiveHeld: exclusiveHeld) }
         }
 
         func close() -> StackWindow {
@@ -124,12 +131,15 @@ final class StackSamples: Streamable, Configurable {
         MainThreadPort.capture()
     }
 
-    /// The two reasons need different fixes, so the status says which one it was.
+    /// Each reason needs a different fix, so the status says which one it was.
     static func unreadableStatus(
-        sanitizerLoaded: Bool = ThreadWalker.isThreadSanitizerLoaded
+        sanitizerLoaded: Bool = ThreadWalker.isThreadSanitizerLoaded,
+        exclusiveHeld: Bool = ThreadWalker.exclusiveIsHeld()
     ) -> String {
         if sanitizerLoaded {
             "unavailable: a thread sanitizer is loaded"
+        } else if exclusiveHeld {
+            "unavailable: another walk held the lock past its timeout"
         } else {
             "unavailable: no main thread has been identified"
         }
@@ -168,7 +178,7 @@ final class StackSamples: Streamable, Configurable {
             }
 
             out.put(.windowNanoseconds(elapsed.nanoseconds))
-            out.put(.mechanismStatus(Self.unreadableStatus()))
+            out.put(.mechanismStatus(Self.unreadableStatus(exclusiveHeld: closed.lockTimedOut)))
             return
         }
 
@@ -215,7 +225,12 @@ final class StackSamples: Streamable, Configurable {
                     continue
                 }
 
-                samples.record(walker.walkMainThread())
+                // Reported by the walk itself, not read again later at flush, when a genuinely
+                // timed-out lock has usually already been released by its holder — and not read
+                // here either, which could just as well catch an unrelated walk's lock.
+                var lockTimedOut = false
+                let frames = walker.walkMainThread(reportingLockTimeout: &lockTimedOut)
+                samples.record(frames, exclusiveHeld: lockTimedOut)
             }
         }
         sampling.name = QueueLabel.stackSampler
@@ -251,6 +266,9 @@ struct StackWindow {
     private(set) var samplesTaken: UInt64 = 0
     private(set) var unreadable: UInt64 = 0
     private(set) var withoutStack: UInt64 = 0
+    /// Set from the sampling thread, right after a walk found the lock held — a flush reading it
+    /// later, off that thread, would catch the lock free again after a genuine timeout.
+    private(set) var lockTimedOut = false
 
     private var counted: [Int: SampledStack] = [:]
 
@@ -258,9 +276,12 @@ struct StackWindow {
         counted.values.sorted { $0.hits > $1.hits }
     }
 
-    mutating func record(_ frames: [UInt64]?) {
+    mutating func record(_ frames: [UInt64]?, exclusiveHeld: Bool = false) {
         guard let frames else {
             unreadable += 1
+            if exclusiveHeld {
+                lockTimedOut = true
+            }
             return
         }
 

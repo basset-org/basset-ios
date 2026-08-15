@@ -47,6 +47,17 @@ struct MainThreadWalkTests {
         #expect(ThreadWalker().walkMainThread() == nil)
     }
 
+    /// Refused before ever reaching the lock — an unrelated walk holding it must not be blamed.
+    @Test @MainActor func aRefusalBeforeTheLockNeverReportsItAsTimedOut() {
+        MainThreadPort.capture()
+        var lockTimedOut = true
+
+        let frames = ThreadWalker().walkMainThread(reportingLockTimeout: &lockTimedOut)
+
+        #expect(frames == nil)
+        #expect(lockTimedOut == false)
+    }
+
     /// A full walk and a sample share a lock; a failure here is a hang, not a wrong answer.
     @Test func samplingConcurrentlyWithAFullWalkFinishes() async {
         await MainActor.run { MainThreadPort.capture() }
@@ -158,6 +169,23 @@ struct StackWindowTests {
         #expect(window.samplesTaken == 0)
         #expect(window.withoutStack == 0)
     }
+
+    /// Carried from the sample that actually found the lock held, not read again later.
+    @Test func aLockFoundHeldAtTheTimeOfTheSampleIsRemembered() {
+        var window = StackWindow()
+
+        window.record(nil, exclusiveHeld: true)
+
+        #expect(window.lockTimedOut)
+    }
+
+    @Test func anUnreadableSampleWithTheLockFreeIsNotMistakenForATimeout() {
+        var window = StackWindow()
+
+        window.record(nil, exclusiveHeld: false)
+
+        #expect(window.lockTimedOut == false)
+    }
 }
 
 struct StackSampleReadingTests {
@@ -216,6 +244,18 @@ struct StackSampleReadingTests {
             == "unavailable: no main thread has been identified")
     }
 
+    /// A timed-out lock must not read as a missing main thread either — the main thread exists.
+    @Test func theUnreadableStatusNamesAHeldLockRatherThanAMissingMainThread() {
+        #expect(
+            StackSamples.unreadableStatus(sanitizerLoaded: false, exclusiveHeld: true)
+                == "unavailable: another walk held the lock past its timeout"
+        )
+        #expect(
+            StackSamples.unreadableStatus(sanitizerLoaded: true, exclusiveHeld: true)
+                == "unavailable: a thread sanitizer is loaded"
+        )
+    }
+
     /// No main thread to read is a broken mechanism, distinct from a quiet one.
     @Test func aWindowThatCouldNotReadTheMainThreadSaysSo() {
         var window = StackWindow()
@@ -226,6 +266,21 @@ struct StackSampleReadingTests {
         #expect(readings.count == 1)
         #expect(rendered(.mechanismStatus, in: readings[0])?.contains("unavailable") == true)
         #expect(rendered(.sampleCount, in: readings[0]) == nil)
+    }
+
+    /// The window carries what the sampling thread saw — a flush reading the lock again, later
+    /// and off that thread, would usually find a genuinely timed-out holder already gone.
+    @Test func aWindowWhereTheLockWasFoundHeldReportsTheTimeoutRatherThanAMissingThread() {
+        var window = StackWindow()
+        window.record(nil, exclusiveHeld: true)
+
+        let readings = emit(window)
+
+        // A sanitizer still outranks it live, same as everywhere else this status is read.
+        let expected = ThreadWalker.isThreadSanitizerLoaded
+            ? "unavailable: a thread sanitizer is loaded"
+            : "unavailable: another walk held the lock past its timeout"
+        #expect(rendered(.mechanismStatus, in: readings[0]) == expected)
     }
 
     @Test func moreDistinctStacksThanTheCapReportTheTruncation() {

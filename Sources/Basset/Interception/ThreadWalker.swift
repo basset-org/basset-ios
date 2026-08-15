@@ -6,6 +6,8 @@ public struct ThreadStack: Sendable {
     public let name: String
     public let isMain: Bool
     public let frames: [UInt64]
+    /// True when the walk hit `ThreadWalker.maxFrames` — the stack likely ran deeper than this.
+    public let truncated: Bool
 }
 
 /// Suspends every thread; between suspend and resume nothing may allocate or take a lock.
@@ -19,6 +21,9 @@ public final class ThreadWalker: @unchecked Sendable {
 
     /// Static, process-wide — two concurrent walks can suspend each other and deadlock.
     private static let exclusive: NSLock = .init()
+
+    /// Longer than any legitimate walk takes; bounds a stuck holder instead of blocking forever.
+    private static let exclusiveTimeout: TimeInterval = 2
 
     public init() {}
 
@@ -44,6 +49,16 @@ public final class ThreadWalker: @unchecked Sendable {
         }
 
         return Int(count)
+    }
+
+    /// Read right after an empty walk — a lock freed since then reads as free either way.
+    public static func exclusiveIsHeld() -> Bool {
+        guard exclusive.try() else {
+            return true
+        }
+
+        exclusive.unlock()
+        return false
     }
 
     // Nothing below this line may allocate: it runs with the process suspended.
@@ -148,18 +163,41 @@ public final class ThreadWalker: @unchecked Sendable {
         return String(cString: buffer)
     }
 
+    private static func unwindSuspended(_ main: thread_t) -> [UInt64] {
+        var frames = [UInt64]()
+        withUnsafeTemporaryAllocation(of: UInt64.self, capacity: Self.maxFrames) { buffer in
+            // ── Nothing from here to the resume may allocate. ──
+            thread_suspend(main)
+            let taken = Self.unwind(main, into: buffer)
+            thread_resume(main)
+            // ── Running again; Swift objects are safe to build. ──
+            frames = Array(buffer[0 ..< taken])
+        }
+        return frames
+    }
+
     public func walk() -> [ThreadStack] {
         guard !Self.isThreadSanitizerLoaded else {
             return []
         }
+        guard Self.exclusive.lock(before: Date().addingTimeInterval(Self.exclusiveTimeout)) else {
+            return []
+        }
 
-        Self.exclusive.lock()
         defer { Self.exclusive.unlock() }
         return walkExclusively()
     }
 
     /// Refused before the lock — a waiting main thread could deadlock its own resume.
     public func walkMainThread() -> [UInt64]? {
+        var ignored = false
+        return walkMainThread(reportingLockTimeout: &ignored)
+    }
+
+    /// Same walk, but says whether the refusal was specifically the lock timing out — set only
+    /// at that guard, so a caller can't blame it for a refusal that never reached the lock.
+    public func walkMainThread(reportingLockTimeout lockTimedOut: inout Bool) -> [UInt64]? {
+        lockTimedOut = false
         guard !Self.isThreadSanitizerLoaded else {
             return nil
         }
@@ -174,20 +212,13 @@ public final class ThreadWalker: @unchecked Sendable {
         guard main != walking else {
             return nil
         }
-
-        Self.exclusive.lock()
-        defer { Self.exclusive.unlock() }
-
-        var frames = [UInt64]()
-        withUnsafeTemporaryAllocation(of: UInt64.self, capacity: Self.maxFrames) { buffer in
-            // ── Nothing from here to the resume may allocate. ──
-            thread_suspend(main)
-            let taken = Self.unwind(main, into: buffer)
-            thread_resume(main)
-            // ── Running again; Swift objects are safe to build. ──
-            frames = Array(buffer[0 ..< taken])
+        guard Self.exclusive.lock(before: Date().addingTimeInterval(Self.exclusiveTimeout)) else {
+            lockTimedOut = true
+            return nil
         }
-        return frames
+
+        defer { Self.exclusive.unlock() }
+        return Self.unwindSuspended(main)
     }
 
     private func walkExclusively() -> [ThreadStack] {
@@ -261,7 +292,8 @@ public final class ThreadWalker: @unchecked Sendable {
                             index: index,
                             name: names[index],
                             isMain: main != 0 && threads[index] == main,
-                            frames: Array(buffer[start ..< (start + taken[index])])
+                            frames: Array(buffer[start ..< (start + taken[index])]),
+                            truncated: taken[index] == Self.maxFrames
                         )
                     )
                 }
