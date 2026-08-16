@@ -15,8 +15,11 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
     private var pending: Data = .init()
     private var pendingFrames = 0
     private var waiting: [(bytes: Data, frames: Int)]
+    /// Posted but not yet answered — still owed to disk until success or a permanent refusal.
+    private var inFlight: [UInt64: (bytes: Data, frames: Int)] = [:]
+    private var nextInFlightId: UInt64 = 0
     private var flushScheduled = false
-    private var retryScheduled = false
+    private var retryWorkItem: DispatchWorkItem?
     private var backoff: TimeInterval = 1
     private var closed = false
     private var refusal: String?
@@ -84,6 +87,8 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
                 return
             }
 
+            retryWorkItem?.cancel()
+            retryWorkItem = nil
             backoff = 1
             flush()
         }
@@ -130,13 +135,14 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
         }
 
         // Oldest first, so a retry doesn't reorder a capture behind whatever arrived since.
+        // Left on disk exactly as it already was — still unconfirmed, not yet delivered.
         let queued = waiting
         waiting = []
-        if !queued.isEmpty {
-            persistBacklog()
-        }
         for batch in queued {
-            post(batch.bytes, frames: batch.frames)
+            let id = nextInFlightId
+            nextInFlightId += 1
+            inFlight[id] = batch
+            post(batch.bytes, frames: batch.frames, inFlightId: id)
         }
 
         guard !pending.isEmpty else {
@@ -147,17 +153,23 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
         let frames = pendingFrames
         pending = Data()
         pendingFrames = 0
-        post(batch, frames: frames)
+        post(batch, frames: frames, inFlightId: nil)
     }
 
-    private func post(_ batch: Data, frames: Int) {
+    private func post(_ batch: Data, frames: Int, inFlightId: UInt64?) {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "content-type")
 
         session.uploadTask(with: request, from: batch) { [weak self] _, response, error in
-            self?.answered(batch, frames: frames, response: response, error: error)
+            self?.answered(
+                batch,
+                frames: frames,
+                inFlightId: inFlightId,
+                response: response,
+                error: error
+            )
         }
         .resume()
     }
@@ -165,6 +177,7 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
     private func answered(
         _ batch: Data,
         frames: Int,
+        inFlightId: UInt64?,
         response: URLResponse?,
         error: Error?
     ) {
@@ -175,13 +188,14 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
             guard let http = response as? HTTPURLResponse else {
                 // No response: offline, DNS, a lost connection. Next attempt usually succeeds.
                 _ = error
-                hold(batch, frames: frames)
+                hold(batch, frames: frames, inFlightId: inFlightId)
                 return
             }
 
             switch http.statusCode {
             case 200 ..< 300:
                 backoff = 1
+                settled(inFlightId)
             // Final for this request: max_readings counts across every device and transport.
             case 429:
                 refusal = "max_frames"
@@ -189,21 +203,36 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
                 pending = Data()
                 pendingFrames = 0
                 waiting.forEach { lost += $0.frames }
+                inFlight.values.forEach { lost += $0.frames }
                 waiting = []
+                inFlight = [:]
                 persistBacklog()
             // 401 is the token expiring, which the next PUT /device fixes — worth retrying.
             case 401,
                  408,
                  500...599:
-                hold(batch, frames: frames)
+                hold(batch, frames: frames, inFlightId: inFlightId)
             default:
                 // A 4xx this client cannot fix by asking again.
                 lost += frames
+                settled(inFlightId)
             }
         }
     }
 
-    private func hold(_ batch: Data, frames: Int) {
+    /// A batch nothing will touch again, delivered or written off — no longer owed to disk.
+    private func settled(_ inFlightId: UInt64?) {
+        guard let inFlightId, inFlight.removeValue(forKey: inFlightId) != nil else {
+            return
+        }
+
+        persistBacklog()
+    }
+
+    private func hold(_ batch: Data, frames: Int, inFlightId: UInt64?) {
+        if let inFlightId {
+            inFlight.removeValue(forKey: inFlightId)
+        }
         waiting.append((bytes: batch, frames: frames))
 
         // Bounded, oldest-first: an hour offline must not grow memory unboundedly.
@@ -215,20 +244,21 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
         }
         persistBacklog()
 
-        guard !retryScheduled else {
-            return
-        }
-
-        retryScheduled = true
+        // Replaced rather than left in place: a reconnect that fails again still gets a
+        // fresh, short retry instead of waiting out whatever the old backoff had left.
+        retryWorkItem?.cancel()
         let delay = backoff
         backoff = min(backoff * 2, maxBackoff)
-        queue.asyncAfter(deadline: .now() + delay) { [self] in
-            retryScheduled = false
-            flush()
-        }
+        let item = DispatchWorkItem { [self] in flush() }
+        retryWorkItem = item
+        queue.asyncAfter(deadline: .now() + delay, execute: item)
     }
 
     private func persistBacklog() {
-        PersistedBacklog.save(waiting, for: requestId, in: backlogDirectory)
+        PersistedBacklog.save(
+            waiting + Array(inFlight.values),
+            for: requestId,
+            in: backlogDirectory
+        )
     }
 }

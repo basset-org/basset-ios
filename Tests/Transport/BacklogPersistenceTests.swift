@@ -18,6 +18,31 @@ extension DeliveryTests {
         #expect(await eventually {
             !PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })
+        channel.close()
+    }
+
+    /// A crash between "posted" and "answered" must not already have erased the only copy.
+    @Test func anInFlightRetryStaysOnDiskUntilItIsAnswered() async {
+        let directory = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let requestId: UInt64 = 21
+        PersistedBacklog.save(
+            [(bytes: Data([5, 5, 5]), frames: 1)],
+            for: requestId,
+            in: directory
+        )
+
+        // Neither an error nor a status: the retry is sent and never answered.
+        StubbedResponses.reset([(nil, false)])
+        let channel = stubbedChannel(requestId: requestId, backlogDirectory: directory)
+
+        #expect(await eventually { StubbedResponses.seen >= 1 }, "the retry was actually sent")
+        #expect(
+            !PersistedBacklog.load(for: requestId, in: directory).isEmpty,
+            "still on disk while the POST is outstanding, not cleared the moment it's attempted"
+        )
+        channel.close()
     }
 
     /// What a crash leaves on disk is what the next launch's channel retries on its own.
@@ -40,6 +65,7 @@ extension DeliveryTests {
             PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })
         #expect(channel.dropped == 0, "nothing the crash left behind was written off")
+        channel.close()
     }
 
     /// A reconnect is worth an immediate try rather than waiting out whatever backoff is left.
@@ -63,6 +89,7 @@ extension DeliveryTests {
         #expect(await eventually {
             PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })
+        channel.close()
     }
 
     /// Cancelled while offline means discard, same as the in-memory buffers upstream.

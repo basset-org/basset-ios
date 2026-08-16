@@ -37,6 +37,10 @@ final class StubbedResponses: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
             return
         }
+        guard answer.status != nil else {
+            // Neither an error nor a status: left hanging, as if still in flight.
+            return
+        }
 
         if let target = Self.target, let moved = URL(string: target) {
             let response = HTTPURLResponse(
