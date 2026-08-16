@@ -48,12 +48,17 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
     }
 
     /// Injectable so retry can be driven against refusals otherwise only reachable on a train.
+    /// `monitorsPath` is false only in tests: a headless CI simulator has no session to grant
+    /// Network.framework's local-network permission, and the first `NWPathMonitor.start()` in
+    /// the process can stall the whole run for an unbounded stretch waiting on it — `reconnected()`
+    /// is exercised directly there instead.
     init(
         endpoint: URL,
         token: String,
         requestId: UInt64,
         session: URLSession? = nil,
-        backlogDirectory: URL = PersistedBacklog.defaultDirectory()
+        backlogDirectory: URL = PersistedBacklog.defaultDirectory(),
+        monitorsPath: Bool = true
     ) {
         self.endpoint = endpoint
         self.token = token
@@ -68,14 +73,16 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
         waiting = PersistedBacklog.load(for: requestId, in: backlogDirectory)
             .map { (sequence: 0, bytes: $0.bytes, frames: $0.frames) }
 
-        pathMonitor.pathUpdateHandler = { [weak self] path in
-            guard path.status == .satisfied else {
-                return
-            }
+        if monitorsPath {
+            pathMonitor.pathUpdateHandler = { [weak self] path in
+                guard path.status == .satisfied else {
+                    return
+                }
 
-            self?.reconnected()
+                self?.reconnected()
+            }
+            pathMonitor.start(queue: queue)
         }
-        pathMonitor.start(queue: queue)
 
         guard !waiting.isEmpty else {
             return

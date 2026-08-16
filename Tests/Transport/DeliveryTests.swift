@@ -113,7 +113,8 @@ func stubbedChannel(
             delegate: RedirectRefusal.shared,
             delegateQueue: nil
         ),
-        backlogDirectory: backlogDirectory
+        backlogDirectory: backlogDirectory,
+        monitorsPath: false
     )
 }
 
