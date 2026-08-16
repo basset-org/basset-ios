@@ -28,12 +28,17 @@ public struct Readings {
         record.add(component)
     }
 
-    /// `entityId`/`entityParent`/`nestedLevel` together, so a call site writes one line rather
-    /// than three. `parent` is `0` for a root — a reading can have more than one.
-    public mutating func putStructure(id: UInt32, parent: UInt32, level: UInt32) {
-        put(.entityId(id))
-        put(.entityParent(parent))
-        put(.nestedLevel(level))
+    /// Stamped on the record and every sibling this reading has produced so far — for a
+    /// correlation id minted after an instrument's own `fault`/`observe` has already built its
+    /// readings, e.g. `faultId`, which every fault contributor's output carries without that
+    /// instrument's own code needing to know it exists.
+    public mutating func tagEveryEntity(with component: Component) {
+        record.add(component)
+        siblings = siblings.map { sibling in
+            var sibling = sibling
+            sibling.add(component)
+            return sibling
+        }
     }
 
     /// A second entity from the same firing — splits a thread snapshot's stacks apart.

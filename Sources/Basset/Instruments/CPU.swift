@@ -69,7 +69,6 @@ final class ThreadCPUUsage: Streamable, Configurable {
         out.also(Self.entity) { sibling in
             sibling.put(.windowNanoseconds(window.nanoseconds))
             sibling.put(.mechanismStatus("truncated: \(busy.count - Self.ceiling) more"))
-            sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         }
     }
 
@@ -105,7 +104,6 @@ final class ThreadCPUUsage: Streamable, Configurable {
         out.put(.threadIsMain(entry.sample.isMain))
         out.put(.threadRunState(entry.sample.runState))
         out.put(.cpuUsageRatio(entry.sample.cpuUsageRatio))
-        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         if !entry.sample.name.isEmpty {
             out.put(.threadName(entry.sample.name))
         }

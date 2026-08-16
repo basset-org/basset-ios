@@ -221,10 +221,7 @@ struct ThreadInventoryReadingTests {
         var out = readings()
         ThreadInventoryReading.write([], into: &out)
 
-        #expect(
-            out.componentsWritten ==
-                [.mechanismStatus, .entityId, .entityParent, .nestedLevel]
-        )
+        #expect(out.componentsWritten == [.mechanismStatus])
     }
 
     /// The count rides every row, so a reader taking only one entity still learns the total.

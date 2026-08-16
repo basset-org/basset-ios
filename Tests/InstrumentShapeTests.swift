@@ -154,7 +154,7 @@ struct InstrumentShapeTests {
     @Test func idSpacesOnlyEverGrow() {
         // Holes are retirements, never reissued (components: see retiredIdsStayReserved).
         let instrumentIds: [UInt16] = Array(1...21) + Array(23...39) + Array(42...57) + [0xff00]
-        let componentIds: [UInt16] = Array(1...238)
+        let componentIds: [UInt16] = Array(1...239)
         let entityIds: [UInt16] = Array(0...32) + Array(35...49) + [0xff00]
 
         #expect(instrumentIdSnapshot == instrumentIds)

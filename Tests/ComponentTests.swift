@@ -221,9 +221,10 @@ struct ComponentTests {
             (.frameHeightPoints(0), .frameHeightPoints),
             (.runtimeClassName(""), .runtimeClassName),
             (.gestureRecognizerState(""), .gestureRecognizerState),
-            (.entityId(0), .entityId),
-            (.entityParent(0), .entityParent),
+            (.viewId(0), .viewId),
+            (.viewParent(0), .viewParent),
             (.nestedLevel(0), .nestedLevel),
+            (.faultId(0), .faultId),
         ]
 
         for (component, expected) in all {

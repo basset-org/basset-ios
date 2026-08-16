@@ -104,14 +104,15 @@ public extension Component.ID {
 
         case .deviceId,
              .deviceUniqueId,
-             .entityId,
-             .entityParent,
+             .faultId,
              .instanceId,
              .instrument,
              .launchId,
              .threadIdentifier,
              .touchId,
-             .userId:
+             .userId,
+             .viewId,
+             .viewParent:
             .correlation
 
         // Numbers that aren't quantities: addresses, an index, an error code spelled in digits.

@@ -71,10 +71,7 @@ struct NotificationSettingsTests {
         var out = readings()
         NotificationSettings.write(NotificationSettingsReading(), into: &out)
 
-        #expect(
-            out.componentsWritten ==
-                [.mechanismStatus, .entityId, .entityParent, .nestedLevel]
-        )
+        #expect(out.componentsWritten == [.mechanismStatus])
     }
 
     /// Read through the runtime — a non-settings object returns nil, not a raise.

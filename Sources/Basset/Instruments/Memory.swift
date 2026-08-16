@@ -74,14 +74,19 @@ final class MemoryPressure: Streamable, PlainInstrument {
 
     /// Never `emitIfChanged`: each crossing gets its own footprint, even warning-critical-warning.
     private func report(_ level: String, scope: String, context: Context) {
+        // Critical only: a thread walk on every warning would cost more than it explains.
+        let faultId: UInt32? = level == "critical" ? EntityIdentity.next() : nil
+
         context.emit { out in
             out.put(.memoryPressureLevel(level))
             out.put(.memoryPressureScope(scope))
             MemoryLedger.read()?.write(into: &out)
+            if let faultId {
+                out.put(.faultId(faultId))
+            }
         }
-        // Critical only: a thread walk on every warning would cost more than it explains.
-        if level == "critical" {
-            context.fault(.memoryPressure)
+        if let faultId {
+            context.fault(.memoryPressure, faultId)
         }
     }
 }

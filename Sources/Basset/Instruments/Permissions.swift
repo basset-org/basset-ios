@@ -371,7 +371,6 @@ extension PermissionFinding {
         if let unknowableBecause {
             out.put(.mechanismStatus("unknowable: \(unknowableBecause)"))
         }
-        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
     }
 }
 
@@ -390,7 +389,6 @@ final class PermissionStatus: Snapshotable, PlainInstrument {
                         "no permission-gated framework is linked into this app"
                     )
                 )
-            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 

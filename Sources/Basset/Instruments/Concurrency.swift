@@ -140,6 +140,7 @@ final class MainThreadHang: Streamable, Configurable {
         let watching = Thread { [heartbeat, watch, clock] in
             var state = HangWatch.State()
             var wasDebugged = false
+            var faultId: UInt32?
 
             while !Thread.current.isCancelled {
                 let deadline = Date().addingTimeInterval(interval)
@@ -171,19 +172,28 @@ final class MainThreadHang: Streamable, Configurable {
                 case .quiet:
                     continue
                 case .began(let nanoseconds, let turns):
+                    // Shared with whatever this fault triggers, so a consumer can join this
+                    // hang's own reading against the stack it caused without a time-window guess.
+                    let id = EntityIdentity.next()
+                    faultId = id
                     context.emit { out in
                         out.put(.hangNanoseconds(nanoseconds))
                         out.put(.hangResolved(false))
                         out.put(.runLoopTurnCount(turns))
+                        out.put(.faultId(id))
                     }
                     // While still stuck — anything else enabled here reads the frozen process.
-                    context.fault(.hang)
+                    context.fault(.hang, id)
                 case .ended(let nanoseconds, let turns):
                     context.emit { out in
                         out.put(.hangNanoseconds(nanoseconds))
                         out.put(.hangResolved(true))
                         out.put(.runLoopTurnCount(turns))
+                        if let faultId {
+                            out.put(.faultId(faultId))
+                        }
                     }
+                    faultId = nil
                 }
             }
         }
@@ -300,7 +310,6 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
     static func write(_ samples: [ThreadSample], into out: inout Readings) {
         guard let first = samples.first else {
             out.put(.mechanismStatus("unavailable: the task listed no threads"))
-            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 
@@ -321,7 +330,6 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
         out.also(Self.entity) { sibling in
             sibling.put(.occurrenceCount(UInt64(samples.count)))
             sibling.put(.mechanismStatus("truncated: \(samples.count - ceiling) more"))
-            sibling.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
         }
     }
 
@@ -347,7 +355,6 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
         // The pair only, no verdict — per-class base priorities aren't established on a phone.
         out.put(.threadPriority(sample.currentPriority))
         out.put(.threadRequestedQos(sample.requestedQos))
-        out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
     }
 
     func reading(_ out: inout Readings) {

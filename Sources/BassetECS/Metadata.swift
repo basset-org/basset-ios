@@ -378,6 +378,7 @@ public extension InstrumentID {
                 reveals: [
                     "how long the main thread stayed busy, and whether it recovered",
                     "whether one long callback or a run of back-to-back ones caused it",
+                    "a faultId shared with the thread snapshot this hang triggers, so the two join without guessing from timing",
                 ],
                 related: [
                     "uikit.view.layoutPass",
@@ -403,6 +404,7 @@ public extension InstrumentID {
                     "what each thread is doing, innermost frame first",
                     "which thread is main, and what it is waiting on",
                     "the build and load address each address belongs to, so a local dSYM resolves it",
+                    "when triggered by a hang or a critical memory crossing, a faultId shared with the reading that triggered it",
                 ],
                 related: ["concurrency.mainThreadHang", "device.info"],
                 mechanism: .machCall,
@@ -502,6 +504,7 @@ public extension InstrumentID {
                     "each crossing into warning and critical pressure, and each return to normal",
                     "whether the system was under pressure or this app alone was asked to free memory",
                     "the footprint and remaining headroom at the edge, rather than a sample taken near it",
+                    "on a critical crossing, a faultId shared with the thread snapshot it triggers",
                 ],
                 related: [
                     "memory.footprint",
