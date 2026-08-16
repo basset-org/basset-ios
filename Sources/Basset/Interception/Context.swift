@@ -40,7 +40,7 @@ public final class Context: @unchecked Sendable {
     private let defaultEntity: Entity.ID
     private let sink: @Sendable (Entity) -> Void
     /// Carries the raising activation's status so a late fault attributes correctly.
-    private let raise: @Sendable (FaultKind, AtomicStatus) -> Void
+    private let raise: @Sendable (FaultKind, UInt32, AtomicStatus) -> Void
     private let timerQueue: DispatchQueue
     private let lock: NSLock = .init()
     private var timers: [DispatchSourceTimer] = []
@@ -64,7 +64,7 @@ public final class Context: @unchecked Sendable {
         timerQueue: DispatchQueue,
         tallySlots: Int = 4,
         sink: @escaping @Sendable (Entity) -> Void,
-        raise: @escaping @Sendable (FaultKind, AtomicStatus) -> Void = { _, _ in }
+        raise: @escaping @Sendable (FaultKind, UInt32, AtomicStatus) -> Void = { _, _, _ in }
     ) {
         tally = Tally(slots: tallySlots)
         self.instrumentName = instrumentName
@@ -77,13 +77,15 @@ public final class Context: @unchecked Sendable {
         self.raise = raise
     }
 
-    /// Something other instruments may care about; runs on the caller's own thread.
-    public func fault(_ kind: FaultKind) {
+    /// Something other instruments may care about; runs on the caller's own thread. `id`
+    /// carries onto every contributor's readings as `faultId`, so this fault's own reading and
+    /// whatever it triggers stay related without either instrument's code doing the linking.
+    public func fault(_ kind: FaultKind, _ id: UInt32) {
         guard status.isActive else {
             return
         }
 
-        raise(kind, status)
+        raise(kind, id, status)
     }
 
     public func registry<Tracked: AnyObject>(_ type: Tracked.Type) -> [Tracked] {

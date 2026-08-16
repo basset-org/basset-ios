@@ -225,7 +225,7 @@ private final class FakeDetector: Streamable, PlainInstrument, @unchecked Sendab
         lock.lock()
         let context = self.context
         lock.unlock()
-        context?.fault(.hang)
+        context?.fault(.hang, 1)
     }
 }
 
@@ -434,12 +434,12 @@ struct RuntimeConvergenceTests {
         subject.settle()
         let replacement = try #require(subject.contributor)
 
-        subject.fault(.hang, from: finished)
+        subject.fault(.hang, id: 1, from: finished)
         subject.settle()
         #expect(replacement.askedCount == 0, "the request that raised it is over")
 
         let live = try #require(subject.detector?.raisingStatus)
-        subject.fault(.hang, from: live)
+        subject.fault(.hang, id: 2, from: live)
         subject.settle()
         #expect(replacement.askedCount == 1, "and a live one is still delivered")
     }
@@ -484,6 +484,36 @@ struct RuntimeConvergenceTests {
 
         #expect(subject.contributor?.askedCount == 1)
         #expect(opener.stream(1)?.count == 1, "the contributor's reading was delivered")
+    }
+
+    /// Without this, a consumer joining a hang's own reading against the stack it triggered
+    /// would have to guess from timing alone.
+    @Test func aFaultsCorrelationIdReachesTheContributorsOwnReading() throws {
+        let (subject, opener) = runtime(faultPair)
+
+        subject.converge(
+            to: [
+                request(
+                    1,
+                    instruments: ["concurrency.mainThreadHang", "runtime.threadSnapshot"]
+                ),
+            ],
+            ingestEndpoint: "in"
+        )
+        subject.detector?.detect()
+        subject.settle()
+
+        // Read as raw bytes — the decoder isn't linked here; only the wire matters.
+        var stamp = Data()
+        stamp
+            .append(contentsOf: withUnsafeBytes(of: Component.ID.faultId.rawValue.littleEndian) {
+                Array($0)
+            })
+        stamp.append(Scalar.uint32.rawValue)
+        stamp.append(contentsOf: withUnsafeBytes(of: UInt32(1).littleEndian) { Array($0) })
+
+        let frames = try #require(opener.stream(1)?.sent)
+        #expect(frames.contains { $0.range(of: stamp) != nil })
     }
 
     /// The request named the detector alone — an instrument it didn't name doesn't run.

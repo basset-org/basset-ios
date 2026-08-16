@@ -394,9 +394,10 @@ public struct Component: Equatable, Sendable {
         case frameHeightPoints = 233
         case runtimeClassName = 234
         case gestureRecognizerState = 235
-        case entityId = 236
-        case entityParent = 237
+        case viewId = 236
+        case viewParent = 237
         case nestedLevel = 238
+        case faultId = 239
     }
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.
@@ -867,7 +868,8 @@ public extension Component {
         .gestureRecognizerState,
         value
     ) }
-    static func entityId(_ value: UInt32) -> Component { .init(.entityId, value) }
-    static func entityParent(_ value: UInt32) -> Component { .init(.entityParent, value) }
+    static func viewId(_ value: UInt32) -> Component { .init(.viewId, value) }
+    static func viewParent(_ value: UInt32) -> Component { .init(.viewParent, value) }
     static func nestedLevel(_ value: UInt32) -> Component { .init(.nestedLevel, value) }
+    static func faultId(_ value: UInt32) -> Component { .init(.faultId, value) }
 }

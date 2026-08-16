@@ -708,7 +708,6 @@ final class TransportSecurity: Snapshotable, PlainInstrument {
             // No dictionary means ATS defaults, not an absence — https with TLS 1.2+.
             out.put(.arbitraryLoadsAllowed(false))
             out.put(.mechanismStatus("no NSAppTransportSecurity key; defaults apply"))
-            out.putStructure(id: EntityIdentity.next(), parent: 0, level: 0)
             return
         }
 
@@ -724,9 +723,6 @@ final class TransportSecurity: Snapshotable, PlainInstrument {
         let domains = settings["NSExceptionDomains"] as? [String: Any] ?? [:]
         out.put(.occurrenceCount(UInt64(domains.count)))
 
-        let root = EntityIdentity.next()
-        out.putStructure(id: root, parent: 0, level: 0)
-
         // Sorted so two captures of one build list exceptions in the same order.
         for name in domains.keys.sorted() {
             let exception = domains[name] as? [String: Any] ?? [:]
@@ -740,7 +736,6 @@ final class TransportSecurity: Snapshotable, PlainInstrument {
                 if let minimum = exception["NSExceptionMinimumTLSVersion"] as? String {
                     sibling.put(.minimumTLSVersion(minimum))
                 }
-                sibling.putStructure(id: EntityIdentity.next(), parent: root, level: 1)
             }
         }
     }

@@ -227,16 +227,14 @@ final class WindowTouches: Streamable, Configurable {
         let location = touch.location(in: nil)
         let key = ObjectIdentifier(touch)
 
-        // Pairs this touch's own began and ended/cancelled readings together — unrelated to
-        // entityId below, which names this one reading, not the physical touch across its
-        // lifecycle.
+        // Pairs this touch's own began and ended/cancelled readings together — and, on a
+        // `.began`, doubles as the anchor its hierarchy snapshot's root view points back at.
         let touchId: UInt32? =
             if phase == .began {
                 touchIds.withLock { $0.begin(key) }
             } else {
                 touchIds.withLock { $0.end(key) }
             }
-        let id = EntityIdentity.next()
 
         context.emit { out in
             out.put(.touchPhase(Self.name(of: phase)))
@@ -246,14 +244,13 @@ final class WindowTouches: Streamable, Configurable {
             if let touchId {
                 out.put(.touchId(touchId))
             }
-            out.putStructure(id: id, parent: 0, level: 0)
 
-            guard hierarchy, phase == .began, let window = touch.window else {
+            guard hierarchy, phase == .began, let touchId, let window = touch.window else {
                 return
             }
 
             out.also(.viewHierarchy) { hier in
-                ViewHierarchy.writeMatches(at: location, in: window, parent: id, into: &hier)
+                ViewHierarchy.writeMatches(at: location, in: window, parent: touchId, into: &hier)
             }
         }
     }
@@ -290,7 +287,7 @@ final class ViewHierarchy: Snapshotable, Configurable {
     static func write(at point: CGPoint, parent: UInt32, into out: inout Readings) {
         guard let window = keyWindow() else {
             out.put(.mechanismStatus("unavailable: no key window"))
-            out.putStructure(id: EntityIdentity.next(), parent: parent, level: 0)
+            putViewPosition(id: EntityIdentity.next(), parent: parent, level: 0, into: &out)
             return
         }
 
@@ -298,7 +295,7 @@ final class ViewHierarchy: Snapshotable, Configurable {
     }
 
     /// The walk itself, against a caller-supplied root. `WindowTouches` calls this directly
-    /// with the touch's own window and its own `entityId` as `parent` — the only way to answer
+    /// with the touch's own window and its own `touchId` as `parent` — the only way to answer
     /// "what got hit" without a round trip the hierarchy might not survive. Also reachable
     /// directly against a constructed view tree, since a test bundle process has no key window
     /// of its own.
@@ -311,7 +308,7 @@ final class ViewHierarchy: Snapshotable, Configurable {
         let hits = matches(at: point, in: root, parent: parent, level: 0)
         guard !hits.isEmpty else {
             out.put(.mechanismStatus("unavailable: nothing at that point"))
-            out.putStructure(id: EntityIdentity.next(), parent: parent, level: 0)
+            putViewPosition(id: EntityIdentity.next(), parent: parent, level: 0, into: &out)
             return
         }
 
@@ -328,12 +325,25 @@ final class ViewHierarchy: Snapshotable, Configurable {
 
         out.also(Self.entity) { sibling in
             sibling.put(.mechanismStatus("truncated: \(omitted) more"))
-            sibling.putStructure(id: EntityIdentity.next(), parent: parent, level: 0)
+            putViewPosition(id: EntityIdentity.next(), parent: parent, level: 0, into: &sibling)
         }
     }
 
+    /// `viewId`/`viewParent`/`nestedLevel` together, so a call site writes one line rather than
+    /// three.
+    private static func putViewPosition(
+        id: UInt32,
+        parent: UInt32,
+        level: UInt32,
+        into out: inout Readings
+    ) {
+        out.put(.viewId(id))
+        out.put(.viewParent(parent))
+        out.put(.nestedLevel(level))
+    }
+
     /// `ceiling` matches, plus every kept match's ancestor chain up to one already kept — the
-    /// ceiling alone can cut a match whose `entityParent` names a row further down this same
+    /// ceiling alone can cut a match whose `viewParent` names a row further down this same
     /// list, and a row naming a parent this reading never emits is worse than emitting a few
     /// more than the ceiling asks for.
     private static func selectWithinCeiling(_ hits: [Match]) -> (kept: [Match], omitted: Int) {
@@ -362,7 +372,7 @@ final class ViewHierarchy: Snapshotable, Configurable {
         out.put(.originYPoints(Double(inRoot.origin.y)))
         out.put(.frameWidthPoints(Double(inRoot.width)))
         out.put(.frameHeightPoints(Double(inRoot.height)))
-        out.putStructure(id: match.id, parent: match.parent, level: match.level)
+        putViewPosition(id: match.id, parent: match.parent, level: match.level, into: &out)
     }
 
     /// Depth first, front to back: a subview drawn later sits on top of an earlier one, so its

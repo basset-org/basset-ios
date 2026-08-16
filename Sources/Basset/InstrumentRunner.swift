@@ -210,7 +210,7 @@ final class InstrumentRunner: @unchecked Sendable {
     }
 
     /// Contributors are copied on `queue` first: a fault can arrive on any thread.
-    func fault(_ kind: FaultKind, from source: AtomicStatus) {
+    func fault(_ kind: FaultKind, id: UInt32, from source: AtomicStatus) {
         // Shared with `deactivate`, so a deactivation waits out a fault already in flight.
         faultLock.lock()
         defer { faultLock.unlock() }
@@ -223,6 +223,9 @@ final class InstrumentRunner: @unchecked Sendable {
         for contributor in faultContributors {
             var readings = contributor.context.readings()
             contributor.instrument.fault(kind, &readings)
+            if !readings.isEmpty {
+                readings.tagEveryEntity(with: .faultId(id))
+            }
             contributor.context.deliver(readings)
         }
     }
@@ -374,7 +377,7 @@ final class InstrumentRunner: @unchecked Sendable {
                     activation: status
                 )
             },
-            raise: { [weak self] kind, source in self?.fault(kind, from: source) }
+            raise: { [weak self] kind, id, source in self?.fault(kind, id: id, from: source) }
         )
         contexts[id] = context
 

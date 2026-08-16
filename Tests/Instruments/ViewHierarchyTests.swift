@@ -56,11 +56,11 @@ struct ViewHierarchyWalkTests {
         let hits = rows(at: CGPoint(x: 5, y: 5), in: outer, parent: 42)
 
         #expect(hits.count == 2)
-        #expect(value(.entityParent, in: hits[1]) == "42")
+        #expect(value(.viewParent, in: hits[1]) == "42")
         #expect(value(.nestedLevel, in: hits[1]) == "0")
     }
 
-    @Test func aNestedMatchPointsAtItsAncestorsEntityId() {
+    @Test func aNestedMatchPointsAtItsAncestorsViewId() {
         let outer = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
         let inner = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
         outer.addSubview(inner)
@@ -68,8 +68,8 @@ struct ViewHierarchyWalkTests {
         let hits = rows(at: CGPoint(x: 5, y: 5), in: outer)
 
         #expect(hits.count == 2)
-        let outerId = value(.entityId, in: hits[1])
-        #expect(value(.entityParent, in: hits[0]) == outerId)
+        let outerId = value(.viewId, in: hits[1])
+        #expect(value(.viewParent, in: hits[0]) == outerId)
         #expect(value(.nestedLevel, in: hits[0]) == "1")
     }
 
@@ -91,7 +91,7 @@ struct ViewHierarchyWalkTests {
     /// walk emits the root itself last. Genuinely truncated (`root.subviews.count` alone
     /// clears the ceiling), unlike a single nested chain, where closing one match's ancestors
     /// closes the whole chain and nothing is ever truncated.
-    @Test func everyKeptRowsParentResolvesToAnEmittedEntityIdEvenWhenTruncated() {
+    @Test func everyKeptRowsParentResolvesToAnEmittedViewIdEvenWhenTruncated() {
         let root = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
         for _ in 0 ..< (ViewHierarchy.ceiling + 10) {
             root.addSubview(UIView(frame: root.bounds))
@@ -103,9 +103,9 @@ struct ViewHierarchyWalkTests {
             .flatMap { value(.mechanismStatus, in: $0) }?
             .contains("truncated") == true)
 
-        let emittedIds = Set(hits.compactMap { value(.entityId, in: $0) })
+        let emittedIds = Set(hits.compactMap { value(.viewId, in: $0) })
         for entity in hits {
-            guard let parentId = value(.entityParent, in: entity), parentId != "0" else {
+            guard let parentId = value(.viewParent, in: entity), parentId != "0" else {
                 continue
             }
 
