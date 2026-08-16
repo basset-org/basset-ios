@@ -486,8 +486,8 @@ struct RuntimeConvergenceTests {
         #expect(opener.stream(1)?.count == 1, "the contributor's reading was delivered")
     }
 
-    /// The raising instrument's own reading and whatever it triggers otherwise carry no shared
-    /// id — a consumer would have to guess the join from timing alone.
+    /// Without this, a consumer joining a hang's own reading against the stack it triggered
+    /// would have to guess from timing alone.
     @Test func aFaultsCorrelationIdReachesTheContributorsOwnReading() throws {
         let (subject, opener) = runtime(faultPair)
 
