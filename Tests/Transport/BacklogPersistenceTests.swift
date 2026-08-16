@@ -15,6 +15,9 @@ extension DeliveryTests {
         let channel = stubbedChannel(requestId: requestId, backlogDirectory: directory)
         channel.send(Data([1, 2, 3]))
 
+        // Confirmed sent first, same as every sibling test here — a slow CI runner still
+        // gets a full budget for the disk check rather than sharing one with the flush delay.
+        #expect(await eventually { StubbedResponses.seen >= 1 })
         #expect(await eventually {
             !PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })
