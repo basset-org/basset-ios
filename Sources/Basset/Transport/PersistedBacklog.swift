@@ -2,6 +2,10 @@ import Foundation
 
 /// A crash mid-outage loses nothing an atomic rename already committed to disk.
 enum PersistedBacklog {
+    /// Serializes every call: an atomic write's own temp file is invisible to nothing else
+    /// here, but a sweep running its directory listing mid-rename would still delete it.
+    private static let lock: NSLock = .init()
+
     static func defaultDirectory() -> URL {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
@@ -17,6 +21,9 @@ enum PersistedBacklog {
         for requestId: UInt64,
         in directory: URL = defaultDirectory()
     ) -> [(bytes: Data, frames: Int)] {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let payload = try? Data(contentsOf: url(for: requestId, in: directory)),
               payload.count > 4
         else {
@@ -46,6 +53,9 @@ enum PersistedBacklog {
         payload.withUnsafeMutableBytes { $0.storeBytes(of: UInt32(totalFrames), as: UInt32.self) }
         waiting.forEach { payload.append($0.bytes) }
 
+        lock.lock()
+        defer { lock.unlock() }
+
         try? FileManager.default.createDirectory(
             at: directory,
             withIntermediateDirectories: true
@@ -54,11 +64,17 @@ enum PersistedBacklog {
     }
 
     static func remove(for requestId: UInt64, in directory: URL = defaultDirectory()) {
+        lock.lock()
+        defer { lock.unlock() }
+
         try? FileManager.default.removeItem(at: url(for: requestId, in: directory))
     }
 
     /// Mirrors the in-memory rule: a request this process did not resume is gone, not retried.
     static func sweep(keeping live: Set<UInt64>, in directory: URL = defaultDirectory()) {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path)
         else {
             return

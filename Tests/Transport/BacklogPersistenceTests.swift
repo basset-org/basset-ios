@@ -45,6 +45,46 @@ extension DeliveryTests {
         channel.close()
     }
 
+    /// A first attempt is owed to disk exactly like a retry is — it just hasn't failed yet.
+    @Test func afirstAttemptStaysOnDiskUntilItIsAnswered() async {
+        let directory = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let requestId: UInt64 = 31
+
+        // Neither an error nor a status: the first attempt is sent and never answered.
+        StubbedResponses.reset([(nil, false)])
+        let channel = stubbedChannel(requestId: requestId, backlogDirectory: directory)
+        channel.send(Data([7, 7, 7]))
+
+        #expect(await eventually { StubbedResponses.seen >= 1 }, "the first attempt was sent")
+        #expect(
+            !PersistedBacklog.load(for: requestId, in: directory).isEmpty,
+            "on disk before it's answered, not only after it first fails"
+        )
+        channel.close()
+    }
+
+    /// A batch the 429 just refused must not also be counted through the in-flight sweep.
+    @Test func a429DoesNotDoubleCountTheBatchItRefused() async {
+        let directory = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let requestId: UInt64 = 45
+        PersistedBacklog.save(
+            [(bytes: Data([1, 2, 3, 4]), frames: 4)],
+            for: requestId,
+            in: directory
+        )
+
+        StubbedResponses.reset([(429, false)])
+        let channel = stubbedChannel(requestId: requestId, backlogDirectory: directory)
+
+        #expect(await eventually { channel.refused == "max_frames" })
+        #expect(channel.dropped == 4, "counted once, not once for the batch and once for the sweep")
+        channel.close()
+    }
+
     /// What a crash leaves on disk is what the next launch's channel retries on its own.
     @Test func apersistedBacklogIsRetriedWhenTheChannelIsRebuilt() async {
         let directory = FileManager.default

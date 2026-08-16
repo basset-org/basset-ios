@@ -333,10 +333,15 @@ private func scratchDefaults() -> UserDefaults {
     UserDefaults(suiteName: "basset-tests-\(UUID().uuidString)")!
 }
 
+/// Never the real Application Support directory — a sweep here must not touch host disk.
+private func scratchBacklogDirectory() -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+}
+
 private func runtime(
     _ instruments: [Registration] = [.stream(FakeMemory.self)],
     opener: RecordingOpener = RecordingOpener(),
-    backlogDirectory: URL = PersistedBacklog.defaultDirectory(),
+    backlogDirectory: URL = scratchBacklogDirectory(),
     clock: MovableClock? = nil
 ) -> (InstrumentRunner, RecordingOpener) {
     (
@@ -860,7 +865,8 @@ struct RuntimeConvergenceTests {
         let subject = InstrumentRunner(
             instruments: bothFakes,
             opener: RecordingOpener(),
-            atLaunchRequests: atLaunchRequests
+            atLaunchRequests: atLaunchRequests,
+            backlogDirectory: scratchBacklogDirectory()
         )
 
         subject.converge(
@@ -882,7 +888,8 @@ struct RuntimeConvergenceTests {
         let subject = InstrumentRunner(
             instruments: [.stream(FakeMemory.self)],
             opener: RecordingOpener(),
-            atLaunchRequests: atLaunchRequests
+            atLaunchRequests: atLaunchRequests,
+            backlogDirectory: scratchBacklogDirectory()
         )
 
         subject.startFromDisk()
@@ -1161,9 +1168,7 @@ struct LaunchBufferTests {
     }
 
     @Test func aBacklogTheControlPlaneStillListsSurvivesTheLaunchSweep() {
-        let directory = FileManager.default
-            .temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
+        let directory = scratchBacklogDirectory()
         // Not at_launch, so the local disk cache from before a crash never names it.
         PersistedBacklog.save([(bytes: Data([1]), frames: 1)], for: 55, in: directory)
         let (subject, _) = runtime(backlogDirectory: directory)
@@ -1186,9 +1191,7 @@ struct LaunchBufferTests {
     }
 
     @Test func aBacklogTheControlPlaneNoLongerListsIsSweptOnceHeardFrom() {
-        let directory = FileManager.default
-            .temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
+        let directory = scratchBacklogDirectory()
         PersistedBacklog.save([(bytes: Data([1]), frames: 1)], for: 99, in: directory)
         let (subject, _) = runtime(backlogDirectory: directory)
 
@@ -1212,7 +1215,8 @@ struct LaunchBufferTests {
         let subject = InstrumentRunner(
             instruments: [.stream(FakeMemory.self)],
             opener: RecordingOpener(),
-            atLaunchRequests: atLaunchRequests
+            atLaunchRequests: atLaunchRequests,
+            backlogDirectory: scratchBacklogDirectory()
         )
 
         subject.startFromDisk()
@@ -1231,7 +1235,8 @@ struct LaunchBufferTests {
         let subject = InstrumentRunner(
             instruments: [.stream(FakeMemory.self)],
             opener: opener,
-            atLaunchRequests: atLaunchRequests
+            atLaunchRequests: atLaunchRequests,
+            backlogDirectory: scratchBacklogDirectory()
         )
 
         subject.converge(
