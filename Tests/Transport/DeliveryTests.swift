@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 /// Drives bad-network answers here: a killed POST, a refusing far end, an expired token.
-private final class StubbedResponses: URLProtocol, @unchecked Sendable {
+final class StubbedResponses: URLProtocol, @unchecked Sendable {
     private nonisolated(unsafe) static var answers: [(status: Int?, error: Bool)] = []
     private nonisolated(unsafe) static var attempts = 0
     private nonisolated(unsafe) static var asked: [String] = []
@@ -91,17 +91,25 @@ private final class StubbedResponses: URLProtocol, @unchecked Sendable {
     }
 }
 
-private func stubbedChannel() -> HTTP2Channel {
+/// A fresh directory per call, so one test's backlog file can't leak into another's.
+func stubbedChannel(
+    requestId: UInt64 = 1,
+    backlogDirectory: URL = FileManager.default
+        .temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+) -> HTTP2Channel {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubbedResponses.self]
     return HTTP2Channel(
         endpoint: URL(string: "https://in.example/frames")!,
         token: "t",
+        requestId: requestId,
         session: URLSession(
             configuration: configuration,
             delegate: RedirectRefusal.shared,
             delegateQueue: nil
-        )
+        ),
+        backlogDirectory: backlogDirectory
     )
 }
 

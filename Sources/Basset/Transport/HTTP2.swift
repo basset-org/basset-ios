@@ -1,16 +1,20 @@
 import BassetECS
 import Foundation
+import Network
 
 /// Readings batched into POSTs. A failed POST is retried, not discarded — worth capturing.
 final class HTTP2Channel: Transport, @unchecked Sendable {
     private let endpoint: URL
     private let token: String
+    private let requestId: UInt64
+    private let backlogDirectory: URL
     private let session: URLSession
     private let queue: DispatchQueue = .init(label: QueueLabel.http2)
+    private let pathMonitor: NWPathMonitor = .init()
 
     private var pending: Data = .init()
     private var pendingFrames = 0
-    private var waiting: [(bytes: Data, frames: Int)] = []
+    private var waiting: [(bytes: Data, frames: Int)]
     private var flushScheduled = false
     private var retryScheduled = false
     private var backoff: TimeInterval = 1
@@ -37,15 +41,52 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
     }
 
     /// Injectable so retry can be driven against refusals otherwise only reachable on a train.
-    init(endpoint: URL, token: String, session: URLSession? = nil) {
+    init(
+        endpoint: URL,
+        token: String,
+        requestId: UInt64,
+        session: URLSession? = nil,
+        backlogDirectory: URL = PersistedBacklog.defaultDirectory()
+    ) {
         self.endpoint = endpoint
         self.token = token
+        self.requestId = requestId
+        self.backlogDirectory = backlogDirectory
         self.session = session ?? URLSession(
             configuration: .ephemeral,
             delegate: RedirectRefusal.shared,
             delegateQueue: nil
         )
         IgnoredSessions.add(self.session)
+        waiting = PersistedBacklog.load(for: requestId, in: backlogDirectory)
+
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else {
+                return
+            }
+
+            self?.reconnected()
+        }
+        pathMonitor.start(queue: queue)
+
+        guard !waiting.isEmpty else {
+            return
+        }
+
+        // A backlog surviving a relaunch is worth an attempt now, not a fresh backoff wait.
+        queue.async { [self] in flush() }
+    }
+
+    /// Reachability regained: worth a try now rather than waiting out whatever backoff is left.
+    func reconnected() {
+        queue.async { [self] in
+            guard !closed, !waiting.isEmpty else {
+                return
+            }
+
+            backoff = 1
+            flush()
+        }
     }
 
     func send(_ frame: Data) {
@@ -77,6 +118,9 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
         queue.async { [self] in
             flush()
             closed = true
+            pathMonitor.cancel()
+            // Cancelled while offline means discard, same as the in-memory buffers upstream.
+            PersistedBacklog.remove(for: requestId, in: backlogDirectory)
         }
     }
 
@@ -88,6 +132,9 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
         // Oldest first, so a retry doesn't reorder a capture behind whatever arrived since.
         let queued = waiting
         waiting = []
+        if !queued.isEmpty {
+            persistBacklog()
+        }
         for batch in queued {
             post(batch.bytes, frames: batch.frames)
         }
@@ -143,6 +190,7 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
                 pendingFrames = 0
                 waiting.forEach { lost += $0.frames }
                 waiting = []
+                persistBacklog()
             // 401 is the token expiring, which the next PUT /device fixes — worth retrying.
             case 401,
                  408,
@@ -165,6 +213,7 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
             held -= oldest.bytes.count
             waiting.removeFirst()
         }
+        persistBacklog()
 
         guard !retryScheduled else {
             return
@@ -177,5 +226,9 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
             retryScheduled = false
             flush()
         }
+    }
+
+    private func persistBacklog() {
+        PersistedBacklog.save(waiting, for: requestId, in: backlogDirectory)
     }
 }

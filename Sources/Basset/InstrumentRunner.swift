@@ -119,11 +119,10 @@ final class InstrumentRunner: @unchecked Sendable {
     }
 
     func startFromDisk(at moment: Date = Date()) {
-        converge(
-            to: atLaunchRequests.load(at: moment),
-            ingestEndpoint: nil,
-            persisting: false
-        )
+        let resumed = atLaunchRequests.load(at: moment)
+        // A backlog for a request this launch did not resume is never coming back for it.
+        PersistedBacklog.sweep(keeping: Set(resumed.map(\.requestId)))
+        converge(to: resumed, ingestEndpoint: nil, persisting: false)
     }
 
     func converge(
