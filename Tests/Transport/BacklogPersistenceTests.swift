@@ -15,10 +15,11 @@ extension DeliveryTests {
         let channel = stubbedChannel(requestId: requestId, backlogDirectory: directory)
         channel.send(Data([1, 2, 3]))
 
-        // Confirmed sent first, same as every sibling test here — a slow CI runner still
-        // gets a full budget for the disk check rather than sharing one with the flush delay.
-        #expect(await eventually { StubbedResponses.seen >= 1 })
-        #expect(await eventually {
+        // Alphabetically first in this suite, so it's the one that pays whatever this
+        // process's first NWPathMonitor/URLSession touch costs — observed over 60s on a
+        // loaded CI simulator though every later, near-identical test stays under 1s.
+        #expect(await eventually(within: .seconds(90)) { StubbedResponses.seen >= 1 })
+        #expect(await eventually(within: .seconds(90)) {
             !PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })
         channel.close()
