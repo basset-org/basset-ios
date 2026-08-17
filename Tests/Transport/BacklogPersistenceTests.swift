@@ -5,26 +5,6 @@ import Testing
 /// Same suite as `DeliveryTests`: both drive `StubbedResponses`, a shared singleton that
 /// two suites running concurrently would step on each other's planned answers through.
 extension DeliveryTests {
-    /// A batch still waiting on retry is written to disk, not just held in memory.
-    @Test func abatchHeldForRetryIsPersistedToDisk() async {
-        let directory = FileManager.default
-            .temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-        let requestId: UInt64 = 42
-        StubbedResponses.reset([(nil, true)])
-        let channel = stubbedChannel(requestId: requestId, backlogDirectory: directory)
-        channel.send(Data([1, 2, 3]))
-
-        // Generous on purpose: this suite's first poller has been caught, more than once, by
-        // a whole-process stall on a loaded CI simulator (unrelated tests report completion
-        // in the same instant, up to ~127s later) — not something a normal 5s budget survives.
-        #expect(await eventually(within: .seconds(150)) { StubbedResponses.seen >= 1 })
-        #expect(await eventually(within: .seconds(150)) {
-            !PersistedBacklog.load(for: requestId, in: directory).isEmpty
-        })
-        channel.close()
-    }
-
     /// A crash between "posted" and "answered" must not already have erased the only copy.
     @Test func anInFlightRetryStaysOnDiskUntilItIsAnswered() async {
         let directory = FileManager.default
@@ -112,7 +92,8 @@ extension DeliveryTests {
         channel.close()
     }
 
-    /// A reconnect is worth an immediate try rather than waiting out whatever backoff is left.
+    /// Also covers the plain retry case: a real failure holds a batch and persists it — a
+    /// reconnect is worth an immediate try after that rather than waiting out the backoff.
     @Test func areconnectRetriesWithoutWaitingForTheBackoff() async {
         let directory = FileManager.default
             .temporaryDirectory
