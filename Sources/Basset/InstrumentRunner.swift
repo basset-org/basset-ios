@@ -48,6 +48,7 @@ final class InstrumentRunner: @unchecked Sendable {
     private let byName: [String: Registration]
     private let opener: TransportOpener
     private let atLaunchRequests: AtLaunchRequests
+    private let backlogDirectory: URL
     private let encoder: FrameEncoder = .init()
     private let queue: DispatchQueue = .init(
         label: QueueLabel.instrumentRunner,
@@ -108,12 +109,14 @@ final class InstrumentRunner: @unchecked Sendable {
         instruments: [Registration] = Instruments.all,
         opener: TransportOpener,
         atLaunchRequests: AtLaunchRequests = AtLaunchRequests(),
+        backlogDirectory: URL = PersistedBacklog.defaultDirectory(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.registrations = instruments
         self.byName = Dictionary(instruments.map { ($0.name, $0) }) { first, _ in first }
         self.opener = opener
         self.atLaunchRequests = atLaunchRequests
+        self.backlogDirectory = backlogDirectory
         self.now = now
         installLoadTimeHooks()
     }
@@ -138,6 +141,12 @@ final class InstrumentRunner: @unchecked Sendable {
             for request in desired where incoming[request.requestId] == nil {
                 incoming[request.requestId] = request
                 firstPerRequestId.append(request)
+            }
+
+            // Only once the control plane has spoken: the disk-only bootstrap list is a
+            // cache of `atLaunch` requests, not proof that everything else is really gone.
+            if ingestEndpoint != nil {
+                PersistedBacklog.sweep(keeping: Set(incoming.keys), in: backlogDirectory)
             }
 
             // Snapshotted: `drop` mutates `live`, which a live keys view is a window onto.

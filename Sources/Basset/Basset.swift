@@ -258,7 +258,7 @@ struct IngestTransports: TransportOpener {
                         .quic(requestId: request.requestId))
                 )
             },
-            fallback: HTTP2Channel(endpoint: http2, token: token)
+            fallback: HTTP2Channel(endpoint: http2, token: token, requestId: request.requestId)
         )
         transport.start()
         return transport
