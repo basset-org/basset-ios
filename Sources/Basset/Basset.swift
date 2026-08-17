@@ -114,12 +114,9 @@ final class DeviceLoop: @unchecked Sendable {
         }
     }
 
+    /// No forced refresh here — the loop's next poll reads userId fresh on its own.
     func identify(userId: String?) {
         guarded.withLock { $0.userId = userId }
-
-        Task.detached(priority: .utility) { [self] in
-            try? await poll()
-        }
     }
 
     func currentState() -> DeviceState {
@@ -141,7 +138,6 @@ final class DeviceLoop: @unchecked Sendable {
         )
     }
 
-    /// A stale poll result must not overwrite a newer user's.
     private func poll() async throws {
         let user = guarded.withLock { $0.userId }
 
@@ -154,15 +150,8 @@ final class DeviceLoop: @unchecked Sendable {
         }
 
         record(.accepted(requestCount: response.requests.count))
-
-        guarded.withLock {
-            $0.ingestEndpoint = response.ingestEndpoint
-            guard $0.userId == user else {
-                return
-            }
-
-            runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
-        }
+        guarded.withLock { $0.ingestEndpoint = response.ingestEndpoint }
+        runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
     }
 
     private func record(_ outcome: CtrlResponse.Outcome) {
