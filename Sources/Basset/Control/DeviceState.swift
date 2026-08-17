@@ -16,11 +16,6 @@ public struct DeviceState: Sendable {
 }
 
 public struct CtrlResponse: Sendable {
-    public enum Call: String, Sendable {
-        case putDevice
-        case requests
-    }
-
     public enum Outcome: Sendable, Equatable {
         case accepted(requestCount: Int)
         case unauthorized
@@ -28,12 +23,10 @@ public struct CtrlResponse: Sendable {
         case unreachable(String)
     }
 
-    public let call: Call
     public let outcome: Outcome
     public let at: Date
 
-    public init(call: Call, outcome: Outcome, at: Date) {
-        self.call = call
+    public init(outcome: Outcome, at: Date) {
         self.outcome = outcome
         self.at = at
     }

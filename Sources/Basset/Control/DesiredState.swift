@@ -155,36 +155,18 @@ private enum JSONValue: Codable {
     }
 }
 
-struct DeviceResponse: Decodable, Sendable {
+struct DesiredState: Decodable, Sendable {
     enum CodingKeys: String, CodingKey {
-        case deviceToken = "device_token"
         case ingestEndpoint = "ingest_endpoint"
         case requests
     }
 
-    let deviceToken: String
     let ingestEndpoint: String
     let requests: [BassetRequest]
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        deviceToken = try container.decode(String.self, forKey: .deviceToken)
         ingestEndpoint = try container.decode(String.self, forKey: .ingestEndpoint)
-        requests = try container
-            .decodeIfPresent(LenientRequestList.self, forKey: .requests)?
-            .requests ?? []
-    }
-}
-
-struct RequestsResponse: Decodable, Sendable {
-    enum CodingKeys: String, CodingKey {
-        case requests
-    }
-
-    let requests: [BassetRequest]
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
         requests = try container
             .decodeIfPresent(LenientRequestList.self, forKey: .requests)?
             .requests ?? []

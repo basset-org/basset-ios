@@ -168,7 +168,7 @@ struct DeliveryTests {
         #expect(StubbedResponses.hostsAsked == ["in.example"], "and not re-aimed")
     }
 
-    /// An expired token isn't a lost reading — the next PUT /device mints a fresh one.
+    /// An expired token isn't a lost reading — the next poll mints a fresh one.
     @Test func anexpiredTokenKeepsTheBatch() async {
         StubbedResponses.reset([(401, false), (200, false)])
         let channel = stubbedChannel()

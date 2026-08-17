@@ -44,14 +44,13 @@ struct DesiredStateDecodingTests {
     @Test func arealCtrlResponseDecodes() throws {
         let response = try decode(
             """
-            {"device_token":"device.jwt","ingest_endpoint":"in.basset.dev",
+            {"ingest_endpoint":"in.basset.dev",
              "requests":[{"request_id":2,"instruments":["runtime.memory","device.info"],
              "at_launch":false,"expires_at":"2026-07-28T13:49:12.410488Z",
              "max_frames":500,"request_token":"request.jwt"}]}
             """
         )
 
-        #expect(response.deviceToken == "device.jwt")
         #expect(response.ingestEndpoint == "in.basset.dev")
         #expect(response.requests.count == 1)
 
@@ -65,7 +64,7 @@ struct DesiredStateDecodingTests {
     @Test func aRequestWithoutMaxFramesIsBackstopped() throws {
         let response = try decode(
             """
-            {"device_token":"d","ingest_endpoint":"in","requests":[
+            {"ingest_endpoint":"in","requests":[
              {"request_id":7,"instruments":["ui.fps"],"at_launch":true,
               "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
             """
@@ -80,7 +79,7 @@ struct DesiredStateDecodingTests {
     @Test func anOversizedMaxFramesIsClampedToTheBackstop() throws {
         let response = try decode(
             """
-            {"device_token":"d","ingest_endpoint":"in","requests":[
+            {"ingest_endpoint":"in","requests":[
              {"request_id":8,"instruments":["ui.fps"],
               "expires_at":"2026-07-28T13:49:12Z","max_frames":4000000000,
               "request_token":"r"}]}
@@ -95,7 +94,7 @@ struct DesiredStateDecodingTests {
     @Test func aFarFutureExpiryIsClampedToTheLifetimeHorizon() throws {
         let response = try decode(
             """
-            {"device_token":"d","ingest_endpoint":"in","requests":[
+            {"ingest_endpoint":"in","requests":[
              {"request_id":9,"instruments":["ui.fps"],
               "expires_at":"3000-01-01T00:00:00Z","request_token":"r"}]}
             """
@@ -110,7 +109,7 @@ struct DesiredStateDecodingTests {
     @Test func aRequestWithinTheBackstopsKeepsItsValues() throws {
         let response = try decode(
             """
-            {"device_token":"d","ingest_endpoint":"in","requests":[
+            {"ingest_endpoint":"in","requests":[
              {"request_id":10,"instruments":["ui.fps"],
               "expires_at":"2026-07-28T13:49:12Z","max_frames":500,
               "request_token":"r"}]}
@@ -124,7 +123,7 @@ struct DesiredStateDecodingTests {
 
     @Test func anEmptyDesiredStateIsAValidAnswer() throws {
         let response =
-            try decode(#"{"device_token":"d","ingest_endpoint":"in","requests":[]}"#)
+            try decode(#"{"ingest_endpoint":"in","requests":[]}"#)
         #expect(response.requests.isEmpty)
     }
 
@@ -133,7 +132,7 @@ struct DesiredStateDecodingTests {
     @Test func instrumentConfigDecodesPerInstrumentName() throws {
         let response = try decode(
             """
-            {"device_token":"d","ingest_endpoint":"in","requests":[
+            {"ingest_endpoint":"in","requests":[
              {"request_id":1,"instruments":["concurrency.mainThreadHang"],
               "instrument_config":{"concurrency.mainThreadHang":{"thresholdMs":300}},
               "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
@@ -150,7 +149,7 @@ struct DesiredStateDecodingTests {
     @Test func aLargeIntegerInConfigSurvivesExactly() throws {
         let response = try decode(
             """
-            {"device_token":"d","ingest_endpoint":"in","requests":[
+            {"ingest_endpoint":"in","requests":[
              {"request_id":1,"instruments":["ui.fps"],
               "instrument_config":{"ui.fps":{"budgetNanoseconds":9007199254740993}},
               "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
@@ -167,7 +166,7 @@ struct DesiredStateDecodingTests {
     @Test func aRequestWithNoInstrumentConfigFieldReadsAsEmpty() throws {
         let response = try decode(
             """
-            {"device_token":"d","ingest_endpoint":"in","requests":[
+            {"ingest_endpoint":"in","requests":[
              {"request_id":1,"instruments":["ui.fps"],
               "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
             """
@@ -180,7 +179,7 @@ struct DesiredStateDecodingTests {
     @Test func aMalformedInstrumentConfigFieldIsDroppedRatherThanFailingTheRequest() throws {
         let response = try decode(
             """
-            {"device_token":"d","ingest_endpoint":"in","requests":[
+            {"ingest_endpoint":"in","requests":[
              {"request_id":1,"instruments":["ui.fps"],"instrument_config":"not an object",
               "expires_at":"2026-07-28T13:49:12Z","request_token":"r"}]}
             """
@@ -191,8 +190,8 @@ struct DesiredStateDecodingTests {
         #expect(request.instrumentConfig.isEmpty)
     }
 
-    private func decode(_ json: String) throws -> DeviceResponse {
-        try JSONDecoder().decode(DeviceResponse.self, from: Data(json.utf8))
+    private func decode(_ json: String) throws -> DesiredState {
+        try JSONDecoder().decode(DesiredState.self, from: Data(json.utf8))
     }
 }
 
@@ -279,14 +278,14 @@ struct AtLaunchRequestTests {
 struct LenientRequestListTests {
     @Test func aMalformedRequestIsSkippedRatherThanFailingTheRest() throws {
         let json = """
-        {"requests": [
+        {"ingest_endpoint": "in", "requests": [
             {"request_id": 1, "instruments": ["a"], "expires_at": "2026-07-28T13:49:12Z"},
             {"request_id": "not a number"},
             {"request_id": 2, "instruments": ["b"], "expires_at": "2026-07-28T13:49:12Z"}
         ]}
         """
         let decoded = try JSONDecoder().decode(
-            RequestsResponse.self,
+            DesiredState.self,
             from: Data(json.utf8)
         )
         #expect(decoded.requests.map(\.requestId) == [1, 2])
@@ -294,10 +293,10 @@ struct LenientRequestListTests {
 
     @Test func garbageElementsOfEveryShapeDecodeToNothing() throws {
         let json = """
-        {"requests": ["soon", 4, null, {}, [true]]}
+        {"ingest_endpoint": "in", "requests": ["soon", 4, null, {}, [true]]}
         """
         let decoded = try JSONDecoder().decode(
-            RequestsResponse.self,
+            DesiredState.self,
             from: Data(json.utf8)
         )
         #expect(decoded.requests.isEmpty)
@@ -305,13 +304,13 @@ struct LenientRequestListTests {
 
     @Test func aNullElementDoesNotTruncateWhatFollowsIt() throws {
         let json = """
-        {"requests": [
+        {"ingest_endpoint": "in", "requests": [
             null,
             {"request_id": 3, "instruments": ["c"], "expires_at": "2026-07-28T13:49:12Z"}
         ]}
         """
         let decoded = try JSONDecoder().decode(
-            RequestsResponse.self,
+            DesiredState.self,
             from: Data(json.utf8)
         )
         #expect(decoded.requests.map(\.requestId) == [3])
@@ -319,8 +318,8 @@ struct LenientRequestListTests {
 
     @Test func aMissingListReadsAsEmpty() throws {
         let decoded = try JSONDecoder().decode(
-            RequestsResponse.self,
-            from: Data("{}".utf8)
+            DesiredState.self,
+            from: Data(#"{"ingest_endpoint": "in"}"#.utf8)
         )
         #expect(decoded.requests.isEmpty)
     }
