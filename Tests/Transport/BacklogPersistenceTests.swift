@@ -15,8 +15,11 @@ extension DeliveryTests {
         let channel = stubbedChannel(requestId: requestId, backlogDirectory: directory)
         channel.send(Data([1, 2, 3]))
 
-        #expect(await eventually { StubbedResponses.seen >= 1 })
-        #expect(await eventually {
+        // Generous on purpose: this suite's first poller has been caught, more than once, by
+        // a whole-process stall on a loaded CI simulator (unrelated tests report completion
+        // in the same instant, up to ~127s later) — not something a normal 5s budget survives.
+        #expect(await eventually(within: .seconds(150)) { StubbedResponses.seen >= 1 })
+        #expect(await eventually(within: .seconds(150)) {
             !PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })
         channel.close()
