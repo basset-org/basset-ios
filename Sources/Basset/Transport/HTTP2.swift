@@ -136,6 +136,9 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
             flush()
             closed = true
             pathMonitor.cancel()
+            // Nothing still in flight is worth carrying past a transport that's gone —
+            // a leftover task otherwise runs to completion for nothing.
+            session.invalidateAndCancel()
             // Cancelled while offline means discard, same as the in-memory buffers upstream.
             PersistedBacklog.remove(for: requestId, in: backlogDirectory)
         }

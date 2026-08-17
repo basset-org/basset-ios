@@ -38,7 +38,8 @@ final class StubbedResponses: URLProtocol, @unchecked Sendable {
             return
         }
         guard answer.status != nil else {
-            // Neither an error nor a status: left hanging, as if still in flight.
+            // Neither an error nor a status: left hanging, as if still in flight — the
+            // channel's own close() is what's expected to cancel this, same as production.
             return
         }
 
