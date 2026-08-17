@@ -70,7 +70,7 @@ public enum Basset {
     }
 }
 
-/// Launch, then upsert, then hold — everything the device asks the control plane.
+/// Launch, then poll, holding between calls — everything the device asks the control plane.
 final class DeviceLoop: @unchecked Sendable {
     private struct State {
         var userId: String?
@@ -96,7 +96,7 @@ final class DeviceLoop: @unchecked Sendable {
         self.runner = InstrumentRunner(opener: IngestTransports(config: config))
     }
 
-    /// First rejection retries immediately (re-upserting refreshes the token); backs off after.
+    /// First rejection retries immediately in case it was transient; backs off after.
     static func rejectionDelay(afterConsecutive rejections: Int) -> Duration? {
         guard rejections > 0 else {
             return nil
@@ -114,12 +114,9 @@ final class DeviceLoop: @unchecked Sendable {
         }
     }
 
+    /// No forced refresh here — the loop's next poll reads userId fresh on its own.
     func identify(userId: String?) {
         guarded.withLock { $0.userId = userId }
-
-        Task.detached(priority: .utility) { [self] in
-            _ = try? await upsert()
-        }
     }
 
     func currentState() -> DeviceState {
@@ -141,26 +138,25 @@ final class DeviceLoop: @unchecked Sendable {
         )
     }
 
-    private func upsert() async throws -> String {
+    private func poll() async throws {
         let user = guarded.withLock { $0.userId }
 
-        let response: DeviceResponse
+        let response: DesiredState
         do {
-            response = try await control.client().putDevice(identity, userId: user)
+            response = try await control.client().requests(identity, userId: user)
         } catch {
-            record(.putDevice, outcome(for: error))
+            record(outcome(for: error))
             throw error
         }
 
-        record(.putDevice, .accepted(requestCount: response.requests.count))
-        runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
+        record(.accepted(requestCount: response.requests.count))
         guarded.withLock { $0.ingestEndpoint = response.ingestEndpoint }
-        return response.deviceToken
+        runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
     }
 
-    private func record(_ call: CtrlResponse.Call, _ outcome: CtrlResponse.Outcome) {
+    private func record(_ outcome: CtrlResponse.Outcome) {
         guarded.withLock {
-            $0.lastCtrlResponse = CtrlResponse(call: call, outcome: outcome, at: Date())
+            $0.lastCtrlResponse = CtrlResponse(outcome: outcome, at: Date())
         }
     }
 
@@ -185,24 +181,9 @@ final class DeviceLoop: @unchecked Sendable {
 
         while !Task.isCancelled {
             do {
-                let deviceToken = try await upsert()
+                try await poll()
+                rejections = 0
                 backoff = .seconds(1)
-
-                // Held read: answers when desired state changes or the hold runs out.
-                while !Task.isCancelled {
-                    let requests: [BassetRequest]
-                    do {
-                        requests = try await control.client().requests(deviceToken: deviceToken)
-                    } catch {
-                        record(.requests, outcome(for: error))
-                        throw error
-                    }
-
-                    rejections = 0
-                    record(.requests, .accepted(requestCount: requests.count))
-                    let endpoint = guarded.withLock { $0.ingestEndpoint }
-                    runner.converge(to: requests, ingestEndpoint: endpoint)
-                }
             } catch ControlError.unauthorized {
                 if let delay = Self.rejectionDelay(afterConsecutive: rejections) {
                     try? await Task.sleep(for: delay)

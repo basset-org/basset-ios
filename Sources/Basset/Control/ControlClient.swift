@@ -57,9 +57,9 @@ struct ControlClient: Sendable {
         IgnoredSessions.add(session)
     }
 
-    func putDevice(_ identity: DeviceIdentity,
-                   userId: String?) async throws -> DeviceResponse
-    {
+    /// Held server-side until the desired state changes or the hold elapses — every
+    /// call carries the full identity, since nothing is remembered between calls.
+    func requests(_ identity: DeviceIdentity, userId: String?) async throws -> DesiredState {
         var body: [String: String] = [
             "api_key": apiKey,
             "device_id": identity.deviceId,
@@ -76,22 +76,13 @@ struct ControlClient: Sendable {
             body["user_id"] = userId
         }
 
-        var request = URLRequest(url: endpoint.appendingPathComponent("device"))
-        request.httpMethod = "PUT"
+        var request = URLRequest(url: endpoint.appendingPathComponent("requests"))
+        request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let data = try await send(to: request)
-        return try JSONDecoder().decode(DeviceResponse.self, from: data)
-    }
-
-    func requests(deviceToken: String) async throws -> [BassetRequest] {
-        var request = URLRequest(url: endpoint.appendingPathComponent("requests"))
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "authorization")
-
-        let data = try await send(to: request)
-        return try JSONDecoder().decode(RequestsResponse.self, from: data).requests
+        return try JSONDecoder().decode(DesiredState.self, from: data)
     }
 
     private func send(to request: URLRequest) async throws -> Data {

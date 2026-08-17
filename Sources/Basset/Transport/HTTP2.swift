@@ -226,7 +226,7 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
                 waiting = []
                 inFlight = [:]
                 persistBacklog()
-            // 401 is the token expiring, which the next PUT /device fixes — worth retrying.
+            // 401 is the token expiring, which the next poll fixes — worth retrying.
             case 401,
                  408,
                  500...599:
