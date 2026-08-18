@@ -170,6 +170,8 @@ final class DeviceLoop: @unchecked Sendable {
             .unreachable("the answer was not HTTP")
         case .oversized(let bytes):
             .unreachable("the answer was refused at \(bytes) bytes")
+        case .insecureEndpoint:
+            .unreachable("the control endpoint is not https")
         case .none:
             .unreachable(error.localizedDescription)
         }
@@ -203,8 +205,22 @@ final class DeviceLoop: @unchecked Sendable {
 struct IngestTransports: TransportOpener {
     let config: Config
 
-    /// Rejects anything that isn't a bare hostname, so a malformed endpoint opens no stream.
-    private static func hostname(_ candidate: String) -> String? {
+    private static func isWithinControlDomain(_ candidate: String, of controlHost: String) -> Bool {
+        let candidate = candidate.lowercased()
+        let controlHost = controlHost.lowercased()
+        let controlLabels = controlHost.split(separator: ".")
+        guard controlLabels.count >= 2 else {
+            return candidate == controlHost
+        }
+
+        let registrable = controlLabels.suffix(2).joined(separator: ".")
+        return candidate == registrable || candidate.hasSuffix(".\(registrable)")
+    }
+
+    /// Rejects anything that isn't a bare hostname under the configured control domain — the
+    /// control plane names the ingest host, but a MITM'd control channel must not be able to
+    /// redirect credentials to an unrelated one.
+    func hostname(_ candidate: String) -> String? {
         guard !candidate.isEmpty, candidate.count <= 253 else {
             return nil
         }
@@ -213,13 +229,18 @@ struct IngestTransports: TransportOpener {
         }) else {
             return nil
         }
+        guard let controlHost = config.control.host,
+              Self.isWithinControlDomain(candidate, of: controlHost)
+        else {
+            return nil
+        }
 
         return candidate
     }
 
     func open(request: BassetRequest, ingestEndpoint: String) -> Transport? {
         guard
-            let host = Self.hostname(ingestEndpoint),
+            let host = hostname(ingestEndpoint),
             let token = request.requestToken,
             let http2 =
             URL(string: "https://\(host):\(config.http2Port)/frames")

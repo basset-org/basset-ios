@@ -3,15 +3,44 @@ import Foundation
 /// What may leave a URL — query dropped whole; an allow-list is one more thing to keep.
 enum Redaction {
     private static let tokenPunctuation: Set<Character> = ["-", "_", ".", "=", "%", "+", "~"]
+    /// A run right after one of these is a credential regardless of its own shape or length.
+    private static let credentialLabels: Set<String> = [
+        "authorization",
+        "bearer",
+        "token",
+        "key",
+        "secret",
+    ]
+    /// A path segment right after one of these is somebody's identity, whatever shape it takes.
+    private static let identityCollectionLabels: Set<String> =
+        [
+            "u",
+            "user",
+            "users",
+            "profile",
+            "profiles",
+            "account",
+            "accounts",
+            "customer",
+            "customers",
+            "tenant",
+            "tenants",
+        ]
 
     static func url(_ url: URL?) -> String {
         guard let url, let scheme = url.scheme, let host = url.host else {
             return ""
         }
 
+        var previous: String?
         let path = url.pathComponents
             .filter { $0 != "/" }
-            .map { looksLikeAnIdentifier($0) ? ":id" : $0 }
+            .map { component -> String in
+                let labeled = previous
+                    .map { identityCollectionLabels.contains($0.lowercased()) } ?? false
+                previous = component
+                return (labeled || looksLikeAnIdentifier(component)) ? ":id" : component
+            }
             .joined(separator: "/")
         return path.isEmpty ? "\(scheme)://\(host)" : "\(scheme)://\(host)/\(path)"
     }
@@ -21,6 +50,7 @@ enum Redaction {
         let characters = Array(text)
         var kept = ""
         var index = 0
+        var previousRun: String?
         while index < characters.count {
             guard isRunCharacter(characters[index]) else {
                 kept.append(characters[index])
@@ -45,7 +75,9 @@ enum Redaction {
                     break
                 }
             }
-            kept += carriesASecret(run) ? ":id" : run
+            let labeled = previousRun.map { credentialLabels.contains($0.lowercased()) } ?? false
+            kept += (labeled || carriesASecret(run)) ? ":id" : run
+            previousRun = run
         }
         return kept
     }

@@ -63,9 +63,11 @@ final class QUICChannel: RacedTransport, @unchecked Sendable {
             case .cancelled,
                  .failed:
                 self?.onFailure?()
-            // A network that drops UDP stays in `.waiting` forever, so it gets a deadline.
-            case .waiting:
-                self?.giveUpIfStillWaiting()
+            // A network that drops UDP stays in `.waiting` forever, and a stalled handshake
+            // can sit in `.preparing` just as long — both get the same deadline.
+            case .preparing,
+                 .waiting:
+                self?.giveUpIfNotReadyInTime()
             default:
                 break
             }
@@ -110,7 +112,7 @@ final class QUICChannel: RacedTransport, @unchecked Sendable {
         }
     }
 
-    private func giveUpIfStillWaiting() {
+    private func giveUpIfNotReadyInTime() {
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.isReady else {
                 return

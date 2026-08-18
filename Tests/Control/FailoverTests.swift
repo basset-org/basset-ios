@@ -8,6 +8,7 @@ private final class Channel: RacedTransport, @unchecked Sendable {
 
     let kind: TransportType?
     var note: String? = "fake"
+    var refused: String?
     private(set) var started = false
 
     private let lock: NSLock = .init()
@@ -173,6 +174,75 @@ struct FailoverTests {
         #expect(transport.kind == .quic, "and takes the stream back")
         #expect(reconnected.count == 1)
         #expect(http2.count == 3, "readings 2, 3 and 4 went over the fallback")
+    }
+
+    /// Once the ingest cap lands, retrying the primary buys nothing — the request is already done.
+    @Test func aTerminalRefusalStopsFurtherPrimaryRetries() {
+        let quic = Channel(kind: .quic)
+        let http2 = Channel(kind: .http2)
+        let attempts = Attempts([quic])
+        let clock = Clock()
+
+        let transport = FailoverTransport(
+            primary: { attempts.next() },
+            fallback: http2,
+            retryAfter: 30,
+            now: { clock.now }
+        )
+        transport.start()
+        quic.becomeReady()
+        transport.send(reading(1))
+
+        quic.fail()
+        http2.refused = "max_frames"
+        #expect(transport.refused == "max_frames")
+
+        clock.now = clock.now.addingTimeInterval(30)
+        transport.send(reading(2))
+
+        #expect(
+            attempts.taken == 1,
+            "a latched refusal is terminal — no further QUIC dial is worth it"
+        )
+        #expect(transport.kind == .http2)
+        #expect(transport.refused == "max_frames")
+    }
+
+    /// The ingest cap is final for the request; a redial already racing must not erase it.
+    @Test func aTerminalRefusalSurvivesARecarryAlreadyInFlight() {
+        let quic = Channel(kind: .quic)
+        let http2 = Channel(kind: .http2)
+        let reconnected = Channel(kind: .quic)
+        let attempts = Attempts([quic, reconnected])
+        let clock = Clock()
+
+        let transport = FailoverTransport(
+            primary: { attempts.next() },
+            fallback: http2,
+            retryAfter: 30,
+            now: { clock.now }
+        )
+        transport.start()
+        quic.becomeReady()
+        transport.send(reading(1))
+
+        quic.fail()
+        clock.now = clock.now.addingTimeInterval(30)
+        transport.send(reading(2))
+        #expect(attempts.taken == 2, "past the cooldown, QUIC is dialled again")
+
+        // The ingest cap lands on http2 while the redial above is still connecting.
+        http2.refused = "max_frames"
+        reconnected.becomeReady()
+
+        #expect(transport.kind == .quic, "the redial still takes over the stream")
+        #expect(
+            transport.refused == "max_frames",
+            "the fallback's terminal refusal must survive the switch to a transport reporting none"
+        )
+
+        transport.send(reading(3))
+        #expect(attempts.taken == 2, "a latched refusal stops any further primary retry")
     }
 
     /// "QUIC failed" alone can't distinguish about-to-retry from stuck-until-a-reading.

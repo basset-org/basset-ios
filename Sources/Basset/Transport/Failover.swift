@@ -23,6 +23,8 @@ final class FailoverTransport: Transport, @unchecked Sendable {
         var held: [Data] = []
         var lastNote: String?
         var refusedAt: Date?
+        /// Latched once seen: a request refused on one transport stays refused after a recarry.
+        var refusal: String?
         var closed = false
         var evicted = 0
         var attempts = 0
@@ -82,7 +84,12 @@ final class FailoverTransport: Transport, @unchecked Sendable {
     }
 
     var refused: String? {
-        guarded.withLock { $0.active }?.refused
+        guarded.withLock { state in
+            if let current = state.active?.refused {
+                state.refusal = current
+            }
+            return state.refusal
+        }
     }
 
     /// Evicted here while nothing could carry, plus what the carrying transport lost on its own.
@@ -154,6 +161,7 @@ final class FailoverTransport: Transport, @unchecked Sendable {
         state.active === fallback
             && state.primary == nil
             && !state.closed
+            && state.refusal == nil
             && (state.refusedAt.map { now().timeIntervalSince($0) >= retryAfter } ?? false)
     }
 
@@ -192,6 +200,9 @@ final class FailoverTransport: Transport, @unchecked Sendable {
                 return nil
             }
 
+            if let outgoing = state.active?.refused {
+                state.refusal = outgoing
+            }
             state.active = transport
             let backlog = state.held
             state.held = []

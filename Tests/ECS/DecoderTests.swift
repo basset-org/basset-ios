@@ -136,6 +136,19 @@ struct DecoderTests {
         #expect(try FrameReader.frames(in: Data()).isEmpty)
     }
 
+    /// Past the limit, a caller belongs on `next()` instead of holding every frame at once.
+    @Test func moreFramesThanTheLimitAreRefusedRatherThanRetainedUnbounded() throws {
+        let entities = (0 ..< 5).map { Entity(.process, capturedAt: UInt64($0)) }
+        let data = framed(entities)
+
+        #expect(throws: DecoderError.tooManyFrames(4)) {
+            try FrameReader.frames(in: data, limit: 4)
+        }
+
+        let frames = try FrameReader.frames(in: data, limit: 5)
+        #expect(frames.count == 5)
+    }
+
     /// A count is a claim about bytes not there — believing it reserves memory unsent.
     @Test func acomponentCountLargerThanTheFrameIsRefusedRatherThanReserved() {
         var manual = Data([PayloadKind.entity.rawValue])
