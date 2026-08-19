@@ -66,9 +66,6 @@ enum PersistedBacklog {
             to: target,
             options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
         )
-        // The atomic write above replaces the file via a rename, and a rename is not
-        // guaranteed to carry either of these from the temp file it replaces — both are
-        // reapplied to the surviving file rather than trusted to have survived the write.
         harden(target)
     }
 
@@ -102,9 +99,6 @@ enum PersistedBacklog {
         var resourceValues = URLResourceValues()
         resourceValues.isExcludedFromBackup = true
         try? mutableTarget.setResourceValues(resourceValues)
-
-        // The protection class rides the file, not a resource value URLResourceValues can
-        // set — FileManager's older attribute API is the one that still writes it.
         try? FileManager.default.setAttributes(
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
             ofItemAtPath: target.path

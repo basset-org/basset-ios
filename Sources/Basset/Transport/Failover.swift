@@ -23,7 +23,6 @@ final class FailoverTransport: Transport, @unchecked Sendable {
         var held: [Data] = []
         var lastNote: String?
         var refusedAt: Date?
-        /// Latched once seen: a request refused on one transport stays refused after a recarry.
         var refusal: String?
         var closed = false
         var evicted = 0
@@ -83,8 +82,6 @@ final class FailoverTransport: Transport, @unchecked Sendable {
         return "\(text) — set aside after \(tried), \(next)"
     }
 
-    /// The fallback can still answer — and refuse — after a recarry moves `active` off it, so
-    /// it is checked here whether or not it is the one currently carrying.
     var refused: String? {
         guarded.withLock { state in
             if let current = state.active?.refused ?? state.primary?.refused ?? fallback.refused {

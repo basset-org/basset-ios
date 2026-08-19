@@ -37,8 +37,6 @@ public enum DecoderError: Error, Equatable {
 
 public struct FrameReader {
     public static let maxFrameLength: UInt64 = 1024 * 1024
-    /// A frame count, not a byte bound: `frames(in:)` keeps every decoded frame resident, so an
-    /// input past this belongs behind `next()`, which decodes one at a time instead.
     public static let maxFrameCount = 65536
 
     private let bytes: [UInt8]

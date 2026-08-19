@@ -9,7 +9,6 @@ enum ControlError: Error {
     case refused(status: Int)
     case notHTTP
     case oversized(bytes: Int)
-    /// The API key never leaves this device in cleartext, even under a caller-supplied URL.
     case insecureEndpoint
 }
 

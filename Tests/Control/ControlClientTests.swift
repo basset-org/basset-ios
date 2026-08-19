@@ -12,7 +12,6 @@ private let identity: DeviceIdentity = .init(
     deviceKind: "device"
 )
 
-/// The API key never goes out over a cleartext control endpoint, even a caller-supplied one.
 struct ControlClientTests {
     @Test func aNonHttpsEndpointIsRefusedBeforeAnyRequestIsSent() async throws {
         let client = try ControlClient(

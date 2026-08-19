@@ -176,7 +176,6 @@ struct FailoverTests {
         #expect(http2.count == 3, "readings 2, 3 and 4 went over the fallback")
     }
 
-    /// Once the ingest cap lands, retrying the primary buys nothing — the request is already done.
     @Test func aTerminalRefusalStopsFurtherPrimaryRetries() {
         let quic = Channel(kind: .quic)
         let http2 = Channel(kind: .http2)
@@ -208,7 +207,6 @@ struct FailoverTests {
         #expect(transport.refused == "max_frames")
     }
 
-    /// The ingest cap is final for the request; a redial already racing must not erase it.
     @Test func aTerminalRefusalSurvivesARecarryAlreadyInFlight() {
         let quic = Channel(kind: .quic)
         let http2 = Channel(kind: .http2)
@@ -231,7 +229,6 @@ struct FailoverTests {
         transport.send(reading(2))
         #expect(attempts.taken == 2, "past the cooldown, QUIC is dialled again")
 
-        // The ingest cap lands on http2 while the redial above is still connecting.
         http2.refused = "max_frames"
         reconnected.becomeReady()
 
@@ -245,8 +242,6 @@ struct FailoverTests {
         #expect(attempts.taken == 2, "a latched refusal stops any further primary retry")
     }
 
-    /// The fallback's own in-flight POST can still be answered after `active` has already
-    /// moved off it — nothing else is watching that answer by then but `refused` itself.
     @Test func aFallbackRefusalArrivingAfterARecarryStillSurfaces() {
         let quic = Channel(kind: .quic)
         let http2 = Channel(kind: .http2)
@@ -270,7 +265,6 @@ struct FailoverTests {
         reconnected.becomeReady()
         #expect(transport.kind == .quic, "already carrying on the redial")
 
-        // Only now does the fallback's outstanding POST come back refused.
         http2.refused = "max_frames"
 
         #expect(transport.refused == "max_frames")

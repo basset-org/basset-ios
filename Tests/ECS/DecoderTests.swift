@@ -136,7 +136,6 @@ struct DecoderTests {
         #expect(try FrameReader.frames(in: Data()).isEmpty)
     }
 
-    /// Past the limit, a caller belongs on `next()` instead of holding every frame at once.
     @Test func moreFramesThanTheLimitAreRefusedRatherThanRetainedUnbounded() throws {
         let entities = (0 ..< 5).map { Entity(.process, capturedAt: UInt64($0)) }
         let data = framed(entities)
@@ -149,7 +148,6 @@ struct DecoderTests {
         #expect(frames.count == 5)
     }
 
-    /// A negative limit is refused outright, not only when there happens to be a frame to hit it.
     @Test func aNegativeLimitIsRefusedEvenAgainstEmptyData() {
         #expect(throws: DecoderError.tooManyFrames(-1)) {
             try FrameReader.frames(in: Data(), limit: -1)

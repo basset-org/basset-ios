@@ -138,7 +138,6 @@ extension DeliveryTests {
         })
     }
 
-    /// A capture waiting on disk for a retry does not belong in the next iCloud/iTunes backup.
     @Test func aSavedBacklogFileIsExcludedFromBackup() throws {
         let directory = FileManager.default
             .temporaryDirectory
@@ -156,8 +155,6 @@ extension DeliveryTests {
         #expect(excluded == true)
     }
 
-    /// The write option alone isn't trusted — an atomic write's rename can drop it, so the
-    /// protection class is asserted on the file that actually survives, same as the backup flag.
     @Test func aSavedBacklogFileIsProtectedUntilFirstUnlock() throws {
         let directory = FileManager.default
             .temporaryDirectory

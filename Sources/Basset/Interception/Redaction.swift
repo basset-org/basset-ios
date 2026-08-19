@@ -3,7 +3,6 @@ import Foundation
 /// What may leave a URL — query dropped whole; an allow-list is one more thing to keep.
 enum Redaction {
     private static let tokenPunctuation: Set<Character> = ["-", "_", ".", "=", "%", "+", "~"]
-    /// A run right after one of these is a credential regardless of its own shape or length.
     private static let credentialLabels: Set<String> = [
         "authorization",
         "bearer",
@@ -11,7 +10,6 @@ enum Redaction {
         "key",
         "secret",
     ]
-    /// A path segment right after one of these is somebody's identity, whatever shape it takes.
     private static let identityCollectionLabels: Set<String> =
         [
             "u",
@@ -78,8 +76,6 @@ enum Redaction {
             if let equals = run.firstIndex(of: "="),
                credentialLabels.contains(run[..<equals].lowercased())
             {
-                // "=" is itself a run character, so "key=abc" is one run: the label never
-                // becomes `previousRun` on its own, and has to be read out of this one instead.
                 kept += "\(run[...equals]):id"
                 previousRun = run
                 continue

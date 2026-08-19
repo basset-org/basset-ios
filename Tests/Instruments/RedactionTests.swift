@@ -43,7 +43,6 @@ struct RedactionTests {
         }
     }
 
-    /// A segment right after a user/customer collection is somebody's identity, not a route word.
     @Test func aSegmentLabeledByTheCollectionBeforeItIsRedactedRegardlessOfShape() {
         let cases = [
             "https://api.example.com/profile/jsmith123": "https://api.example.com/profile/:id",
@@ -91,7 +90,6 @@ struct RedactionTests {
         }
     }
 
-    /// A short or letter-only run is still a credential when the word before it says so.
     @Test func aRunLabeledByTheWordBeforeItIsRedactedRegardlessOfShape() {
         let cases = [
             "Authorization tok_ABC123": "Authorization :id",
@@ -106,7 +104,6 @@ struct RedactionTests {
         }
     }
 
-    /// "=" glues the label onto the value into one run, so the split has to happen inside it.
     @Test func aLabelAttachedByAnEqualsSignIsRedactedRegardlessOfShape() {
         let cases = [
             "token=abc rotated": "token=:id rotated",
