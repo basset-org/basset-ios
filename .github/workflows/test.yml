@@ -16,10 +16,8 @@ jobs:
     # generated name leaves those two contexts permanently unreported, which
     # blocks every merge rather than failing anything.
     name: simulator (${{ matrix.runtime }})
-    # Split by what each image carries: the macos-26 image ships no iOS 18
-    # runtime at all, and the floor is what catches a decoder that works on
-    # the newest OS and returns nothing below it. So the oldest runtime stays
-    # on the image that has one.
+    # Oldest runtime pinned to macos-15: the floor is what catches a decoder
+    # that works on the newest OS and returns nothing below it.
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
