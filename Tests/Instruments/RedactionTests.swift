@@ -106,6 +106,19 @@ struct RedactionTests {
         }
     }
 
+    /// "=" glues the label onto the value into one run, so the split has to happen inside it.
+    @Test func aLabelAttachedByAnEqualsSignIsRedactedRegardlessOfShape() {
+        let cases = [
+            "token=abc rotated": "token=:id rotated",
+            "key=AB12 now": "key=:id now",
+            "sent bearer=xyz today": "sent bearer=:id today",
+        ]
+
+        for (given, expected) in cases {
+            #expect(Redaction.message(given) == expected)
+        }
+    }
+
     /// Over-redaction costs the reader the fault — ordinary words and short ids stay.
     @Test func aplainLogMessageKeepsItsWords() {
         let kept = [

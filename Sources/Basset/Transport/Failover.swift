@@ -83,9 +83,11 @@ final class FailoverTransport: Transport, @unchecked Sendable {
         return "\(text) — set aside after \(tried), \(next)"
     }
 
+    /// The fallback can still answer — and refuse — after a recarry moves `active` off it, so
+    /// it is checked here whether or not it is the one currently carrying.
     var refused: String? {
         guarded.withLock { state in
-            if let current = state.active?.refused {
+            if let current = state.active?.refused ?? state.primary?.refused ?? fallback.refused {
                 state.refusal = current
             }
             return state.refusal
@@ -200,9 +202,6 @@ final class FailoverTransport: Transport, @unchecked Sendable {
                 return nil
             }
 
-            if let outgoing = state.active?.refused {
-                state.refusal = outgoing
-            }
             state.active = transport
             let backlog = state.held
             state.held = []

@@ -66,9 +66,10 @@ enum PersistedBacklog {
             to: target,
             options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
         )
-        // The atomic write above replaces the file via a rename, which drops this resource
-        // value — it has to be reapplied to the surviving file, not the one that was written.
-        excludeFromBackup(target)
+        // The atomic write above replaces the file via a rename, and a rename is not
+        // guaranteed to carry either of these from the temp file it replaces — both are
+        // reapplied to the surviving file rather than trusted to have survived the write.
+        harden(target)
     }
 
     static func remove(for requestId: UInt64, in directory: URL = defaultDirectory()) {
@@ -96,11 +97,18 @@ enum PersistedBacklog {
         }
     }
 
-    private static func excludeFromBackup(_ target: URL) {
-        var target = target
+    private static func harden(_ target: URL) {
+        var mutableTarget = target
         var resourceValues = URLResourceValues()
         resourceValues.isExcludedFromBackup = true
-        try? target.setResourceValues(resourceValues)
+        try? mutableTarget.setResourceValues(resourceValues)
+
+        // The protection class rides the file, not a resource value URLResourceValues can
+        // set — FileManager's older attribute API is the one that still writes it.
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: target.path
+        )
     }
 
     private static func url(for requestId: UInt64, in directory: URL) -> URL {

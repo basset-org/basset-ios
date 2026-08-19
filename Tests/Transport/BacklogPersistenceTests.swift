@@ -156,6 +156,24 @@ extension DeliveryTests {
         #expect(excluded == true)
     }
 
+    /// The write option alone isn't trusted — an atomic write's rename can drop it, so the
+    /// protection class is asserted on the file that actually survives, same as the backup flag.
+    @Test func aSavedBacklogFileIsProtectedUntilFirstUnlock() throws {
+        let directory = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let requestId: UInt64 = 52
+        PersistedBacklog.save(
+            [(bytes: Data([1, 2, 3]), frames: 1)],
+            for: requestId,
+            in: directory
+        )
+
+        let file = directory.appendingPathComponent(String(requestId), isDirectory: false)
+        let protection = try file.resourceValues(forKeys: [.fileProtectionKey]).fileProtection
+        #expect(protection == .completeUntilFirstUserAuthentication)
+    }
+
     /// A request the process did not resume is gone, whatever it left behind on disk.
     @Test func sweepDiscardsABacklogForARequestThatDidNotResume() {
         let directory = FileManager.default

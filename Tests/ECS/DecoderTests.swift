@@ -149,6 +149,13 @@ struct DecoderTests {
         #expect(frames.count == 5)
     }
 
+    /// A negative limit is refused outright, not only when there happens to be a frame to hit it.
+    @Test func aNegativeLimitIsRefusedEvenAgainstEmptyData() {
+        #expect(throws: DecoderError.tooManyFrames(-1)) {
+            try FrameReader.frames(in: Data(), limit: -1)
+        }
+    }
+
     /// A count is a claim about bytes not there — believing it reserves memory unsent.
     @Test func acomponentCountLargerThanTheFrameIsRefusedRatherThanReserved() {
         var manual = Data([PayloadKind.entity.rawValue])

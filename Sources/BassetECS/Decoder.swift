@@ -54,6 +54,10 @@ public struct FrameReader {
     }
 
     public static func frames(in data: Data, limit: Int = maxFrameCount) throws -> [Frame] {
+        guard limit >= 0 else {
+            throw DecoderError.tooManyFrames(limit)
+        }
+
         var reader = FrameReader(data)
         var frames = [Frame]()
         while let frame = try reader.next() {

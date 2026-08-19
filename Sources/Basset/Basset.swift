@@ -1,5 +1,6 @@
 @_exported import BassetECS
 import Foundation
+import Network
 
 public struct Config: Sendable {
     public var apiKey: String
@@ -205,16 +206,29 @@ final class DeviceLoop: @unchecked Sendable {
 struct IngestTransports: TransportOpener {
     let config: Config
 
+    /// No public-suffix list here, so this never widens past what the control host itself
+    /// spells out: peeling its one leading label ("ctrl.basset.dev" -> "basset.dev") is safe,
+    /// but guessing a fixed label count is not — it reads "co.uk" out of "ctrl.example.co.uk"
+    /// as if that alone meant something, and out of an IP literal's octets as if they were
+    /// labels at all. Below three labels, or under an IP literal, only an exact match will do.
     private static func isWithinControlDomain(_ candidate: String, of controlHost: String) -> Bool {
         let candidate = candidate.lowercased()
         let controlHost = controlHost.lowercased()
-        let controlLabels = controlHost.split(separator: ".")
-        guard controlLabels.count >= 2 else {
+        guard !isIPLiteral(controlHost) else {
             return candidate == controlHost
         }
 
-        let registrable = controlLabels.suffix(2).joined(separator: ".")
-        return candidate == registrable || candidate.hasSuffix(".\(registrable)")
+        let controlLabels = controlHost.split(separator: ".")
+        guard controlLabels.count >= 3 else {
+            return candidate == controlHost
+        }
+
+        let parent = controlLabels.dropFirst().joined(separator: ".")
+        return candidate == parent || candidate.hasSuffix(".\(parent)")
+    }
+
+    private static func isIPLiteral(_ host: String) -> Bool {
+        IPv4Address(host) != nil || IPv6Address(host) != nil
     }
 
     /// Rejects anything that isn't a bare hostname under the configured control domain — the

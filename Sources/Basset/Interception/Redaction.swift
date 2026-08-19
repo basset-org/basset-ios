@@ -75,6 +75,16 @@ enum Redaction {
                     break
                 }
             }
+            if let equals = run.firstIndex(of: "="),
+               credentialLabels.contains(run[..<equals].lowercased())
+            {
+                // "=" is itself a run character, so "key=abc" is one run: the label never
+                // becomes `previousRun` on its own, and has to be read out of this one instead.
+                kept += "\(run[...equals]):id"
+                previousRun = run
+                continue
+            }
+
             let labeled = previousRun.map { credentialLabels.contains($0.lowercased()) } ?? false
             kept += (labeled || carriesASecret(run)) ? ":id" : run
             previousRun = run

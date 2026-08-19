@@ -245,6 +245,37 @@ struct FailoverTests {
         #expect(attempts.taken == 2, "a latched refusal stops any further primary retry")
     }
 
+    /// The fallback's own in-flight POST can still be answered after `active` has already
+    /// moved off it — nothing else is watching that answer by then but `refused` itself.
+    @Test func aFallbackRefusalArrivingAfterARecarryStillSurfaces() {
+        let quic = Channel(kind: .quic)
+        let http2 = Channel(kind: .http2)
+        let reconnected = Channel(kind: .quic)
+        let attempts = Attempts([quic, reconnected])
+        let clock = Clock()
+
+        let transport = FailoverTransport(
+            primary: { attempts.next() },
+            fallback: http2,
+            retryAfter: 30,
+            now: { clock.now }
+        )
+        transport.start()
+        quic.becomeReady()
+        transport.send(reading(1))
+
+        quic.fail()
+        clock.now = clock.now.addingTimeInterval(30)
+        transport.send(reading(2))
+        reconnected.becomeReady()
+        #expect(transport.kind == .quic, "already carrying on the redial")
+
+        // Only now does the fallback's outstanding POST come back refused.
+        http2.refused = "max_frames"
+
+        #expect(transport.refused == "max_frames")
+    }
+
     /// "QUIC failed" alone can't distinguish about-to-retry from stuck-until-a-reading.
     @Test func theNoteSaysWhetherQuicIsComingBack() {
         let quic = Channel(kind: .quic)
