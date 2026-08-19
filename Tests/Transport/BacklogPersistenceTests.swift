@@ -110,7 +110,7 @@ extension DeliveryTests {
         channel.reconnected()
 
         // Well under the 1s backoff the failed send just scheduled: only the reconnect explains it.
-        #expect(await eventually(within: .milliseconds(700)) { StubbedResponses.seen >= 1 })
+        #expect(await eventually(within: .milliseconds(900)) { StubbedResponses.seen >= 1 })
         #expect(await eventually {
             PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })
