@@ -16,11 +16,8 @@ jobs:
     # generated name leaves those two contexts permanently unreported, which
     # blocks every merge rather than failing anything.
     name: simulator (${{ matrix.runtime }})
-    # Split by what each image carries rather than by speed. The six-core runner
-    # answers the two tests a shared one starves, and runs the suite in a third
-    # of the time — but its image ships no iOS 18 runtime at all, and the floor
-    # is what catches a decoder that works on the newest OS and returns nothing
-    # below it. So the oldest runtime stays on the image that has one.
+    # Oldest runtime pinned to macos-15: the floor is what catches a decoder
+    # that works on the newest OS and returns nothing below it.
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -30,7 +27,7 @@ jobs:
             runner: macos-15
             sharedSimulator: "true"
           - runtime: newest
-            runner: blacksmith-6vcpu-macos-26
+            runner: macos-26
             sharedSimulator: "false"
     steps:
       - uses: actions/checkout@v4
