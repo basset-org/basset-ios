@@ -71,7 +71,7 @@
 --pattern-let inline
 --preserve-acronyms
 --preserve-decls
---preserved-property-types Package,Instruments
+--preserved-property-types Package,Instruments,URL
 --property-types infer-locals-only
 --ranges spaced
 --self init-only

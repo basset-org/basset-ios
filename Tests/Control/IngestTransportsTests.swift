@@ -31,19 +31,33 @@ struct IngestTransportsTests {
         #expect(opener.hostname("evil.localhost") == nil)
     }
 
-    /// Two labels alone can't say whether the control host is a bare registrable domain or
-    /// itself sits under a public suffix — without a public-suffix list, only an exact match
-    /// is safe, so a subdomain that a real deployment might legitimately want is refused too.
+    /// A custom control host has no configured domain to widen from by default — an exact
+    /// match is the only safe fallback, whatever the host's own label count happens to be.
     @Test func aTwoLabelControlHostAlsoRequiresAnExactMatch() {
         let opener = opener(control: "https://basset.dev")
         #expect(opener.hostname("basset.dev") == "basset.dev")
         #expect(opener.hostname("in.basset.dev") == nil)
     }
 
-    /// Peeling one label off a control host under a multi-label public suffix still lands on
-    /// the integrator's own domain, not the bare suffix — "co.uk" alone never becomes the anchor.
-    @Test func aSubdomainUnderAMultiLabelPublicSuffixIsBoundedToTheIntegratorsDomain() {
-        let opener = opener(control: "https://ctrl.mycompany.co.uk")
+    /// Guessing a domain out of a control host's own labels can't tell "co.uk" the public
+    /// suffix from "mycompany.co.uk" the registrable domain — so nothing is guessed. A control
+    /// host that happens to sit one label below a multi-label suffix is exactly as unwidened
+    /// as any other, and a tampered control response naming a sibling under that suffix is
+    /// refused rather than trusted.
+    @Test func aControlHostUnderAMultiLabelPublicSuffixIsNotWidenedWithoutConfiguration() {
+        let opener = opener(control: "https://ctrl.co.uk")
+        #expect(opener.hostname("ctrl.co.uk") == "ctrl.co.uk")
+        #expect(opener.hostname("evil.co.uk") == nil)
+        #expect(opener.hostname("in.co.uk") == nil)
+    }
+
+    /// `ingestDomain` is how a deployment states the sibling relationship explicitly, rather
+    /// than having it inferred from the control host's labels.
+    @Test func anExplicitIngestDomainWidensPastAnExactMatch() {
+        let opener = opener(
+            control: "https://ctrl.mycompany.co.uk",
+            ingestDomain: "mycompany.co.uk"
+        )
         #expect(opener.hostname("in.mycompany.co.uk") == "in.mycompany.co.uk")
         #expect(opener.hostname("evil.co.uk") == nil)
     }
@@ -56,12 +70,24 @@ struct IngestTransportsTests {
         #expect(opener.hostname("evil.0.5") == nil)
     }
 
+    /// IPv6 rides through `URL.host` unbracketed, and the exact-match check works on that
+    /// same unbracketed form — this only fails if the two disagree about the shape.
+    @Test func anIpv6LiteralControlHostRequiresAnExactMatch() {
+        let opener = opener(control: "https://[::1]")
+        #expect(opener.hostname("::1") == "::1")
+        #expect(opener.hostname("::2") == nil)
+    }
+
     @Test func nonHostnameCharactersAreRejectedRegardlessOfDomain() {
         let opener = opener(control: "https://ctrl.basset.dev")
         #expect(opener.hostname("in.basset.dev/../attacker.com") == nil)
     }
 
-    private func opener(control: String) -> IngestTransports {
-        IngestTransports(config: Config(apiKey: "key", control: URL(string: control)!))
+    private func opener(control: String, ingestDomain: String? = nil) -> IngestTransports {
+        IngestTransports(config: Config(
+            apiKey: "key",
+            control: URL(string: control)!,
+            ingestDomain: ingestDomain
+        ))
     }
 }

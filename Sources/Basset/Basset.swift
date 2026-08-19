@@ -3,22 +3,32 @@ import Foundation
 import Network
 
 public struct Config: Sendable {
+    private static let defaultControl = URL(string: "https://ctrl.basset.dev")!
+
     public var apiKey: String
     public var control: URL
     public var quicPort: UInt16
     public var http2Port: UInt16
+    /// The domain a control-plane-supplied ingest host must sit under, e.g. `"basset.dev"` for
+    /// `"in.basset.dev"` — a hostname's labels alone can't say where a public suffix ends, so
+    /// trusting anything past an exact match to `control`'s own host needs this spelled out
+    /// rather than guessed. Left `nil` with the default `control`, this is `"basset.dev"`; left
+    /// `nil` with any other `control`, an ingest host must match that host exactly.
+    public var ingestDomain: String?
 
     /// Ports are defaults: the control plane names the ingest host, not its port.
     public init(
         apiKey: String,
         control: URL = URL(string: "https://ctrl.basset.dev")!,
         quicPort: UInt16 = 30943,
-        http2Port: UInt16 = 30944
+        http2Port: UInt16 = 30944,
+        ingestDomain: String? = nil
     ) {
         self.apiKey = apiKey
         self.control = control
         self.quicPort = quicPort
         self.http2Port = http2Port
+        self.ingestDomain = ingestDomain ?? (control == Config.defaultControl ? "basset.dev" : nil)
     }
 }
 
@@ -206,35 +216,22 @@ final class DeviceLoop: @unchecked Sendable {
 struct IngestTransports: TransportOpener {
     let config: Config
 
-    /// No public-suffix list here, so this never widens past what the control host itself
-    /// spells out: peeling its one leading label ("ctrl.basset.dev" -> "basset.dev") is safe,
-    /// but guessing a fixed label count is not — it reads "co.uk" out of "ctrl.example.co.uk"
-    /// as if that alone meant something, and out of an IP literal's octets as if they were
-    /// labels at all. Below three labels, or under an IP literal, only an exact match will do.
-    private static func isWithinControlDomain(_ candidate: String, of controlHost: String) -> Bool {
-        let candidate = candidate.lowercased()
-        let controlHost = controlHost.lowercased()
-        guard !isIPLiteral(controlHost) else {
-            return candidate == controlHost
-        }
-
-        let controlLabels = controlHost.split(separator: ".")
-        guard controlLabels.count >= 3 else {
-            return candidate == controlHost
-        }
-
-        let parent = controlLabels.dropFirst().joined(separator: ".")
-        return candidate == parent || candidate.hasSuffix(".\(parent)")
-    }
-
     private static func isIPLiteral(_ host: String) -> Bool {
         IPv4Address(host) != nil || IPv6Address(host) != nil
     }
 
-    /// Rejects anything that isn't a bare hostname under the configured control domain — the
-    /// control plane names the ingest host, but a MITM'd control channel must not be able to
-    /// redirect credentials to an unrelated one.
+    /// Rejects anything that isn't the configured ingest domain (or a subdomain of it), or an
+    /// exact match to the control host when no domain is configured — the control plane names
+    /// the ingest host, but a MITM'd control channel must not be able to redirect credentials
+    /// anywhere wider than that. An IP-literal control host has no domain to widen from, so it
+    /// always requires an exact match, `ingestDomain` or not.
     func hostname(_ candidate: String) -> String? {
+        guard let controlHost = config.control.host else {
+            return nil
+        }
+        guard !Self.isIPLiteral(controlHost) else {
+            return candidate == controlHost ? candidate : nil
+        }
         guard !candidate.isEmpty, candidate.count <= 253 else {
             return nil
         }
@@ -243,13 +240,13 @@ struct IngestTransports: TransportOpener {
         }) else {
             return nil
         }
-        guard let controlHost = config.control.host,
-              Self.isWithinControlDomain(candidate, of: controlHost)
-        else {
-            return nil
+
+        let candidateLower = candidate.lowercased()
+        guard let domain = config.ingestDomain?.lowercased() else {
+            return candidateLower == controlHost.lowercased() ? candidate : nil
         }
 
-        return candidate
+        return candidateLower == domain || candidateLower.hasSuffix(".\(domain)") ? candidate : nil
     }
 
     func open(request: BassetRequest, ingestEndpoint: String) -> Transport? {
@@ -257,7 +254,7 @@ struct IngestTransports: TransportOpener {
             let host = hostname(ingestEndpoint),
             let token = request.requestToken,
             let http2 =
-            URL(string: "https://\(host):\(config.http2Port)/frames")
+            URL(string: "https://\(authority(for: host)):\(config.http2Port)/frames")
         else {
             return nil
         }
@@ -278,5 +275,11 @@ struct IngestTransports: TransportOpener {
         )
         transport.start()
         return transport
+    }
+
+    /// IPv6 rides bare through `URL.host`, but the authority component it came from needs its
+    /// brackets back or the port after it parses as part of the address.
+    private func authority(for host: String) -> String {
+        host.contains(":") ? "[\(host)]" : host
     }
 }
