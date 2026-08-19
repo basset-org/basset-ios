@@ -1,23 +1,27 @@
 @_exported import BassetECS
 import Foundation
+import Network
 
 public struct Config: Sendable {
     public var apiKey: String
     public var control: URL
     public var quicPort: UInt16
     public var http2Port: UInt16
+    public var ingestDomain: String?
 
     /// Ports are defaults: the control plane names the ingest host, not its port.
     public init(
         apiKey: String,
         control: URL = URL(string: "https://ctrl.basset.dev")!,
         quicPort: UInt16 = 30943,
-        http2Port: UInt16 = 30944
+        http2Port: UInt16 = 30944,
+        ingestDomain: String? = nil
     ) {
         self.apiKey = apiKey
         self.control = control
         self.quicPort = quicPort
         self.http2Port = http2Port
+        self.ingestDomain = ingestDomain
     }
 }
 
@@ -170,6 +174,8 @@ final class DeviceLoop: @unchecked Sendable {
             .unreachable("the answer was not HTTP")
         case .oversized(let bytes):
             .unreachable("the answer was refused at \(bytes) bytes")
+        case .insecureEndpoint:
+            .unreachable("the control endpoint is not https")
         case .none:
             .unreachable(error.localizedDescription)
         }
@@ -201,10 +207,28 @@ final class DeviceLoop: @unchecked Sendable {
 
 /// One stream per request, each opened with that request's own token — ingest routes on it.
 struct IngestTransports: TransportOpener {
+    private static let defaultControl = "https://ctrl.basset.dev"
+
     let config: Config
 
-    /// Rejects anything that isn't a bare hostname, so a malformed endpoint opens no stream.
-    private static func hostname(_ candidate: String) -> String? {
+    private var ingestDomain: String? {
+        if let configured = config.ingestDomain {
+            return configured
+        }
+        return config.control.absoluteString == Self.defaultControl ? "basset.dev" : nil
+    }
+
+    private static func isIPLiteral(_ host: String) -> Bool {
+        IPv4Address(host) != nil || IPv6Address(host) != nil
+    }
+
+    func hostname(_ candidate: String) -> String? {
+        guard let controlHost = config.control.host else {
+            return nil
+        }
+        guard !Self.isIPLiteral(controlHost) else {
+            return candidate.lowercased() == controlHost.lowercased() ? candidate : nil
+        }
         guard !candidate.isEmpty, candidate.count <= 253 else {
             return nil
         }
@@ -214,15 +238,20 @@ struct IngestTransports: TransportOpener {
             return nil
         }
 
-        return candidate
+        let candidateLower = candidate.lowercased()
+        guard let domain = ingestDomain?.lowercased() else {
+            return candidateLower == controlHost.lowercased() ? candidate : nil
+        }
+
+        return candidateLower == domain || candidateLower.hasSuffix(".\(domain)") ? candidate : nil
     }
 
     func open(request: BassetRequest, ingestEndpoint: String) -> Transport? {
         guard
-            let host = Self.hostname(ingestEndpoint),
+            let host = hostname(ingestEndpoint),
             let token = request.requestToken,
             let http2 =
-            URL(string: "https://\(host):\(config.http2Port)/frames")
+            URL(string: "https://\(authority(for: host)):\(config.http2Port)/frames")
         else {
             return nil
         }
@@ -243,5 +272,9 @@ struct IngestTransports: TransportOpener {
         )
         transport.start()
         return transport
+    }
+
+    private func authority(for host: String) -> String {
+        host.contains(":") ? "[\(host)]" : host
     }
 }

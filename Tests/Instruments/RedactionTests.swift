@@ -43,6 +43,18 @@ struct RedactionTests {
         }
     }
 
+    @Test func aSegmentLabeledByTheCollectionBeforeItIsRedactedRegardlessOfShape() {
+        let cases = [
+            "https://api.example.com/profile/jsmith123": "https://api.example.com/profile/:id",
+            "https://api.example.com/u/alice": "https://api.example.com/u/:id",
+            "https://api.example.com/customers/customer42": "https://api.example.com/customers/:id",
+        ]
+
+        for (given, expected) in cases {
+            #expect(Redaction.url(URL(string: given)) == expected)
+        }
+    }
+
     /// Over-redaction costs the reader the shape of the request.
     @Test func ordinaryPathWordsKeepTheirShape() {
         let kept = [
@@ -71,6 +83,32 @@ struct RedactionTests {
             "bearer aB3x-K9z_Q7mPL5v2 expired": "bearer :id expired",
             "order 3f2504e0-4f89-11d3-9a0c-0305e82c3301 declined":
                 "order :id declined",
+        ]
+
+        for (given, expected) in cases {
+            #expect(Redaction.message(given) == expected)
+        }
+    }
+
+    @Test func aRunLabeledByTheWordBeforeItIsRedactedRegardlessOfShape() {
+        let cases = [
+            "Authorization tok_ABC123": "Authorization :id",
+            "Authorization abcdefghijklmnopq": "Authorization :id",
+            "bearer abc": "bearer :id",
+            "api key AB12 rotated": "api key :id rotated",
+            "secret shh now rotate it": "secret :id now rotate it",
+        ]
+
+        for (given, expected) in cases {
+            #expect(Redaction.message(given) == expected)
+        }
+    }
+
+    @Test func aLabelAttachedByAnEqualsSignIsRedactedRegardlessOfShape() {
+        let cases = [
+            "token=abc rotated": "token=:id rotated",
+            "key=AB12 now": "key=:id now",
+            "sent bearer=xyz today": "sent bearer=:id today",
         ]
 
         for (given, expected) in cases {

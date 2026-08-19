@@ -32,10 +32,12 @@ public enum DecoderError: Error, Equatable {
     case frameTooLarge(UInt64)
     case uvarintTooLong
     case stringNotUtf8
+    case tooManyFrames(Int)
 }
 
 public struct FrameReader {
     public static let maxFrameLength: UInt64 = 1024 * 1024
+    public static let maxFrameCount = 65536
 
     private let bytes: [UInt8]
     private var offset: Int
@@ -49,10 +51,18 @@ public struct FrameReader {
         self.offset = 0
     }
 
-    public static func frames(in data: Data) throws -> [Frame] {
+    public static func frames(in data: Data, limit: Int = maxFrameCount) throws -> [Frame] {
+        guard limit >= 0 else {
+            throw DecoderError.tooManyFrames(limit)
+        }
+
         var reader = FrameReader(data)
         var frames = [Frame]()
         while let frame = try reader.next() {
+            guard frames.count < limit else {
+                throw DecoderError.tooManyFrames(limit)
+            }
+
             frames.append(frame)
         }
         return frames

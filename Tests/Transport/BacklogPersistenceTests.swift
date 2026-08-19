@@ -138,6 +138,39 @@ extension DeliveryTests {
         })
     }
 
+    @Test func aSavedBacklogFileIsExcludedFromBackup() throws {
+        let directory = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let requestId: UInt64 = 51
+        PersistedBacklog.save(
+            [(bytes: Data([1, 2, 3]), frames: 1)],
+            for: requestId,
+            in: directory
+        )
+
+        let file = directory.appendingPathComponent(String(requestId), isDirectory: false)
+        let excluded = try file.resourceValues(forKeys: [.isExcludedFromBackupKey])
+            .isExcludedFromBackup
+        #expect(excluded == true)
+    }
+
+    @Test func aSavedBacklogFileIsProtectedUntilFirstUnlock() throws {
+        let directory = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let requestId: UInt64 = 52
+        PersistedBacklog.save(
+            [(bytes: Data([1, 2, 3]), frames: 1)],
+            for: requestId,
+            in: directory
+        )
+
+        let file = directory.appendingPathComponent(String(requestId), isDirectory: false)
+        let protection = try file.resourceValues(forKeys: [.fileProtectionKey]).fileProtection
+        #expect(protection == .completeUntilFirstUserAuthentication)
+    }
+
     /// A request the process did not resume is gone, whatever it left behind on disk.
     @Test func sweepDiscardsABacklogForARequestThatDidNotResume() {
         let directory = FileManager.default

@@ -60,7 +60,13 @@ enum PersistedBacklog {
             at: directory,
             withIntermediateDirectories: true
         )
-        try? payload.write(to: url(for: requestId, in: directory), options: .atomic)
+
+        let target = url(for: requestId, in: directory)
+        try? payload.write(
+            to: target,
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        )
+        harden(target)
     }
 
     static func remove(for requestId: UInt64, in directory: URL = defaultDirectory()) {
@@ -86,6 +92,17 @@ enum PersistedBacklog {
                 continue
             }
         }
+    }
+
+    private static func harden(_ target: URL) {
+        var mutableTarget = target
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try? mutableTarget.setResourceValues(resourceValues)
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: target.path
+        )
     }
 
     private static func url(for requestId: UInt64, in directory: URL) -> URL {

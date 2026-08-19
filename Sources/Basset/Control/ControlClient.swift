@@ -9,6 +9,7 @@ enum ControlError: Error {
     case refused(status: Int)
     case notHTTP
     case oversized(bytes: Int)
+    case insecureEndpoint
 }
 
 /// Built on first use, not at `start`: constructing a `URLSession` costs ~2ms on the main thread.
@@ -60,6 +61,10 @@ struct ControlClient: Sendable {
     /// Held server-side until the desired state changes or the hold elapses — every
     /// call carries the full identity, since nothing is remembered between calls.
     func requests(_ identity: DeviceIdentity, userId: String?) async throws -> DesiredState {
+        guard endpoint.scheme?.lowercased() == "https" else {
+            throw ControlError.insecureEndpoint
+        }
+
         var body: [String: String] = [
             "api_key": apiKey,
             "device_id": identity.deviceId,
