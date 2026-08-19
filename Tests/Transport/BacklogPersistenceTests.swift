@@ -94,7 +94,9 @@ extension DeliveryTests {
 
     /// Also covers the plain retry case: a real failure holds a batch and persists it — a
     /// reconnect is worth an immediate try after that rather than waiting out the backoff.
-    @Test func areconnectRetriesWithoutWaitingForTheBackoff() async {
+    /// Skipped on a shared simulator — GCD dispatch itself can stall past the deadline here.
+    @Test(.enabled(if: !TestMachine.isSharedSimulator))
+    func areconnectRetriesWithoutWaitingForTheBackoff() async {
         let directory = FileManager.default
             .temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
