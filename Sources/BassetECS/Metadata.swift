@@ -61,8 +61,7 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
     public enum Cadence: String, Codable, Sendable {
         case once
         case onChange
-        case periodic
-        case continuous
+        case interval
     }
 
     public enum Overhead: String, Codable, Sendable {
@@ -267,7 +266,7 @@ public extension InstrumentID {
                 ],
                 related: ["uikit.viewController.appear", "power.thermalState"],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .interval,
                 overhead: .low
             )
         case .urlSessionTaskMetrics:
@@ -378,7 +377,7 @@ public extension InstrumentID {
                     "memory.footprint",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .interval,
                 overhead: .low
             )
         case .mainThreadHang:
@@ -437,7 +436,7 @@ public extension InstrumentID {
                     "concurrency.mainThreadHang",
                 ],
                 mechanism: .osLogStore,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .low
             )
         case .swiftUIHostAppear:
@@ -474,7 +473,7 @@ public extension InstrumentID {
                     "power.thermalState",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .interval,
                 overhead: .low
             )
         case .swiftUIPresentation:
@@ -503,7 +502,7 @@ public extension InstrumentID {
                 ],
                 related: ["swiftui.host.updates", "swiftui.runtimeIssues"],
                 mechanism: .reflection,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium
             )
         case .memoryPressure:
@@ -604,7 +603,7 @@ public extension InstrumentID {
                     "uikit.view.layoutPass",
                 ],
                 mechanism: .none,
-                cadence: .periodic
+                cadence: .interval
             )
         case .cpuThreadUsage:
             InstrumentMetadata(
@@ -621,7 +620,7 @@ public extension InstrumentID {
                     "power.thermalState",
                 ],
                 mechanism: .machCall,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .low,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -645,7 +644,7 @@ public extension InstrumentID {
                     "lifecycle.lastRunEnded",
                 ],
                 mechanism: .machCall,
-                cadence: .periodic
+                cadence: .interval
             )
         case .coreDataSave:
             InstrumentMetadata(
@@ -679,7 +678,7 @@ public extension InstrumentID {
                     "cpu.thread.usage",
                 ],
                 mechanism: .notification,
-                cadence: .periodic
+                cadence: .interval
             )
         case .logFaults:
             InstrumentMetadata(
@@ -696,7 +695,7 @@ public extension InstrumentID {
                     "network.urlSession.taskMetrics",
                 ],
                 mechanism: .osLogStore,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -716,7 +715,7 @@ public extension InstrumentID {
                 ],
                 related: ["log.faults", "swiftui.runtimeIssues"],
                 mechanism: .osLogStore,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -776,7 +775,7 @@ public extension InstrumentID {
                     "cpu.thread.usage",
                 ],
                 mechanism: .osWatcher,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .low
             )
         case .accessibilitySettings:
@@ -940,7 +939,7 @@ public extension InstrumentID {
                     "uikit.viewController.appear",
                 ],
                 mechanism: .machCall,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -966,7 +965,7 @@ public extension InstrumentID {
                     "cpu.thread.usage",
                 ],
                 mechanism: .swizzle,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .low
             )
         case .metalGPULatency:
@@ -985,7 +984,7 @@ public extension InstrumentID {
                     "power.thermalState",
                 ],
                 mechanism: .swizzle,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium
             )
         case .linkedLibraries:
@@ -1036,7 +1035,7 @@ public extension InstrumentID {
                     "uikit.gesture.state",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .interval,
                 overhead: .low,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -1066,7 +1065,7 @@ public extension InstrumentID {
                     "runtime.methodOwners",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .onChange,
                 overhead: .negligible,
                 minimumSDKVersion: "0.4.0"
             )
@@ -1085,7 +1084,7 @@ public extension InstrumentID {
                     "uikit.control.action",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .onChange,
                 overhead: .negligible,
                 minimumSDKVersion: "0.4.0"
             )
