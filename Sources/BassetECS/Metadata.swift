@@ -44,6 +44,9 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         case none
         case statusRead
         case notification
+        /// An Apple watcher object basset creates and owns (`NWPathMonitor`, `CADisplayLink`)
+        /// — a live callback, but on nothing the app itself created or exposed.
+        case osWatcher
         case kvo
         case swizzle
         case delegateProxy
@@ -58,8 +61,7 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
     public enum Cadence: String, Codable, Sendable {
         case once
         case onChange
-        case periodic
-        case continuous
+        case interval
     }
 
     public enum Overhead: String, Codable, Sendable {
@@ -142,6 +144,7 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
     public let observed: Observed
     public let overhead: Overhead
     public let config: [ConfigField]
+    public let minimumSDKVersion: String
 
     public init(
         summary: String,
@@ -152,7 +155,8 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         cadence: Cadence,
         observed: Observed = .thisRun,
         overhead: Overhead = .negligible,
-        config: [ConfigField] = []
+        config: [ConfigField] = [],
+        minimumSDKVersion: String = "0.1.1"
     ) {
         self.summary = summary
         self.whenToUse = whenToUse
@@ -163,9 +167,10 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         self.observed = observed
         self.overhead = overhead
         self.config = config
+        self.minimumSDKVersion = minimumSDKVersion
     }
 
-    /// Custom only for `config`: older serialized metadata predates the field and lacks it.
+    /// Custom only for fields newer than the type: older serialized metadata predates them.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         summary = try container.decode(String.self, forKey: .summary)
@@ -177,6 +182,10 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         observed = try container.decode(Observed.self, forKey: .observed)
         overhead = try container.decode(Overhead.self, forKey: .overhead)
         config = try container.decodeIfPresent([ConfigField].self, forKey: .config) ?? []
+        minimumSDKVersion = try container.decodeIfPresent(
+            String.self,
+            forKey: .minimumSDKVersion
+        ) ?? "0.1.1"
     }
 }
 
@@ -257,7 +266,7 @@ public extension InstrumentID {
                 ],
                 related: ["uikit.viewController.appear", "power.thermalState"],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .interval,
                 overhead: .low
             )
         case .urlSessionTaskMetrics:
@@ -284,7 +293,7 @@ public extension InstrumentID {
                     "why a path was unsatisfied, including the local-network denial that has no other signal",
                 ],
                 related: ["network.urlSession.taskMetrics"],
-                mechanism: .none,
+                mechanism: .osWatcher,
                 cadence: .onChange
             )
         case .appStateChanges:
@@ -368,7 +377,7 @@ public extension InstrumentID {
                     "memory.footprint",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .interval,
                 overhead: .low
             )
         case .mainThreadHang:
@@ -427,7 +436,7 @@ public extension InstrumentID {
                     "concurrency.mainThreadHang",
                 ],
                 mechanism: .osLogStore,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .low
             )
         case .swiftUIHostAppear:
@@ -464,7 +473,7 @@ public extension InstrumentID {
                     "power.thermalState",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .interval,
                 overhead: .low
             )
         case .swiftUIPresentation:
@@ -493,7 +502,7 @@ public extension InstrumentID {
                 ],
                 related: ["swiftui.host.updates", "swiftui.runtimeIssues"],
                 mechanism: .reflection,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium
             )
         case .memoryPressure:
@@ -594,7 +603,7 @@ public extension InstrumentID {
                     "uikit.view.layoutPass",
                 ],
                 mechanism: .none,
-                cadence: .periodic
+                cadence: .interval
             )
         case .cpuThreadUsage:
             InstrumentMetadata(
@@ -611,7 +620,7 @@ public extension InstrumentID {
                     "power.thermalState",
                 ],
                 mechanism: .machCall,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .low,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -635,7 +644,7 @@ public extension InstrumentID {
                     "lifecycle.lastRunEnded",
                 ],
                 mechanism: .machCall,
-                cadence: .periodic
+                cadence: .interval
             )
         case .coreDataSave:
             InstrumentMetadata(
@@ -669,7 +678,7 @@ public extension InstrumentID {
                     "cpu.thread.usage",
                 ],
                 mechanism: .notification,
-                cadence: .periodic
+                cadence: .interval
             )
         case .logFaults:
             InstrumentMetadata(
@@ -686,7 +695,7 @@ public extension InstrumentID {
                     "network.urlSession.taskMetrics",
                 ],
                 mechanism: .osLogStore,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -706,7 +715,7 @@ public extension InstrumentID {
                 ],
                 related: ["log.faults", "swiftui.runtimeIssues"],
                 mechanism: .osLogStore,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -765,8 +774,8 @@ public extension InstrumentID {
                     "swiftui.host.updates",
                     "cpu.thread.usage",
                 ],
-                mechanism: .none,
-                cadence: .periodic,
+                mechanism: .osWatcher,
+                cadence: .interval,
                 overhead: .low
             )
         case .accessibilitySettings:
@@ -930,7 +939,7 @@ public extension InstrumentID {
                     "uikit.viewController.appear",
                 ],
                 mechanism: .machCall,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -956,7 +965,7 @@ public extension InstrumentID {
                     "cpu.thread.usage",
                 ],
                 mechanism: .swizzle,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .low
             )
         case .metalGPULatency:
@@ -975,7 +984,7 @@ public extension InstrumentID {
                     "power.thermalState",
                 ],
                 mechanism: .swizzle,
-                cadence: .periodic,
+                cadence: .interval,
                 overhead: .medium
             )
         case .linkedLibraries:
@@ -1026,7 +1035,7 @@ public extension InstrumentID {
                     "uikit.gesture.state",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
+                cadence: .interval,
                 overhead: .low,
                 config: [
                     InstrumentMetadata.ConfigField(
@@ -1056,8 +1065,9 @@ public extension InstrumentID {
                     "runtime.methodOwners",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
-                overhead: .negligible
+                cadence: .onChange,
+                overhead: .negligible,
+                minimumSDKVersion: "0.4.0"
             )
         case .gestureState:
             InstrumentMetadata(
@@ -1074,8 +1084,9 @@ public extension InstrumentID {
                     "uikit.control.action",
                 ],
                 mechanism: .swizzle,
-                cadence: .continuous,
-                overhead: .negligible
+                cadence: .onChange,
+                overhead: .negligible,
+                minimumSDKVersion: "0.4.0"
             )
         case .viewHierarchy:
             InstrumentMetadata(
@@ -1106,7 +1117,8 @@ public extension InstrumentID {
                         description: "The point's y coordinate, in the key window's own " +
                             "coordinate space. Default 0."
                     ),
-                ]
+                ],
+                minimumSDKVersion: "0.4.0"
             )
         case .configRefused:
             InstrumentMetadata(
@@ -1117,7 +1129,8 @@ public extension InstrumentID {
                 ],
                 related: [],
                 mechanism: .none,
-                cadence: .onChange
+                cadence: .onChange,
+                minimumSDKVersion: "0.2.0"
             )
         }
     }
