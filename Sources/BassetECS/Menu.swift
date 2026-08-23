@@ -117,6 +117,7 @@ extension MenuEntry {
         if !simulator {
             notes.append("hardware only, no simulator")
         }
+        notes.append("basset \(metadata.minimumSDKVersion)+")
         return notes.joined(separator: ", ")
     }
 

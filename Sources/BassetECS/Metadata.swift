@@ -44,6 +44,9 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         case none
         case statusRead
         case notification
+        /// An Apple watcher object basset creates and owns (`NWPathMonitor`, `CADisplayLink`)
+        /// — a live callback, but on nothing the app itself created or exposed.
+        case osWatcher
         case kvo
         case swizzle
         case delegateProxy
@@ -142,6 +145,7 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
     public let observed: Observed
     public let overhead: Overhead
     public let config: [ConfigField]
+    public let minimumSDKVersion: String
 
     public init(
         summary: String,
@@ -152,7 +156,8 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         cadence: Cadence,
         observed: Observed = .thisRun,
         overhead: Overhead = .negligible,
-        config: [ConfigField] = []
+        config: [ConfigField] = [],
+        minimumSDKVersion: String = "0.1.1"
     ) {
         self.summary = summary
         self.whenToUse = whenToUse
@@ -163,9 +168,10 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         self.observed = observed
         self.overhead = overhead
         self.config = config
+        self.minimumSDKVersion = minimumSDKVersion
     }
 
-    /// Custom only for `config`: older serialized metadata predates the field and lacks it.
+    /// Custom only for fields newer than the type: older serialized metadata predates them.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         summary = try container.decode(String.self, forKey: .summary)
@@ -177,6 +183,10 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         observed = try container.decode(Observed.self, forKey: .observed)
         overhead = try container.decode(Overhead.self, forKey: .overhead)
         config = try container.decodeIfPresent([ConfigField].self, forKey: .config) ?? []
+        minimumSDKVersion = try container.decodeIfPresent(
+            String.self,
+            forKey: .minimumSDKVersion
+        ) ?? "0.1.1"
     }
 }
 
@@ -284,7 +294,7 @@ public extension InstrumentID {
                     "why a path was unsatisfied, including the local-network denial that has no other signal",
                 ],
                 related: ["network.urlSession.taskMetrics"],
-                mechanism: .none,
+                mechanism: .osWatcher,
                 cadence: .onChange
             )
         case .appStateChanges:
@@ -765,7 +775,7 @@ public extension InstrumentID {
                     "swiftui.host.updates",
                     "cpu.thread.usage",
                 ],
-                mechanism: .none,
+                mechanism: .osWatcher,
                 cadence: .periodic,
                 overhead: .low
             )
@@ -1057,7 +1067,8 @@ public extension InstrumentID {
                 ],
                 mechanism: .swizzle,
                 cadence: .continuous,
-                overhead: .negligible
+                overhead: .negligible,
+                minimumSDKVersion: "0.4.0"
             )
         case .gestureState:
             InstrumentMetadata(
@@ -1075,7 +1086,8 @@ public extension InstrumentID {
                 ],
                 mechanism: .swizzle,
                 cadence: .continuous,
-                overhead: .negligible
+                overhead: .negligible,
+                minimumSDKVersion: "0.4.0"
             )
         case .viewHierarchy:
             InstrumentMetadata(
@@ -1106,7 +1118,8 @@ public extension InstrumentID {
                         description: "The point's y coordinate, in the key window's own " +
                             "coordinate space. Default 0."
                     ),
-                ]
+                ],
+                minimumSDKVersion: "0.4.0"
             )
         case .configRefused:
             InstrumentMetadata(
@@ -1117,7 +1130,8 @@ public extension InstrumentID {
                 ],
                 related: [],
                 mechanism: .none,
-                cadence: .onChange
+                cadence: .onChange,
+                minimumSDKVersion: "0.2.0"
             )
         }
     }
