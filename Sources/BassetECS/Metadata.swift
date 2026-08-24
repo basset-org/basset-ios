@@ -549,7 +549,7 @@ public extension InstrumentID {
                     "lifecycle.app.state",
                     "lifecycle.lastRunEnded",
                 ],
-                mechanism: .statusRead,
+                mechanism: .notification,
                 cadence: .onChange
             )
         case .lastRunEnded:
@@ -740,7 +740,7 @@ public extension InstrumentID {
                     "network.transportSecurity",
                     "network.path.transitions",
                 ],
-                mechanism: .statusRead,
+                mechanism: .swizzle,
                 cadence: .onChange
             )
         case .transportSecurity:
