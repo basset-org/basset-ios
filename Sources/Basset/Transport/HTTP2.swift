@@ -24,7 +24,7 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
     private var nextSequence: UInt64 = 1
     private var flushScheduled = false
     private var retryWorkItem: DispatchWorkItem?
-    private var backoff: TimeInterval = 1
+    private var backoff: TimeInterval
     private var closed = false
     private var refusal: String?
     private var lost = 0
@@ -32,6 +32,7 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
     private let flushAfter: DispatchTimeInterval = .milliseconds(500)
     private let flushAt = 32 * 1024
     private let maxWaitingBytes = 512 * 1024
+    private let initialBackoff: TimeInterval
     private let maxBackoff: TimeInterval = 30
 
     var kind: TransportType? {
@@ -58,12 +59,15 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
         requestId: UInt64,
         session: URLSession? = nil,
         backlogDirectory: URL = PersistedBacklog.defaultDirectory(),
-        monitorsPath: Bool = true
+        monitorsPath: Bool = true,
+        initialBackoff: TimeInterval = 1
     ) {
         self.endpoint = endpoint
         self.token = token
         self.requestId = requestId
         self.backlogDirectory = backlogDirectory
+        self.initialBackoff = initialBackoff
+        backoff = initialBackoff
         self.session = session ?? URLSession(
             configuration: .ephemeral,
             delegate: RedirectRefusal.shared,
@@ -101,7 +105,7 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
 
             retryWorkItem?.cancel()
             retryWorkItem = nil
-            backoff = 1
+            backoff = initialBackoff
             flush()
         }
     }
@@ -211,7 +215,7 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
 
             switch http.statusCode {
             case 200 ..< 300:
-                backoff = 1
+                backoff = initialBackoff
                 settled(sequence)
             // Final for this request: max_readings counts across every device and transport.
             case 429:

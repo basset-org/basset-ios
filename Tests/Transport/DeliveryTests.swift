@@ -101,7 +101,8 @@ func stubbedChannel(
     requestId: UInt64 = 1,
     backlogDirectory: URL = FileManager.default
         .temporaryDirectory
-        .appendingPathComponent(UUID().uuidString)
+        .appendingPathComponent(UUID().uuidString),
+    initialBackoff: TimeInterval = 1
 ) -> HTTP2Channel {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubbedResponses.self]
@@ -115,7 +116,8 @@ func stubbedChannel(
             delegateQueue: nil
         ),
         backlogDirectory: backlogDirectory,
-        monitorsPath: false
+        monitorsPath: false,
+        initialBackoff: initialBackoff
     )
 }
 
