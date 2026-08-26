@@ -91,6 +91,9 @@ final class InstrumentRunner: @unchecked Sendable {
     private var reportedImages: [UInt64: Set<String>] = [:]
     /// Requests whose set changed before anything was open to tell.
     private var owesActiveSet: Set<UInt64> = []
+    /// Images a request needs before its held readings mean anything, kept out of the backlog:
+    /// evicting one would leave it marked as reported and every address in it unplaceable.
+    private var owedImages: [UInt64: [BinaryImage]] = [:]
     private let maxBuffered = 1024
     private var expiryTimer: DispatchSourceTimer?
 
@@ -258,6 +261,7 @@ final class InstrumentRunner: @unchecked Sendable {
         buffered.removeAll { $0.requestId == requestId }
         reportedImages.removeValue(forKey: requestId)
         owesActiveSet.remove(requestId)
+        owedImages.removeValue(forKey: requestId)
     }
 
     /// False on the reading path: rebuilding the timer there would push its own deadline out.
@@ -521,12 +525,9 @@ final class InstrumentRunner: @unchecked Sendable {
                     continue
                 }
                 guard let transport = transport(for: requestId, request) else {
-                    // Images first, and held with it: a reading flushed out of the backlog
-                    // later would otherwise arrive with addresses nothing can place.
-                    for image in imageFrames(placing, into: requestId) {
-                        hold(image, for: requestId)
-                    }
-
+                    // Owed, not held: the backlog is capped and counted, and an image that
+                    // fell out of it would leave every address in this reading unplaceable.
+                    owe(placing, for: requestId)
                     hold(frame, for: requestId)
                     continue
                 }
@@ -599,6 +600,13 @@ final class InstrumentRunner: @unchecked Sendable {
     /// its own — so every request needs its own copy, once.
     /// Not counted against the request's cap: max_readings bounds what a device was asked
     /// for, and an address the reader cannot place is not one of them.
+    private func owe(_ images: [BinaryImage], for requestId: UInt64) {
+        var already = Set((owedImages[requestId] ?? []).map(\.uuid))
+        for image in images where already.insert(image.uuid).inserted {
+            owedImages[requestId, default: []].append(image)
+        }
+    }
+
     private func imageFrames(
         _ images: [BinaryImage],
         into requestId: UInt64
@@ -635,6 +643,15 @@ final class InstrumentRunner: @unchecked Sendable {
         }
 
         transports[requestId] = opened
+        // Ahead of the backlog: a reading flushed before its image arrives is unreadable
+        // for as long as anyone looks at it.
+        for frame in imageFrames(
+            owedImages.removeValue(forKey: requestId) ?? [],
+            into: requestId
+        ) {
+            opened.send(frame)
+        }
+
         if owesActiveSet.remove(requestId) != nil {
             emitActiveSet(only: requestId)
         }

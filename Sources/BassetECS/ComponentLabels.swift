@@ -246,7 +246,7 @@ public extension Component.ID {
         case .emptyResultCount: "Produced nothing"
         case .debuggerAttached: "Debugger attached"
         case .interfaceOrientation: "Orientation"
-        case .retiredActiveInstrument: "Now running"
+        case .retiredActiveInstrument: "Now running (retired)"
         }
     }
 }
