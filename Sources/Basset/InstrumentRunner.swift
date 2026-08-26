@@ -346,6 +346,12 @@ final class InstrumentRunner: @unchecked Sendable {
             deactivate(id)
             active.remove(id)
         }
+        let before = active
+        defer {
+            if active != before {
+                announceActiveSet()
+            }
+        }
         for (id, registration) in wanted where !active.contains(id) {
             activeConfig[id] = configData[id]
             activate(registration, config: configData[id])
@@ -508,6 +514,47 @@ final class InstrumentRunner: @unchecked Sendable {
                 sent[requestId, default: 0] += 1
             }
             dropRequestsAtTheirCap()
+        }
+    }
+
+    /// What each live request is running, now that it changed. Without it a capture spanning
+    /// an update cannot tell an instrument that was quiet from one that was not yet on.
+    private func announceActiveSet() {
+        let running = active
+        for (requestId, request) in live {
+            let named = request.instruments.compactMap { byName[$0]?.id }
+            let mine = named.filter { running.contains($0) }.sorted { $0.rawValue < $1.rawValue }
+            guard !mine.isEmpty else {
+                continue
+            }
+
+            var record = Entity(.activeInstruments)
+            record.add(.instrument(InstrumentID.instrumentsActive.rawValue))
+            record.add(.launchId(LaunchIdentity.current))
+            record.add(.occurrenceCount(UInt64(mine.count)))
+            // Repeated, innermost order irrelevant — the set is what matters, not a sequence.
+            for id in mine {
+                record.add(.activeInstrument(id.rawValue))
+            }
+
+            let payload = encoder.encode(record)
+            guard UInt64(payload.count) <= FrameReader.maxFrameLength else {
+                continue
+            }
+
+            // Never opens one: convergence must not flush a buffer that a reading is still
+            // deciding the fate of. A request with no transport yet learns its set on the
+            // next change, once something else has opened it.
+            let frame = encoder.frame(payload)
+            guard let transport = transports[requestId],
+                  transport.refused == nil,
+                  framesLeft(for: requestId, request) > 0
+            else {
+                continue
+            }
+
+            transport.send(frame)
+            sent[requestId, default: 0] += 1
         }
     }
 

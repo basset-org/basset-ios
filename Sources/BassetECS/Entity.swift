@@ -51,6 +51,8 @@ public struct Entity: Equatable, Sendable {
         case controlAction = 47
         case gestureRecognizer = 48
         case viewHierarchy = 49
+        case imageRender = 50
+        case activeInstruments = 51
         case instrumentConfig = 0xff00
     }
 

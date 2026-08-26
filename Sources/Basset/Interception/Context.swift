@@ -117,6 +117,11 @@ public final class Context: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Where an instance tracked through `follow(class:)` was first created from.
+    public func callers(class trackedClass: AnyClass, instance: UInt32) -> [UInt64] {
+        registries.registry(runtimeClass: trackedClass).callers(ofInstance: instance)
+    }
+
     public func readings(_ entity: Entity.ID? = nil) -> Readings {
         Readings(
             entity: entity ?? defaultEntity,

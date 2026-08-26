@@ -49,6 +49,12 @@ public extension Menu {
                 + "\(domains.count == 1 ? "domain" : "domains"). "
                 + "Name one in a request: `basset request create -i <instrument>`."
         )
+        out.append("")
+        out.append(
+            "What an instrument reveals is a mechanism, not a judgement about it. "
+                + "A value that looks wrong is a question until a reported symptom "
+                + "or a stated expectation says what right would have been."
+        )
 
         for (domain, entries) in domains {
             out.append("")

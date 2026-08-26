@@ -12,12 +12,22 @@ enum ApplicationPresence {
     /// Guards against subscribing twice, which would double-count every transition.
     private static let watching: Mutex<Bool> = .init(false)
 
+    private static let rotation: Mutex<String> = .init("unknown")
+
     static var isForeground: Bool {
         foreground.isActive
     }
 
     static var state: String {
         isForeground ? "foreground" : "background"
+    }
+
+    /// What the interface is showing, not how the phone is being held. `UIDevice`'s own
+    /// orientation reads `unknown` until someone calls
+    /// `beginGeneratingDeviceOrientationNotifications`, which powers the accelerometer and is
+    /// reference counted — a library calling it can leave an app's own `end` unbalanced.
+    static var orientation: String {
+        rotation.withLock { $0 }
     }
 
     /// Called from `start`; subscribes from any thread, reads state on main asynchronously.
@@ -65,6 +75,16 @@ enum ApplicationPresence {
         foreground.activate()
         #endif
 
+        #if canImport(UIKit)
+        // Observed but never started: an app already generating them gets live rotation for
+        // nothing, and one that is not still has the value read on every presence change.
+        center.addObserver(
+            forName: UIDevice.orientationDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { _ in read() }
+        #endif
+
         if Thread.isMainThread {
             read()
         } else {
@@ -73,6 +93,33 @@ enum ApplicationPresence {
     }
 
     private static func read() {
+        #if canImport(UIKit)
+        rotation.withLock { $0 = readOrientation() }
+        #endif
+        readPresence()
+    }
+
+    #if canImport(UIKit)
+    private static func readOrientation() -> String {
+        let scene = HostApplication.shared?
+            .connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first
+        guard let scene else {
+            return "unknown"
+        }
+
+        return switch scene.interfaceOrientation {
+        case .portrait: "portrait"
+        case .portraitUpsideDown: "portraitUpsideDown"
+        case .landscapeLeft: "landscapeLeft"
+        case .landscapeRight: "landscapeRight"
+        default: "unknown"
+        }
+    }
+    #endif
+
+    private static func readPresence() {
         #if canImport(UIKit)
         // An extension host has no application object; treated as foreground like no-UIKit.
         if HostApplication.shared?.applicationState == .background {

@@ -27,11 +27,25 @@ struct HangWatch {
         let debugged: Bool
     }
 
+    /// Restated while a debugger stays attached: a capture read later must not have to find
+    /// the one poll it began on to learn that every hang verdict in it was withheld.
+    static let suppressionRestatedEvery: TimeInterval = 60
+
     let threshold: UInt64
 
-    /// True exactly on the poll a debugger newly attaches — never repeated while it stays attached.
-    static func debuggerSuppressionBegan(was wasDebugged: Bool, is debugged: Bool) -> Bool {
-        debugged && !wasDebugged
+    static func debuggerSuppressionDue(
+        is debugged: Bool,
+        lastSaid: Date?,
+        now: Date
+    ) -> Bool {
+        guard debugged else {
+            return false
+        }
+        guard let lastSaid else {
+            return true
+        }
+
+        return now.timeIntervalSince(lastSaid) >= suppressionRestatedEvery
     }
 
     func step(_ state: inout State, _ poll: Poll) -> Verdict {
@@ -139,7 +153,7 @@ final class MainThreadHang: Streamable, Configurable {
             1000000000
         let watching = Thread { [heartbeat, watch, clock] in
             var state = HangWatch.State()
-            var wasDebugged = false
+            var saidSuppressed: Date?
             var faultId: UInt32?
 
             while !Thread.current.isCancelled {
@@ -150,12 +164,24 @@ final class MainThreadHang: Streamable, Configurable {
                 }
 
                 let debugged = Debugger.isAttached
-                if HangWatch.debuggerSuppressionBegan(was: wasDebugged, is: debugged) {
+                if HangWatch.debuggerSuppressionDue(
+                    is: debugged,
+                    lastSaid: saidSuppressed,
+                    now: Date()
+                ) {
+                    saidSuppressed = Date()
                     context.emit { out in
-                        out.put(.mechanismStatus("suppressed: debugger attached"))
+                        out.put(.debuggerAttached(true))
+                        out.put(
+                            .mechanismStatus(
+                                "suppressed: a debugger is attached, so no hang can be measured"
+                            )
+                        )
                     }
                 }
-                wasDebugged = debugged
+                if !debugged {
+                    saidSuppressed = nil
+                }
 
                 let verdict = watch.step(
                     &state,

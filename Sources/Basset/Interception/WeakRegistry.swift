@@ -4,10 +4,12 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
     private final class Box {
         weak var tracked: Tracked?
         let instance: UInt32
+        let callers: [UInt64]
 
-        init(_ tracked: Tracked, _ instance: UInt32) {
+        init(_ tracked: Tracked, _ instance: UInt32, _ callers: [UInt64]) {
             self.tracked = tracked
             self.instance = instance
+            self.callers = callers
         }
     }
 
@@ -53,9 +55,19 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
         }
     }
 
+    /// Where the object was first created from, innermost frame first. Empty once the
+    /// object is gone, and for one that arrived through a path that does not record it.
+    public func callers(ofInstance instance: UInt32) -> [UInt64] {
+        guarded.withLock { state in
+            state.boxes.first { $0.instance == instance }?.callers ?? []
+        }
+    }
+
     /// Answers the object's number whether it just got one or already had one.
     @discardableResult
     public func add(_ tracked: Tracked) -> UInt32 {
+        // Walked before the lock: it allocates, and every chokepoint on this class waits here.
+        let callers = CallerStack.here()
         let (instance, waiting) = guarded
             .withLock { state -> (UInt32, [(Tracked, UInt32) -> Void]?) in
                 state.forgetReleased()
@@ -64,7 +76,7 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
                 }
 
                 state.nextInstance += 1
-                state.boxes.append(Box(tracked, state.nextInstance))
+                state.boxes.append(Box(tracked, state.nextInstance, callers))
                 return (state.nextInstance, Array(state.arrivals.values))
             }
 

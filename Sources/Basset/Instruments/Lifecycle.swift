@@ -30,6 +30,9 @@ final class AppState: Streamable, PlainInstrument {
         watch(UIApplication.willEnterForegroundNotification, context) { [weak self] in
             self?.report("foreground", context: context)
         }
+        watch(UIDevice.orientationDidChangeNotification, context) { [weak self] in
+            self?.report(ApplicationPresence.state, context: context)
+        }
         // Distinguishes a genuine gap in readings from the app having simply been backgrounded.
         watch(UIApplication.didBecomeActiveNotification, context) { [weak self] in
             guard let self else {
@@ -78,6 +81,7 @@ final class AppState: Streamable, PlainInstrument {
     private func report(_ state: String, context: Context) {
         context.emitIfChanged { out in
             out.put(.appState(state))
+            out.put(.interfaceOrientation(ApplicationPresence.orientation))
         }
     }
 }

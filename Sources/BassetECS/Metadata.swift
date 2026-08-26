@@ -211,6 +211,7 @@ public extension InstrumentID {
                 summary: "Hardware, OS and build identity for the device under capture",
                 whenToUse: "read alongside any other instrument whose numbers change meaning between hardware and a simulator, or between build configurations",
                 reveals: [
+                    "whether a debugger is attached, which suppresses hang detection and makes every timing number in the capture suspect",
                     "which device model and OS produced the rest of the capture",
                     "whether the readings came from a debug build or a simulator",
                     "which version of this SDK produced the capture",
@@ -301,6 +302,7 @@ public extension InstrumentID {
                 summary: "Whether the app was in front, and how long it was away",
                 whenToUse: "read alongside anything else — a capture that goes quiet is either an app that stopped being asked or an app iOS suspended, and only this says which",
                 reveals: [
+                    "which way the interface is oriented at each change, so a reading taken in landscape is not read as a portrait one",
                     "when the app went to background and came back",
                     "how long it was away, which is how a gap in a capture is explained rather than guessed at",
                 ],
@@ -340,7 +342,14 @@ public extension InstrumentID {
                     "camera.device.inventory",
                 ],
                 mechanism: .kvo,
-                cadence: .onChange
+                cadence: .onChange,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "callers",
+                        type: .bool,
+                        description: "Report which of the app's own code built each session, as return addresses into the images it shipped. Frames inside the OS are left out: they say nothing about the caller. Default true."
+                    ),
+                ]
             )
         case .cameraDeviceFormat:
             InstrumentMetadata(
@@ -364,7 +373,7 @@ public extension InstrumentID {
                 summary: "How many camera frames reach the app each second, how long the app's own delegate takes to process each one, how many the system threw away instead, and why",
                 whenToUse: "a camera preview is black, frozen, or the app hangs while a session runs — frames may not be arriving at all, may be arriving and being dropped faster than they are consumed, or may be arriving on time while the app's own per-frame processing runs long enough to miss the next one",
                 reveals: [
-                    "whether any frames reach the app, reported every second including the seconds where none did",
+                    "whether any frames reach the app, reported every second including the seconds where none did — but only while a connection is carrying, so zero means a starved camera rather than a stopped one",
                     "wall-clock time the app's own captureOutput:didOutputSampleBuffer:fromConnection: spends per frame, totalled and peak for the window",
                     "which delegate class is receiving frames, reported once when it starts being watched",
                     "how many frames the system dropped, which an app that never wrote a drop callback cannot see",
@@ -949,6 +958,27 @@ public extension InstrumentID {
                     ),
                 ]
             )
+        case .imagingRenderPasses:
+            InstrumentMetadata(
+                summary: "How often the app renders through Core Image, and what it renders into",
+                whenToUse: "a filtered or shader-processed image comes out rotated, mirrored, slow or blank, and the preview looks nothing like what gets saved",
+                reveals: [
+                    "how many Core Image renders run each second, counted separately for each kind of destination they draw into",
+                    "how many images the app built from a Metal texture, which is the other half of a texture round trip",
+                    "a round trip through a Metal texture flips the image, so the two counts together say whether an output ends up flipped or upright",
+                    "renders that produced nothing, which Core Image reports by returning no image rather than by failing",
+                ],
+                related: [
+                    "metal.drawable.presentation",
+                    "metal.gpu.latency",
+                    "render.frame.pacing",
+                    "camera.frames.delivery",
+                ],
+                mechanism: .swizzle,
+                cadence: .interval,
+                overhead: .low,
+                minimumSDKVersion: "0.8.0"
+            )
         case .metalDrawablePresentation:
             InstrumentMetadata(
                 summary: "Frames a Metal layer actually put on screen, and the gaps between them",
@@ -1119,6 +1149,20 @@ public extension InstrumentID {
                     ),
                 ],
                 minimumSDKVersion: "0.4.0"
+            )
+        case .instrumentsActive:
+            InstrumentMetadata(
+                summary: "Which instruments this capture is running, restated whenever that set changes",
+                whenToUse: "read alongside anything else: a gap in one instrument's readings means it was quiet only if it was running at the time",
+                reveals: [
+                    "every instrument this request has running on the device, at the moment the set last changed",
+                    "the seam where a request's instruments were changed, so readings either side are not read as one set",
+                    "nothing at all until something changes: the set at the start is the first one reported",
+                ],
+                related: ["basset.configRefused", "device.info"],
+                mechanism: .none,
+                cadence: .onChange,
+                minimumSDKVersion: "0.8.0"
             )
         case .configRefused:
             InstrumentMetadata(
