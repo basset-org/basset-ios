@@ -353,6 +353,18 @@ final class CameraDeviceInventory: Streamable, PlainInstrument {
     func stopObserving() {}
 }
 
+#if os(iOS)
+private func connections(of object: AnyObject) -> [AnyObject] {
+    object.value(forKey: "connections") as? [AnyObject] ?? []
+}
+
+/// A connection the session has wired up and not switched off: frames should be arriving.
+private func isActiveAndEnabled(_ connection: AnyObject) -> Bool {
+    ((connection.value(forKey: "isActive") as? Bool) ?? false)
+        && ((connection.value(forKey: "isEnabled") as? Bool) ?? false)
+}
+#endif
+
 final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
     private struct State {
         var instrumented: Set<ObjectIdentifier> = []
@@ -396,16 +408,7 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
         // Snapshotted, then read outside the lock: asking AVFoundation about a connection
         // while holding it invites a callback into this instrument on another thread.
         let outputs = guarded.withLock { $0.watched.allObjects }
-        for output in outputs {
-            let connections = output.value(forKey: "connections") as? [AnyObject] ?? []
-            for connection in connections
-                where ((connection.value(forKey: "isActive") as? Bool) ?? false)
-                && ((connection.value(forKey: "isEnabled") as? Bool) ?? false)
-            {
-                return true
-            }
-        }
-        return false
+        return outputs.contains { connections(of: $0).contains(where: isActiveAndEnabled) }
         #else
         return false
         #endif
@@ -687,11 +690,8 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
         instance: UInt32,
         into context: Context
     ) {
-        let connections = session.value(forKey: "connections") as? [AnyObject] ?? []
-        let carrying = connections.filter {
-            (($0.value(forKey: "isActive") as? Bool) ?? false)
-                && (($0.value(forKey: "isEnabled") as? Bool) ?? false)
-        }
+        let wired = connections(of: session)
+        let active = wired.filter(isActiveAndEnabled)
         let inputs = session.value(forKey: "inputs") as? [AnyObject] ?? []
         let outputs = session.value(forKey: "outputs") as? [AnyObject] ?? []
 
@@ -701,8 +701,8 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
             out.put(.sessionPreset(session.value(forKey: "sessionPreset") as? String ?? ""))
             out.put(.inputCount(UInt32(inputs.count)))
             out.put(.outputCount(UInt32(outputs.count)))
-            out.put(.connectionCount(UInt32(connections.count)))
-            out.put(.activeConnectionCount(UInt32(carrying.count)))
+            out.put(.connectionCount(UInt32(wired.count)))
+            out.put(.activeConnectionCount(UInt32(active.count)))
             out.put(.sessionRunning((session.value(forKey: "isRunning") as? Bool) ?? false))
 
             if config.callers,
