@@ -497,9 +497,12 @@ final class InstrumentRunner: @unchecked Sendable {
 
             return address
         }
-        let placing = addresses.isEmpty ? [] : BinaryImages.covering(addresses)
 
         queue.async { [self] in
+            // Walked here rather than on the thread that emitted: an instrument reporting from
+            // the main thread must not pay for reading every mapped image.
+            let placing = addresses.isEmpty ? [] : BinaryImages.covering(addresses)
+
             // Enforced here too: a deferred wake costs one reading, not an unbounded capture.
             expireLocked(at: now(), rescheduling: false)
 

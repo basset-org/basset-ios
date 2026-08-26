@@ -31,6 +31,13 @@ public enum BinaryImages {
     /// Built once — allocating this per image was most of the scan's cost.
     private static let textSegmentName: Array = .init(SEG_TEXT.utf8)
 
+    /// Each image's start/end, ascending, no strings built — naming them cost the most.
+    /// The walk costs ~87µs over 347 images and the set only changes when something is
+    /// dlopened, so it is held and rebuilt on the count moving. A remove and an add between
+    /// two reads nets the same count and serves a stale table — the cost of that is an
+    /// address nothing resolves, never an address resolved to the wrong image.
+    private static let held: Mutex<(count: UInt32, spans: [ImageSpan])> = .init((0, []))
+
     public static func loaded() -> [BinaryImage] {
         var images = [BinaryImage]()
         for index in 0 ..< _dyld_image_count() {
@@ -111,8 +118,18 @@ public enum BinaryImages {
         return (executable as NSString).deletingLastPathComponent
     }
 
-    /// Each image's start/end, ascending, no strings built — naming them cost the most.
     private static func mappedSpans() -> [ImageSpan] {
+        let counted = _dyld_image_count()
+        if let cached = held.withLock({ $0.count == counted ? $0.spans : nil }) {
+            return cached
+        }
+
+        let walked = walkMappedSpans()
+        held.withLock { $0 = (counted, walked) }
+        return walked
+    }
+
+    private static func walkMappedSpans() -> [ImageSpan] {
         var spans = [ImageSpan]()
         spans.reserveCapacity(Int(_dyld_image_count()))
         for index in 0 ..< _dyld_image_count() {
