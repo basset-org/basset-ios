@@ -27,8 +27,7 @@ struct HangWatch {
         let debugged: Bool
     }
 
-    /// Restated while a debugger stays attached: a capture read later must not have to find
-    /// the one poll it began on to learn that every hang verdict in it was withheld.
+    /// Restated while attached: a reader must not hunt for the one poll it began on.
     static let suppressionRestatedEvery: TimeInterval = 60
 
     let threshold: UInt64

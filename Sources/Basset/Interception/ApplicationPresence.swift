@@ -101,10 +101,11 @@ enum ApplicationPresence {
 
     #if canImport(UIKit)
     private static func readOrientation() -> String {
+        // A backgrounded scene in a multi-window app answers with its own last orientation.
         let scene = HostApplication.shared?
             .connectedScenes
             .compactMap { $0 as? UIWindowScene }
-            .first
+            .first { $0.activationState == .foregroundActive }
         guard let scene else {
             return "unknown"
         }

@@ -360,6 +360,8 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
         var defined: Set<ObjectIdentifier> = []
         var rebinding: Set<ObjectIdentifier> = []
         var watching = 0
+        /// Weak: an output the app released must not be kept alive to be asked about.
+        let watched: NSHashTable<AnyObject> = .weakObjects()
     }
 
     static let id: InstrumentID = .cameraFrameDelivery
@@ -383,9 +385,6 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
 
     private let guarded: Mutex<State> = .init(State())
 
-    /// Weak: an output the app released must not be kept alive to be asked about.
-    private let watched: NSHashTable<AnyObject> = .weakObjects()
-
     private var isWatchingSomething: Bool {
         guarded.withLock { $0.watching > 0 }
     }
@@ -394,7 +393,10 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
     /// Zero frames with nothing carrying is a camera that stopped, and says nothing at all.
     private var isCarrying: Bool {
         #if os(iOS)
-        for output in watched.allObjects {
+        // Snapshotted, then read outside the lock: asking AVFoundation about a connection
+        // while holding it invites a callback into this instrument on another thread.
+        let outputs = guarded.withLock { $0.watched.allObjects }
+        for output in outputs {
             let connections = output.value(forKey: "connections") as? [AnyObject] ?? []
             for connection in connections
                 where ((connection.value(forKey: "isActive") as? Bool) ?? false)
@@ -468,7 +470,7 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
 
     #if os(iOS)
     private func instrument(_ output: AnyObject, with context: Context) {
-        watched.add(output)
+        guarded.withLock { $0.watched.add(output) }
         guard let delegate = output.value(forKey: "sampleBufferDelegate") as AnyObject?,
               let subject = object_getClass(delegate)
         else {

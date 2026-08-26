@@ -30,6 +30,8 @@ final class AppState: Streamable, PlainInstrument {
         watch(UIApplication.willEnterForegroundNotification, context) { [weak self] in
             self?.report("foreground", context: context)
         }
+        // Silent unless the app itself called beginGeneratingDeviceOrientationNotifications:
+        // starting that here would power the accelerometer and unbalance the app's own count.
         watch(UIDevice.orientationDidChangeNotification, context) { [weak self] in
             self?.report(ApplicationPresence.state, context: context)
         }

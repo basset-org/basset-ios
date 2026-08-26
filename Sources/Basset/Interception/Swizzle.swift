@@ -57,6 +57,16 @@ struct HookShape: Equatable {
     static let timingVoid: HookShape = .init(
         name: "timingVoid", arguments: 2, returns: "v", firstArgument: nil
     )
+    /// `-[CIContext render:toMTLTexture:commandBuffer:bounds:colorSpace:]` — three objects,
+    /// a `CGRect` by value, then a `CGColorSpaceRef` which is a pointer, not an object.
+    static let textureRenderCallback: HookShape = .init(
+        name: "textureRenderCallback",
+        arguments: 7,
+        returns: "v",
+        firstArgument: "@",
+        pointerArgument: 6
+    )
+
     /// `-captureOutput:didOutputSampleBuffer:fromConnection:` and its drop counterpart.
     static let sampleBufferCallback: HookShape = .init(
         name: "sampleBufferCallback",
@@ -267,6 +277,28 @@ private final class HookSite {
     }
 
     /// Drops nothing — the app must get back exactly what the original method produced.
+    func callChained(
+        _ receiver: AnyObject,
+        _ first: AnyObject?,
+        _ second: AnyObject?,
+        _ third: AnyObject?,
+        _ rect: CGRect,
+        _ pointer: UnsafeRawPointer?
+    ) {
+        guard let chained else {
+            return
+        }
+
+        let original = unsafeBitCast(
+            chained,
+            to: (@convention(c) (
+                AnyObject, Selector, AnyObject?, AnyObject?, AnyObject?, CGRect,
+                UnsafeRawPointer?
+            ) -> Void).self
+        )
+        original(receiver, selector, first, second, third, rect, pointer)
+    }
+
     func callChainedReturning(_ receiver: AnyObject) -> AnyObject? {
         guard let chained else {
             return nil
@@ -687,6 +719,31 @@ public final class Swizzle: @unchecked Sendable {
                     (observer.body as? (AnyObject, AnyObject?) -> Void)?(receiver, made)
                 }
                 return made
+            }
+            return imp_implementationWithBlock(block)
+        }
+    }
+
+    /// Three objects, a rect by value, and a pointer — the shape a Core Image render takes.
+    public func after(
+        _ target: AnyClass?,
+        _ selector: Selector,
+        takingThreeObjectsRectAndPointer: Void,
+        _ observer: @escaping (AnyObject) -> Void
+    ) -> SwizzleOutcome {
+        install(
+            target,
+            selector,
+            shape: .textureRenderCallback,
+            observer: observer
+        ) { site in
+            let block: @convention(block) (
+                AnyObject, AnyObject?, AnyObject?, AnyObject?, CGRect, UnsafeRawPointer?
+            ) -> Void = { receiver, first, second, third, rect, pointer in
+                site.callChained(receiver, first, second, third, rect, pointer)
+                for observer in site.observers {
+                    (observer.body as? (AnyObject) -> Void)?(receiver)
+                }
             }
             return imp_implementationWithBlock(block)
         }

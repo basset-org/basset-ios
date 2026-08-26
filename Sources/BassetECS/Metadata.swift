@@ -302,7 +302,8 @@ public extension InstrumentID {
                 summary: "Whether the app was in front, and how long it was away",
                 whenToUse: "read alongside anything else — a capture that goes quiet is either an app that stopped being asked or an app iOS suspended, and only this says which",
                 reveals: [
-                    "which way the interface is oriented at each change, so a reading taken in landscape is not read as a portrait one",
+                    "which way the interface is oriented on every reading, so one taken in landscape is not read as a portrait one",
+                    "a reading on rotation itself, but only in an app that already asks iOS for device orientation notifications",
                     "when the app went to background and came back",
                     "how long it was away, which is how a gap in a capture is explained rather than guessed at",
                 ],
@@ -960,13 +961,13 @@ public extension InstrumentID {
             )
         case .imagingRenderPasses:
             InstrumentMetadata(
-                summary: "How often the app renders through Core Image, and what it renders into",
-                whenToUse: "a filtered or shader-processed image comes out rotated, mirrored, slow or blank, and the preview looks nothing like what gets saved",
+                summary: "Core Image renders into a Metal texture, and the images built back out of one",
+                whenToUse: "an image processed through Core Image comes out rotated or mirrored, and the preview looks nothing like what gets saved",
                 reveals: [
-                    "how many Core Image renders run each second, counted separately for each kind of destination they draw into",
-                    "how many images the app built from a Metal texture, which is the other half of a texture round trip",
-                    "a round trip through a Metal texture flips the image, so the two counts together say whether an output ends up flipped or upright",
-                    "renders that produced nothing, which Core Image reports by returning no image rather than by failing",
+                    "how many Core Image renders draw into a Metal texture each second",
+                    "how many images the app built from a Metal texture, which is the other half of a round trip",
+                    "a round trip flips the image, so the two counts together say whether an output ends up upright",
+                    "when a hook the runtime refused leaves a count unmeasured rather than zero",
                 ],
                 related: [
                     "metal.drawable.presentation",
@@ -1157,7 +1158,7 @@ public extension InstrumentID {
                 reveals: [
                     "every instrument this request has running on the device, at the moment the set last changed",
                     "the seam where a request's instruments were changed, so readings either side are not read as one set",
-                    "nothing at all until something changes: the set at the start is the first one reported",
+                    "nothing while a set holds steady, so a capture with one of these was never changed after it began",
                 ],
                 related: ["basset.configRefused", "device.info"],
                 mechanism: .none,
