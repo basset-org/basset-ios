@@ -699,26 +699,13 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
             if config.callers,
                let sessionClass = objc_getClass("AVCaptureSession") as? AnyClass
             {
-                let shipped = BinaryImages.shippedDirectory()
-                let callers = context.callers(class: sessionClass, instance: instance)
-                let app = BinaryImages.covering(callers)
-                    .filter { $0.isShipped(under: shipped) }
-                // The OS frames between the app's own say nothing about who called, and
-                // resolving them needs device-support symbols the reader rarely holds.
-                let own = callers.filter { frame in
-                    app.contains { $0.loadAddress <= frame && frame < $0.loadAddress + $0.size }
-                }
+                let own = CallerStack.shipped(
+                    context.callers(class: sessionClass, instance: instance)
+                )
 
                 // Innermost first — arrival order is stack order, nothing needs numbering.
                 for frame in own {
                     out.put(.frameAddress(frame))
-                }
-                for image in app {
-                    out.also(.binaryImage) { entry in
-                        entry.put(.imageName(image.name))
-                        entry.put(.imageLoadAddress(image.loadAddress))
-                        entry.put(.imageUUID(image.uuid))
-                    }
                 }
             }
 

@@ -87,6 +87,8 @@ final class InstrumentRunner: @unchecked Sendable {
     private var endpoint: String?
 
     private var buffered: [(requestId: UInt64, frame: Data)] = []
+    /// Per request, not per launch: an image sent to one capture is absent from another.
+    private var reportedImages: [UInt64: Set<String>] = [:]
     private let maxBuffered = 1024
     private var expiryTimer: DispatchSourceTimer?
 
@@ -252,6 +254,7 @@ final class InstrumentRunner: @unchecked Sendable {
         sent.removeValue(forKey: requestId)
         evicted.removeValue(forKey: requestId)
         buffered.removeAll { $0.requestId == requestId }
+        reportedImages.removeValue(forKey: requestId)
     }
 
     /// False on the reading path: rebuilding the timer there would push its own deadline out.
@@ -349,7 +352,7 @@ final class InstrumentRunner: @unchecked Sendable {
         let before = active
         defer {
             if active != before {
-                announceActiveSet()
+                emitActiveSet()
             }
         }
         for (id, registration) in wanted where !active.contains(id) {
@@ -398,7 +401,7 @@ final class InstrumentRunner: @unchecked Sendable {
 
         status.activate()
         if configRefused {
-            reportConfigRefused(for: registration, activation: status)
+            emitConfigRefused(for: registration, activation: status)
         }
 
         // Gated on the registration: `threadSnapshot` also implements `reading`.
@@ -415,7 +418,7 @@ final class InstrumentRunner: @unchecked Sendable {
     }
 
     /// Bypasses `Instrument`: the trigger is another instrument's own config decode failing.
-    private func reportConfigRefused(for registration: Registration, activation: AtomicStatus) {
+    private func emitConfigRefused(for registration: Registration, activation: AtomicStatus) {
         var entity = Entity(.instrumentConfig)
         entity.add(.instrument(registration.id.rawValue))
         emit(
@@ -483,6 +486,19 @@ final class InstrumentRunner: @unchecked Sendable {
                 nil
             }
 
+        // Only walked when a reading actually names addresses: `covering` reads every mapped
+        // image, which no reading without frames should pay for.
+        let addresses: [UInt64] = record.components.compactMap { component in
+            guard component.id == .frameAddress,
+                  case .uint64(let address) = component.value
+            else {
+                return nil
+            }
+
+            return address
+        }
+        let placing = addresses.isEmpty ? [] : BinaryImages.covering(addresses)
+
         queue.async { [self] in
             // Enforced here too: a deferred wake costs one reading, not an unbounded capture.
             expireLocked(at: now(), rescheduling: false)
@@ -494,6 +510,7 @@ final class InstrumentRunner: @unchecked Sendable {
             for (requestId, request) in live
                 where request.instruments.contains(filterName)
             {
+                emitImages(placing, into: requestId, request)
                 guard let frame else {
                     evicted[requestId, default: 0] += 1
                     continue
@@ -519,7 +536,7 @@ final class InstrumentRunner: @unchecked Sendable {
 
     /// What each live request is running, now that it changed. Without it a capture spanning
     /// an update cannot tell an instrument that was quiet from one that was not yet on.
-    private func announceActiveSet() {
+    private func emitActiveSet() {
         let running = active
         for (requestId, request) in live {
             let named = request.instruments.compactMap { byName[$0]?.id }
@@ -554,6 +571,36 @@ final class InstrumentRunner: @unchecked Sendable {
             }
 
             transport.send(frame)
+            sent[requestId, default: 0] += 1
+        }
+    }
+
+    /// An address is unreadable without the image holding it, and each capture is read on
+    /// its own — so every request needs its own copy, once.
+    private func emitImages(
+        _ images: [BinaryImage],
+        into requestId: UInt64,
+        _ request: BassetRequest
+    ) {
+        for image in images
+            where reportedImages[requestId, default: []].insert(image.uuid).inserted
+        {
+            var record = Entity(.binaryImage)
+            record.add(.imageName(image.name))
+            record.add(.imageLoadAddress(image.loadAddress))
+            record.add(.imageUUID(image.uuid))
+            record.add(.launchId(LaunchIdentity.current))
+
+            let payload = encoder.encode(record)
+            guard UInt64(payload.count) <= FrameReader.maxFrameLength,
+                  let transport = transports[requestId],
+                  transport.refused == nil,
+                  framesLeft(for: requestId, request) > 0
+            else {
+                continue
+            }
+
+            transport.send(encoder.frame(payload))
             sent[requestId, default: 0] += 1
         }
     }

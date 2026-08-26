@@ -312,40 +312,17 @@ struct StackSampleReadingTests {
         #expect(frames == ["48", "32", "16"])
     }
 
-    /// Without the images, a reader holds addresses and no way to resolve them.
-    @Test func areportedStackCarriesTheImagesItsAddressesLandIn() throws {
+    /// The images an address lands in are the runner's to send, once per request — a
+    /// window here carries the addresses and nothing else.
+    @Test func areportedStackCarriesAddressesAndLeavesTheImagesToTheRunner() throws {
         let executable = try #require(BinaryImages.mainExecutable())
         var window = StackWindow()
         window.record([executable.loadAddress])
 
         let readings = emit(window)
 
-        #expect(readings.contains { $0.id == .binaryImage })
-        #expect(readings.contains { rendered(.imageUUID, in: $0) == executable.uuid })
-    }
-
-    /// A binary's identity cannot change mid-launch, so a second window owes nothing new.
-    @Test func anImageAlreadyReportedByThisInstrumentIsNotReportedAgain() throws {
-        let executable = try #require(BinaryImages.mainExecutable())
-        let instrument = StackSamples(config: StackSamples.defaultConfig)
-        let elapsed = Context.FlushWindow(nanoseconds: 1000000000)
-
-        var firstWindow = StackWindow()
-        firstWindow.record([executable.loadAddress])
-        var firstOut = Readings(entity: StackSamples.entity, instrumentName: StackSamples.name)
-        instrument.write(firstWindow, over: elapsed, into: &firstOut)
-
-        var secondWindow = StackWindow()
-        secondWindow.record([executable.loadAddress])
-        var secondOut = Readings(entity: StackSamples.entity, instrumentName: StackSamples.name)
-        instrument.write(secondWindow, over: elapsed, into: &secondOut)
-
-        #expect(([firstOut.sealed()] + firstOut.sealedSiblings())
-            .contains { $0.id == .binaryImage })
-        #expect(
-            ([secondOut.sealed()] + secondOut.sealedSiblings())
-                .contains { $0.id == .binaryImage } == false
-        )
+        #expect(readings.contains { $0.id == StackSamples.entity })
+        #expect(!readings.contains { $0.id == .binaryImage })
     }
 
     private func emit(_ window: StackWindow) -> [Entity] {

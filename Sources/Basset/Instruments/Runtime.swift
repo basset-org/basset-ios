@@ -7,7 +7,6 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
     static let entity = Entity.ID.thread
 
     private let walker: ThreadWalker = .init()
-    private var reportedImages: Set<String> = []
 
     init() {
         // Captured while the main thread still answers — needed after it stops.
@@ -56,15 +55,6 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
         describe(first, into: &out)
         for stack in stacks.dropFirst() {
             out.also(Self.entity) { thread in describe(stack, into: &thread) }
-        }
-        for image in BinaryImages.covering(stacks.flatMap(\.frames))
-            where reportedImages.insert(image.uuid).inserted
-        {
-            out.also(.binaryImage) { entry in
-                entry.put(.imageName(image.name))
-                entry.put(.imageLoadAddress(image.loadAddress))
-                entry.put(.imageUUID(image.uuid))
-            }
         }
     }
 
@@ -122,7 +112,6 @@ final class StackSamples: Streamable, Configurable {
     private let walker: ThreadWalker = .init()
     private let samples: Samples = .init()
     private var sampler: Thread?
-    private var reportedImages: Set<String> = []
 
     init(config: Config) {
         let clampedMs = min(max(config.intervalMs, Self.minimumIntervalMs), Self.maximumIntervalMs)
@@ -202,17 +191,6 @@ final class StackSamples: Streamable, Configurable {
                 sibling.put(
                     .mechanismStatus("truncated: \(hottest.count - Self.stacksPerWindow) more")
                 )
-            }
-        }
-
-        let reported = hottest.prefix(Self.stacksPerWindow).flatMap(\.frames)
-        for image in BinaryImages.covering(reported)
-            where reportedImages.insert(image.uuid).inserted
-        {
-            out.also(.binaryImage) { entry in
-                entry.put(.imageName(image.name))
-                entry.put(.imageLoadAddress(image.loadAddress))
-                entry.put(.imageUUID(image.uuid))
             }
         }
     }

@@ -37,4 +37,22 @@ public enum CallerStack {
             return frames
         }
     }
+
+    /// Only the frames inside images the app shipped.
+    ///
+    /// The OS frames between an app's own say nothing about who called, and resolving them
+    /// needs device-support symbols for that exact build, which a reader rarely holds. Kept
+    /// out of `here`: this walks the mapped image spans, which the chokepoint capture must
+    /// not pay for. A stack of what a thread is *doing* wants every frame and skips this.
+    static func shipped(_ frames: [UInt64]) -> [UInt64] {
+        let directory = BinaryImages.shippedDirectory()
+        let images = BinaryImages.covering(frames).filter { $0.isShipped(under: directory) }
+        guard !images.isEmpty else {
+            return []
+        }
+
+        return frames.filter { frame in
+            images.contains { $0.loadAddress <= frame && frame < $0.loadAddress + $0.size }
+        }
+    }
 }
