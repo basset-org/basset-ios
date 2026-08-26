@@ -225,6 +225,11 @@ struct ComponentTests {
             (.viewParent(0), .viewParent),
             (.nestedLevel(0), .nestedLevel),
             (.faultId(0), .faultId),
+            (.renderDestination(""), .renderDestination),
+            (.textureBackedImageCount(0), .textureBackedImageCount),
+            (.emptyResultCount(0), .emptyResultCount),
+            (.debuggerAttached(false), .debuggerAttached),
+            (.interfaceOrientation(""), .interfaceOrientation),
         ]
 
         for (component, expected) in all {
@@ -242,6 +247,7 @@ struct ComponentTests {
             .retiredSyncEventType,
             .retiredSyncSucceeded,
             .retiredChangedKeyCount,
+            .retiredActiveInstrument,
         ])
     }
 

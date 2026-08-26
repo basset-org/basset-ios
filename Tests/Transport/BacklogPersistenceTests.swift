@@ -94,7 +94,8 @@ extension DeliveryTests {
 
     /// Also covers the plain retry case: a real failure holds a batch and persists it — a
     /// reconnect is worth an immediate try after that rather than waiting out the backoff.
-    /// Skipped on a shared simulator — GCD dispatch itself can stall past the deadline here.
+    /// Skipped on a shared simulator: no retry arrives there inside the deadline even with the
+    /// backoff seeded far beyond it, so what that runner measures is not what this asserts.
     @Test(.enabled(if: !TestMachine.isSharedSimulator))
     func areconnectRetriesWithoutWaitingForTheBackoff() async {
         let directory = FileManager.default
@@ -102,7 +103,13 @@ extension DeliveryTests {
             .appendingPathComponent(UUID().uuidString)
         let requestId: UInt64 = 13
         StubbedResponses.reset([(nil, true)])
-        let channel = stubbedChannel(requestId: requestId, backlogDirectory: directory)
+        // A backoff far longer than the deadline below, so a slow runner cannot be what
+        // satisfies the retry: only the reconnect can fire it that early.
+        let channel = stubbedChannel(
+            requestId: requestId,
+            backlogDirectory: directory,
+            initialBackoff: 30
+        )
         channel.send(Data([1, 2, 3]))
         #expect(await eventually {
             !PersistedBacklog.load(for: requestId, in: directory).isEmpty
@@ -111,8 +118,7 @@ extension DeliveryTests {
         StubbedResponses.reset([(200, false)])
         channel.reconnected()
 
-        // Well under the 1s backoff the failed send just scheduled: only the reconnect explains it.
-        #expect(await eventually(within: .milliseconds(900)) { StubbedResponses.seen >= 1 })
+        #expect(await eventually(within: .seconds(5)) { StubbedResponses.seen >= 1 })
         #expect(await eventually {
             PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })

@@ -89,7 +89,7 @@ struct LinkedLibrariesTests {
             entity: LinkedLibraries.entity,
             instrumentName: LinkedLibraries.name
         )
-        LinkedLibraries.write(images, shippedUnder: Self.shipped, into: &out)
+        LinkedLibraries.write(images, inAppBundleUnder: Self.shipped, into: &out)
         guard !out.isEmpty else {
             return []
         }
@@ -160,7 +160,7 @@ struct LinkedLibrariesWiringTests {
     @Test func themainExecutableCountsAsShipped() throws {
         let executable = try #require(BinaryImages.mainExecutable())
 
-        #expect(executable.isShipped(under: BinaryImages.shippedDirectory()))
+        #expect(executable.isInAppBundle(under: BinaryImages.appBundleDirectory()))
     }
 
     /// `Name.appex` shares the app's path as a text prefix but sits beside it, not inside it.
@@ -174,7 +174,7 @@ struct LinkedLibrariesWiringTests {
             path: "/somewhere/Example.appex/Widget"
         )
 
-        #expect(extensionImage.isShipped(under: "/somewhere/Example.app") == false)
+        #expect(extensionImage.isInAppBundle(under: "/somewhere/Example.app") == false)
     }
 
     @Test func thedirectoryItselfCountsAsShipped() {
@@ -187,7 +187,7 @@ struct LinkedLibrariesWiringTests {
             path: "/somewhere/Example.app"
         )
 
-        #expect(executable.isShipped(under: "/somewhere/Example.app"))
+        #expect(executable.isInAppBundle(under: "/somewhere/Example.app"))
     }
 
     /// A macOS bundle breaks the parent-directory rule — frameworks sit beside the executable.
@@ -213,13 +213,13 @@ struct LinkedLibrariesWiringTests {
             path: "/x/Example.app/Contents/Frameworks/Analytics.framework/Analytics"
         )
 
-        #expect(framework.isShipped(under: root))
+        #expect(framework.isInAppBundle(under: root))
     }
 
     @Test func anemptyDirectoryShipsNothing() throws {
         let executable = try #require(BinaryImages.mainExecutable())
 
-        #expect(executable.isShipped(under: "") == false)
+        #expect(executable.isInAppBundle(under: "") == false)
     }
 
     /// Runs against the real process — the cases above covered only the transform, not discovery.
@@ -230,7 +230,7 @@ struct LinkedLibrariesWiringTests {
     @Test func theshippedDirectoryIsTheOneHoldingTheExecutable() throws {
         let executable = try #require(BinaryImages.mainExecutable())
 
-        #expect(executable.isShipped(under: BinaryImages.shippedDirectory()))
+        #expect(executable.isInAppBundle(under: BinaryImages.appBundleDirectory()))
     }
 
     /// A wrong directory would count OS libraries as the app's and drop the app's own binary.
@@ -242,7 +242,7 @@ struct LinkedLibrariesWiringTests {
         )
         LinkedLibraries.write(
             BinaryImages.loaded(),
-            shippedUnder: BinaryImages.shippedDirectory(),
+            inAppBundleUnder: BinaryImages.appBundleDirectory(),
             into: &out
         )
         let readings = [out.sealed()] + out.sealedSiblings()

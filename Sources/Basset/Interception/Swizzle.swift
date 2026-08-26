@@ -57,6 +57,17 @@ struct HookShape: Equatable {
     static let timingVoid: HookShape = .init(
         name: "timingVoid", arguments: 2, returns: "v", firstArgument: nil
     )
+    /// `-[CIContext render:toMTLTexture:commandBuffer:bounds:colorSpace:]` — three objects,
+    /// a `CGRect` by value, then a `CGColorSpaceRef` which is a pointer, not an object.
+    static let textureRenderCallback: HookShape = .init(
+        name: "textureRenderCallback",
+        arguments: 7,
+        returns: "v",
+        firstArgument: "@",
+        pointerArgument: 6,
+        argumentEncodings: [3: "@", 4: "@", 5: "{CGRect"]
+    )
+
     /// `-captureOutput:didOutputSampleBuffer:fromConnection:` and its drop counterpart.
     static let sampleBufferCallback: HookShape = .init(
         name: "sampleBufferCallback",
@@ -75,6 +86,9 @@ struct HookShape: Equatable {
     let firstArgument: String?
     /// Raw-pointer argument, not an object — CMSampleBufferRef would be wrongly retained.
     var pointerArgument: Int?
+    /// Every other argument that has to be what the thunk reads it as. Without these a
+    /// selector of the same arity installs and the thunk reads a wrong register as an object.
+    var argumentEncodings: [Int: String] = [:]
 
     static func factory(objects count: Int) -> HookShape {
         HookShape(
@@ -267,6 +281,28 @@ private final class HookSite {
     }
 
     /// Drops nothing — the app must get back exactly what the original method produced.
+    func callChained(
+        _ receiver: AnyObject,
+        _ first: AnyObject?,
+        _ second: AnyObject?,
+        _ third: AnyObject?,
+        _ rect: CGRect,
+        _ pointer: UnsafeRawPointer?
+    ) {
+        guard let chained else {
+            return
+        }
+
+        let original = unsafeBitCast(
+            chained,
+            to: (@convention(c) (
+                AnyObject, Selector, AnyObject?, AnyObject?, AnyObject?, CGRect,
+                UnsafeRawPointer?
+            ) -> Void).self
+        )
+        original(receiver, selector, first, second, third, rect, pointer)
+    }
+
     func callChainedReturning(_ receiver: AnyObject) -> AnyObject? {
         guard let chained else {
             return nil
@@ -692,6 +728,31 @@ public final class Swizzle: @unchecked Sendable {
         }
     }
 
+    /// Three objects, a rect by value, and a pointer — the shape a Core Image render takes.
+    public func after(
+        _ target: AnyClass?,
+        _ selector: Selector,
+        takingThreeObjectsRectAndPointer: Void,
+        _ observer: @escaping (AnyObject) -> Void
+    ) -> SwizzleOutcome {
+        install(
+            target,
+            selector,
+            shape: .textureRenderCallback,
+            observer: observer
+        ) { site in
+            let block: @convention(block) (
+                AnyObject, AnyObject?, AnyObject?, AnyObject?, CGRect, UnsafeRawPointer?
+            ) -> Void = { receiver, first, second, third, rect, pointer in
+                site.callChained(receiver, first, second, third, rect, pointer)
+                for observer in site.observers {
+                    (observer.body as? (AnyObject) -> Void)?(receiver)
+                }
+            }
+            return imp_implementationWithBlock(block)
+        }
+    }
+
     /// One object — `-dataTaskWithRequest:` and siblings, how nearly every task is made.
     public func afterFactory(
         _ target: AnyClass?,
@@ -826,6 +887,12 @@ public final class Swizzle: @unchecked Sendable {
             // Object encodings can be qualified; matched by prefix, BOOL must be exact.
             let matches = wanted == "@" ? found.hasPrefix("@") : found == wanted
             guard matches else {
+                return .argumentKindMismatch(shape: shape.name)
+            }
+        }
+        for (index, wanted) in shape.argumentEncodings {
+            let found = Self.argumentEncoding(inherited, at: index) ?? "?"
+            guard found.hasPrefix(wanted) else {
                 return .argumentKindMismatch(shape: shape.name)
             }
         }

@@ -241,6 +241,12 @@ public extension Component.ID {
         case .viewParent: "Parent view"
         case .nestedLevel: "Nesting depth"
         case .faultId: "Fault ID"
+        case .renderDestination: "Renders into"
+        case .textureBackedImageCount: "Images from a texture"
+        case .emptyResultCount: "Produced nothing"
+        case .debuggerAttached: "Debugger attached"
+        case .interfaceOrientation: "Orientation"
+        case .retiredActiveInstrument: "Now running (retired)"
         }
     }
 }

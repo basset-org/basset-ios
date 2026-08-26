@@ -53,7 +53,9 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
     case controlAction = 55
     case gestureState = 56
     case viewHierarchy = 57
+    case imagingRenderPasses = 58
     case configRefused = 0xff00
+    case instrumentsActive = 0xff01
 
     public var name: String {
         switch self {
@@ -103,6 +105,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .callProviderActions: "call.provider.actions"
         case .audioRoute: "audio.route"
         case .stackSamples: "runtime.stackSamples"
+        case .imagingRenderPasses: "imaging.render.passes"
         case .metalDrawablePresentation: "metal.drawable.presentation"
         case .metalGPULatency: "metal.gpu.latency"
         case .linkedLibraries: "runtime.linkedLibraries"
@@ -112,6 +115,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .gestureState: "uikit.gesture.state"
         case .viewHierarchy: "uikit.view.hierarchy"
         case .configRefused: "basset.configRefused"
+        case .instrumentsActive: "basset.instrumentsActive"
         }
     }
 
@@ -163,6 +167,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .callProviderActions: .call
         case .audioRoute: .audio
         case .stackSamples: .runtime
+        case .imagingRenderPasses: .imaging
         case .metalDrawablePresentation: .metal
         case .metalGPULatency: .metal
         case .linkedLibraries: .runtime
@@ -172,6 +177,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .gestureState: .uikit
         case .viewHierarchy: .uikit
         case .configRefused: .basset
+        case .instrumentsActive: .basset
         }
     }
 
@@ -224,6 +230,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .callProviderActions: .stream
         case .audioRoute: .stream
         case .stackSamples: .stream
+        case .imagingRenderPasses: .stream
         case .metalDrawablePresentation: .stream
         case .metalGPULatency: .stream
         case .linkedLibraries: .reading
@@ -234,6 +241,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .viewHierarchy: .reading
         // Never activated: basset emits this itself, outside the registration table.
         case .configRefused: .reading
+        case .instrumentsActive: .reading
         }
     }
 

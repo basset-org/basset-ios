@@ -11,8 +11,8 @@ public struct BinaryImage: Sendable {
     /// Kept to say where an image came from; never emitted — a full path leaks install dirs.
     public let path: String
 
-    /// Whether the image was shipped inside the app rather than by the OS.
-    public func isShipped(under directory: String) -> Bool {
+    /// Whether the image came from the app bundle rather than from the OS.
+    public func isInAppBundle(under directory: String) -> Bool {
         guard !directory.isEmpty else {
             return false
         }
@@ -30,6 +30,12 @@ public struct BinaryImage: Sendable {
 public enum BinaryImages {
     /// Built once — allocating this per image was most of the scan's cost.
     private static let textSegmentName: Array = .init(SEG_TEXT.utf8)
+
+    /// Each image's start/end, ascending, no strings built — naming them cost the most.
+    /// Every image is described where it is walked, so nothing is later looked up by a dyld
+    /// index a dlopen could have moved. A hold stale by an unload and a load of equal count
+    /// can answer with an image that is gone, never name the wrong one.
+    private static let held: Mutex<(count: UInt32, images: [BinaryImage])> = .init((0, []))
 
     public static func loaded() -> [BinaryImage] {
         var images = [BinaryImage]()
@@ -61,7 +67,7 @@ public enum BinaryImages {
     }
 
     /// The app's own directory, by mach-o type — `Bundle.main` is the test host, not the app.
-    public static func shippedDirectory() -> String {
+    public static func appBundleDirectory() -> String {
         for index in 0 ..< _dyld_image_count() {
             guard let header = _dyld_get_image_header(index),
                   header.pointee.filetype == UInt32(MH_EXECUTE),
@@ -78,19 +84,19 @@ public enum BinaryImages {
 
     /// Only images an address lands in; a process maps hundreds, a stack touches a few.
     public static func covering(_ addresses: some Sequence<UInt64>) -> [BinaryImage] {
-        let spans = mappedSpans()
-        var matched = Set<UInt32>()
+        let images = mappedImages()
+        var matched = [String: BinaryImage]()
         for address in addresses {
-            guard let index = spans.index(containing: address) else {
+            guard let image = images.first(where: {
+                address >= $0.loadAddress && address < $0.loadAddress &+ $0.size
+            }) else {
                 continue
             }
 
-            matched.insert(index)
+            matched[image.uuid] = image
         }
 
-        return matched
-            .compactMap { describe(at: $0) }
-            .sorted { $0.loadAddress < $1.loadAddress }
+        return matched.values.sorted { $0.loadAddress < $1.loadAddress }
     }
 
     /// The nearest enclosing bundle, or the executable's directory when there is none.
@@ -111,8 +117,20 @@ public enum BinaryImages {
         return (executable as NSString).deletingLastPathComponent
     }
 
-    /// Each image's start/end, ascending, no strings built — naming them cost the most.
-    private static func mappedSpans() -> [ImageSpan] {
+    private static func mappedImages() -> [BinaryImage] {
+        let counted = _dyld_image_count()
+        if let cached = held.withLock({ $0.count == counted ? $0.images : nil }) {
+            return cached
+        }
+
+        let walked = (0 ..< counted)
+            .compactMap { describe(at: $0) }
+            .sorted { $0.loadAddress < $1.loadAddress }
+        held.withLock { $0 = (counted, walked) }
+        return walked
+    }
+
+    private static func walkMappedSpans() -> [ImageSpan] {
         var spans = [ImageSpan]()
         spans.reserveCapacity(Int(_dyld_image_count()))
         for index in 0 ..< _dyld_image_count() {

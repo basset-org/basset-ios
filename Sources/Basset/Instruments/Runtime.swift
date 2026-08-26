@@ -7,7 +7,6 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
     static let entity = Entity.ID.thread
 
     private let walker: ThreadWalker = .init()
-    private var reportedImages: Set<String> = []
 
     init() {
         // Captured while the main thread still answers — needed after it stops.
@@ -56,15 +55,6 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
         describe(first, into: &out)
         for stack in stacks.dropFirst() {
             out.also(Self.entity) { thread in describe(stack, into: &thread) }
-        }
-        for image in BinaryImages.covering(stacks.flatMap(\.frames))
-            where reportedImages.insert(image.uuid).inserted
-        {
-            out.also(.binaryImage) { entry in
-                entry.put(.imageName(image.name))
-                entry.put(.imageLoadAddress(image.loadAddress))
-                entry.put(.imageUUID(image.uuid))
-            }
         }
     }
 
@@ -122,7 +112,6 @@ final class StackSamples: Streamable, Configurable {
     private let walker: ThreadWalker = .init()
     private let samples: Samples = .init()
     private var sampler: Thread?
-    private var reportedImages: Set<String> = []
 
     init(config: Config) {
         let clampedMs = min(max(config.intervalMs, Self.minimumIntervalMs), Self.maximumIntervalMs)
@@ -202,17 +191,6 @@ final class StackSamples: Streamable, Configurable {
                 sibling.put(
                     .mechanismStatus("truncated: \(hottest.count - Self.stacksPerWindow) more")
                 )
-            }
-        }
-
-        let reported = hottest.prefix(Self.stacksPerWindow).flatMap(\.frames)
-        for image in BinaryImages.covering(reported)
-            where reportedImages.insert(image.uuid).inserted
-        {
-            out.also(.binaryImage) { entry in
-                entry.put(.imageName(image.name))
-                entry.put(.imageLoadAddress(image.loadAddress))
-                entry.put(.imageUUID(image.uuid))
             }
         }
     }
@@ -305,7 +283,7 @@ struct StackWindow {
     }
 }
 
-/// What's mapped into the process and what the app shipped; statics are invisible here.
+/// What's mapped into the process and what came from the app bundle; statics are invisible.
 final class LinkedLibraries: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .linkedLibraries
     static let entity = Entity.ID.binaryImage
@@ -317,7 +295,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
 
     static func write(
         _ images: [BinaryImage],
-        shippedUnder directory: String,
+        inAppBundleUnder directory: String,
         into out: inout Readings
     ) {
         guard !images.isEmpty else {
@@ -325,7 +303,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
             return
         }
 
-        let bundled = images.filter { $0.isShipped(under: directory) }
+        let bundled = images.filter { $0.isInAppBundle(under: directory) }
             .sorted { $0.size > $1.size }
         guard let first = bundled.first else {
             // Nothing but the OS — the answer for an app with no linked dependencies.
@@ -368,7 +346,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
     func reading(_ out: inout Readings) {
         Self.write(
             BinaryImages.loaded(),
-            shippedUnder: BinaryImages.shippedDirectory(),
+            inAppBundleUnder: BinaryImages.appBundleDirectory(),
             into: &out
         )
     }

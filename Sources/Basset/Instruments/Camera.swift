@@ -353,6 +353,18 @@ final class CameraDeviceInventory: Streamable, PlainInstrument {
     func stopObserving() {}
 }
 
+#if os(iOS)
+private func connections(of object: AnyObject) -> [AnyObject] {
+    object.value(forKey: "connections") as? [AnyObject] ?? []
+}
+
+/// A connection the session has wired up and not switched off: frames should be arriving.
+private func isActiveAndEnabled(_ connection: AnyObject) -> Bool {
+    ((connection.value(forKey: "isActive") as? Bool) ?? false)
+        && ((connection.value(forKey: "isEnabled") as? Bool) ?? false)
+}
+#endif
+
 final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
     private struct State {
         var instrumented: Set<ObjectIdentifier> = []
@@ -360,6 +372,8 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
         var defined: Set<ObjectIdentifier> = []
         var rebinding: Set<ObjectIdentifier> = []
         var watching = 0
+        /// Weak: an output the app released must not be kept alive to be asked about.
+        let watched: NSHashTable<AnyObject> = .weakObjects()
     }
 
     static let id: InstrumentID = .cameraFrameDelivery
@@ -385,6 +399,19 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
 
     private var isWatchingSomething: Bool {
         guarded.withLock { $0.watching > 0 }
+    }
+
+    /// Zero frames while a connection is carrying is the reading this instrument exists for.
+    /// Zero frames with nothing carrying is a camera that stopped, and says nothing at all.
+    private var isCarrying: Bool {
+        #if os(iOS)
+        // Snapshotted, then read outside the lock: asking AVFoundation about a connection
+        // while holding it invites a callback into this instrument on another thread.
+        let outputs = guarded.withLock { $0.watched.allObjects }
+        return outputs.contains { connections(of: $0).contains(where: isActiveAndEnabled) }
+        #else
+        return false
+        #endif
     }
 
     init() {}
@@ -423,7 +450,14 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
 
         // Emitted every interval, even empty — silence and a starved camera read the same.
         context.flush(every: .seconds(1)) { [weak self] out, window in
-            guard let self, self.isWatchingSomething else {
+            guard let self, self.isWatchingSomething, self.isCarrying else {
+                // Drained anyway: what a stopped camera counted must not surface in the
+                // window after it starts again, dated to the wrong second.
+                _ = context.tally.take(Self.delivered)
+                _ = context.tally.take(Self.dropped)
+                _ = context.tally.take(Self.reason)
+                _ = context.tally.take(Self.delegateDurationTotal)
+                _ = context.tally.take(Self.delegateDurationPeak)
                 return
             }
 
@@ -446,6 +480,7 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
 
     #if os(iOS)
     private func instrument(_ output: AnyObject, with context: Context) {
+        guarded.withLock { $0.watched.add(output) }
         guard let delegate = output.value(forKey: "sampleBufferDelegate") as AnyObject?,
               let subject = object_getClass(delegate)
         else {
@@ -587,13 +622,21 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
     #endif
 }
 
-final class CameraSessionConfiguration: Streamable, PlainInstrument, LoadTimeInstall {
+final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstall {
+    struct Config: Codable, Sendable {
+        let callers: Bool
+    }
+
     static let id: InstrumentID = .cameraSessionConfiguration
     static let entity = Entity.ID.captureSession
+    static let defaultConfig: Config = .init(callers: true)
 
     private let observations: Observations = .init()
+    private let config: Config
 
-    init() {}
+    init(config: Config) {
+        self.config = config
+    }
 
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)
@@ -647,11 +690,8 @@ final class CameraSessionConfiguration: Streamable, PlainInstrument, LoadTimeIns
         instance: UInt32,
         into context: Context
     ) {
-        let connections = session.value(forKey: "connections") as? [AnyObject] ?? []
-        let carrying = connections.filter {
-            (($0.value(forKey: "isActive") as? Bool) ?? false)
-                && (($0.value(forKey: "isEnabled") as? Bool) ?? false)
-        }
+        let wired = connections(of: session)
+        let active = wired.filter(isActiveAndEnabled)
         let inputs = session.value(forKey: "inputs") as? [AnyObject] ?? []
         let outputs = session.value(forKey: "outputs") as? [AnyObject] ?? []
 
@@ -661,9 +701,22 @@ final class CameraSessionConfiguration: Streamable, PlainInstrument, LoadTimeIns
             out.put(.sessionPreset(session.value(forKey: "sessionPreset") as? String ?? ""))
             out.put(.inputCount(UInt32(inputs.count)))
             out.put(.outputCount(UInt32(outputs.count)))
-            out.put(.connectionCount(UInt32(connections.count)))
-            out.put(.activeConnectionCount(UInt32(carrying.count)))
+            out.put(.connectionCount(UInt32(wired.count)))
+            out.put(.activeConnectionCount(UInt32(active.count)))
             out.put(.sessionRunning((session.value(forKey: "isRunning") as? Bool) ?? false))
+
+            if config.callers,
+               let sessionClass = objc_getClass("AVCaptureSession") as? AnyClass
+            {
+                let own = CallerStack.inAppImages(
+                    context.callers(class: sessionClass, instance: instance)
+                )
+
+                // Innermost first — arrival order is stack order, nothing needs numbering.
+                for frame in own {
+                    out.put(.frameAddress(frame))
+                }
+            }
 
             // Multi-cam only: the number a session refuses to start, configured but not running.
             if let multiCamClass = objc_getClass("AVCaptureMultiCamSession") as? AnyClass,

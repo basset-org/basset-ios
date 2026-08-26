@@ -398,6 +398,12 @@ public struct Component: Equatable, Sendable {
         case viewParent = 237
         case nestedLevel = 238
         case faultId = 239
+        case renderDestination = 240
+        case textureBackedImageCount = 241
+        case emptyResultCount = 242
+        case debuggerAttached = 243
+        case interfaceOrientation = 244
+        case retiredActiveInstrument = 245
     }
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.
@@ -872,4 +878,23 @@ public extension Component {
     static func viewParent(_ value: UInt32) -> Component { .init(.viewParent, value) }
     static func nestedLevel(_ value: UInt32) -> Component { .init(.nestedLevel, value) }
     static func faultId(_ value: UInt32) -> Component { .init(.faultId, value) }
+    static func renderDestination(_ value: String) -> Component {
+        .init(.renderDestination, value)
+    }
+
+    static func textureBackedImageCount(_ value: UInt64) -> Component {
+        .init(.textureBackedImageCount, value)
+    }
+
+    static func emptyResultCount(_ value: UInt64) -> Component {
+        .init(.emptyResultCount, value)
+    }
+
+    static func debuggerAttached(_ value: Bool) -> Component {
+        .init(.debuggerAttached, value)
+    }
+
+    static func interfaceOrientation(_ value: String) -> Component {
+        .init(.interfaceOrientation, value)
+    }
 }

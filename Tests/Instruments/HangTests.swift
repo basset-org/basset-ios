@@ -157,11 +157,33 @@ struct HangWatchTests {
         #expect(verdict == .quiet)
     }
 
-    @Test func debuggerSuppressionIsReportedOnceOnTheTransitionIn() {
-        #expect(HangWatch.debuggerSuppressionBegan(was: false, is: true))
-        #expect(!HangWatch.debuggerSuppressionBegan(was: true, is: true))
-        #expect(!HangWatch.debuggerSuppressionBegan(was: true, is: false))
-        #expect(!HangWatch.debuggerSuppressionBegan(was: false, is: false))
+    @Test func debuggerSuppressionIsSaidAtOnceAndThenRestated() {
+        let attached = MonotonicTime(nanoseconds: 1000000000000)
+        #expect(
+            HangWatch.debuggerSuppressionDue(is: true, lastSaid: nil, now: attached)
+        )
+        #expect(
+            !HangWatch.debuggerSuppressionDue(
+                is: true,
+                lastSaid: attached,
+                now: MonotonicTime(nanoseconds: attached.nanoseconds + 1000000000)
+            )
+        )
+        #expect(
+            HangWatch.debuggerSuppressionDue(
+                is: true,
+                lastSaid: attached,
+                now: MonotonicTime(
+                    nanoseconds: attached.nanoseconds + HangWatch.suppressionRestatedEvery
+                )
+            )
+        )
+    }
+
+    @Test func nothingIsSaidWhileNoDebuggerIsAttached() {
+        let now = MonotonicTime(nanoseconds: 1000000000000)
+        #expect(!HangWatch.debuggerSuppressionDue(is: false, lastSaid: nil, now: now))
+        #expect(!HangWatch.debuggerSuppressionDue(is: false, lastSaid: now, now: now))
     }
 
     /// A guard interrupting a hang leaves `began` with no `ended` — no unmeasured duration ships.

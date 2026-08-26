@@ -54,6 +54,7 @@ public enum Instruments {
         .stream(ControlAction.self),
         .stream(GestureState.self),
         .reading(ViewHierarchy.self),
+        .stream(ImagingRenderPasses.self),
     ]
 
     public static func named(_ name: String) -> Registration? {

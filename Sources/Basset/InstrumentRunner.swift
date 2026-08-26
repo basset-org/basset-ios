@@ -87,7 +87,18 @@ final class InstrumentRunner: @unchecked Sendable {
     private var endpoint: String?
 
     private var buffered: [(requestId: UInt64, frame: Data)] = []
+    /// Per request, not per launch: an image sent to one capture is absent from another.
+    private var reportedImages: [UInt64: Set<String>] = [:]
+    /// Requests whose set changed before anything was open to tell.
+    private var owesActiveSet: Set<UInt64> = []
+    /// Images a request needs before its held readings mean anything, kept out of the backlog:
+    /// evicting one would leave it marked as reported and every address in it unplaceable.
+    private var owedImages: [UInt64: [BinaryImage]] = [:]
     private let maxBuffered = 1024
+    /// Naturally bounded by the images a process maps, but per request and under backpressure
+    /// that is still a number worth stating. Dropping one costs nothing lasting: an image is
+    /// only marked as reported once it is sent, so the next address in it owes it again.
+    private let maxOwedImages = 64
     private var expiryTimer: DispatchSourceTimer?
 
     /// Injectable: a deferred system wake can't be arranged by a test waiting on it.
@@ -252,6 +263,9 @@ final class InstrumentRunner: @unchecked Sendable {
         sent.removeValue(forKey: requestId)
         evicted.removeValue(forKey: requestId)
         buffered.removeAll { $0.requestId == requestId }
+        reportedImages.removeValue(forKey: requestId)
+        owesActiveSet.remove(requestId)
+        owedImages.removeValue(forKey: requestId)
     }
 
     /// False on the reading path: rebuilding the timer there would push its own deadline out.
@@ -320,6 +334,7 @@ final class InstrumentRunner: @unchecked Sendable {
     }
 
     private func convergeInstruments() {
+        let before = active
         var wanted = [InstrumentID: Registration]()
         var configData = [InstrumentID: Data]()
         // Ascending by requestId, so the highest wins — `live` promises no order of its own.
@@ -345,6 +360,11 @@ final class InstrumentRunner: @unchecked Sendable {
         for id in active.intersection(wanted.keys) where activeConfig[id] != configData[id] {
             deactivate(id)
             active.remove(id)
+        }
+        defer {
+            if !before.isEmpty, active != before {
+                emitActiveSet()
+            }
         }
         for (id, registration) in wanted where !active.contains(id) {
             activeConfig[id] = configData[id]
@@ -392,7 +412,7 @@ final class InstrumentRunner: @unchecked Sendable {
 
         status.activate()
         if configRefused {
-            reportConfigRefused(for: registration, activation: status)
+            emitConfigRefused(for: registration, activation: status)
         }
 
         // Gated on the registration: `threadSnapshot` also implements `reading`.
@@ -409,7 +429,7 @@ final class InstrumentRunner: @unchecked Sendable {
     }
 
     /// Bypasses `Instrument`: the trigger is another instrument's own config decode failing.
-    private func reportConfigRefused(for registration: Registration, activation: AtomicStatus) {
+    private func emitConfigRefused(for registration: Registration, activation: AtomicStatus) {
         var entity = Entity(.instrumentConfig)
         entity.add(.instrument(registration.id.rawValue))
         emit(
@@ -477,7 +497,23 @@ final class InstrumentRunner: @unchecked Sendable {
                 nil
             }
 
+        // Only walked when a reading actually names addresses: `covering` reads every mapped
+        // image, which no reading without frames should pay for.
+        let addresses: [UInt64] = record.components.compactMap { component in
+            guard component.id == .frameAddress,
+                  case .uint64(let address) = component.value
+            else {
+                return nil
+            }
+
+            return address
+        }
+
         queue.async { [self] in
+            // Walked here rather than on the thread that emitted: an instrument reporting from
+            // the main thread must not pay for reading every mapped image.
+            let placing = addresses.isEmpty ? [] : BinaryImages.covering(addresses)
+
             // Enforced here too: a deferred wake costs one reading, not an unbounded capture.
             expireLocked(at: now(), rescheduling: false)
 
@@ -493,8 +529,19 @@ final class InstrumentRunner: @unchecked Sendable {
                     continue
                 }
                 guard let transport = transport(for: requestId, request) else {
+                    // Owed, not held: the backlog is capped and counted, and an image that
+                    // fell out of it would leave every address in this reading unplaceable.
+                    owe(placing, for: requestId)
                     hold(frame, for: requestId)
                     continue
+                }
+
+                for image in imageFrames(placing, into: requestId) {
+                    guard transport.refused == nil else {
+                        break
+                    }
+
+                    transport.send(image)
                 }
 
                 // A cap the request asked for, not a fault; `refused` says it happened.
@@ -511,6 +558,86 @@ final class InstrumentRunner: @unchecked Sendable {
         }
     }
 
+    /// What each live request is running, now that it changed. Without it a capture spanning
+    /// an update cannot tell an instrument that was quiet from one that was not yet on.
+    private func emitActiveSet(only wanted: UInt64? = nil) {
+        let running = active
+        for (requestId, request) in live where wanted == nil || wanted == requestId {
+            let named = request.instruments.compactMap { byName[$0]?.id }
+            let mine = named.filter { running.contains($0) }.sorted { $0.rawValue < $1.rawValue }
+            guard !mine.isEmpty else {
+                continue
+            }
+
+            var record = Entity(.activeInstruments)
+            record.add(.instrument(InstrumentID.instrumentsActive.rawValue))
+            record.add(.launchId(LaunchIdentity.current))
+            record.add(.occurrenceCount(UInt64(mine.count)))
+            // Repeated, innermost order irrelevant — the set is what matters, not a sequence.
+            for id in mine {
+                record.add(.instrument(id.rawValue))
+            }
+
+            let payload = encoder.encode(record)
+            guard UInt64(payload.count) <= FrameReader.maxFrameLength else {
+                continue
+            }
+
+            // Owed rather than held: the backlog is for readings, and a marker queued in it
+            // would take a reading's place. Sent the moment this request opens a transport.
+            let frame = encoder.frame(payload)
+            guard let transport = transports[requestId] else {
+                owesActiveSet.insert(requestId)
+                continue
+            }
+            guard transport.refused == nil else {
+                continue
+            }
+
+            // Uncounted, like the images: saying what a capture is running is not a reading
+            // the request asked for, and a small cap must not be spent describing itself.
+            transport.send(frame)
+        }
+    }
+
+    /// An address is unreadable without the image holding it, and each capture is read on
+    /// its own — so every request needs its own copy, once.
+    /// Not counted against the request's cap: max_readings bounds what a device was asked
+    /// for, and an address the reader cannot place is not one of them.
+    private func owe(_ images: [BinaryImage], for requestId: UInt64) {
+        var already = Set((owedImages[requestId] ?? []).map(\.uuid))
+        for image in images where already.insert(image.uuid).inserted {
+            guard owedImages[requestId, default: []].count < maxOwedImages else {
+                return
+            }
+
+            owedImages[requestId, default: []].append(image)
+        }
+    }
+
+    private func imageFrames(
+        _ images: [BinaryImage],
+        into requestId: UInt64
+    ) -> [Data] {
+        var frames = [Data]()
+        for image in images where !reportedImages[requestId, default: []].contains(image.uuid) {
+            var record = Entity(.binaryImage)
+            record.add(.imageName(image.name))
+            record.add(.imageLoadAddress(image.loadAddress))
+            record.add(.imageUUID(image.uuid))
+            record.add(.launchId(LaunchIdentity.current))
+
+            let payload = encoder.encode(record)
+            guard UInt64(payload.count) <= FrameReader.maxFrameLength else {
+                continue
+            }
+
+            reportedImages[requestId, default: []].insert(image.uuid)
+            frames.append(encoder.frame(payload))
+        }
+        return frames
+    }
+
     private func transport(for requestId: UInt64,
                            _ request: BassetRequest) -> Transport?
     {
@@ -524,6 +651,19 @@ final class InstrumentRunner: @unchecked Sendable {
         }
 
         transports[requestId] = opened
+        // Ahead of the backlog: a reading flushed before its image arrives is unreadable
+        // for as long as anyone looks at it.
+        for frame in imageFrames(
+            owedImages.removeValue(forKey: requestId) ?? [],
+            into: requestId
+        ) {
+            opened.send(frame)
+        }
+
+        if owesActiveSet.remove(requestId) != nil {
+            emitActiveSet(only: requestId)
+        }
+
         flushBuffer(for: requestId, request, over: opened)
         return opened
     }
