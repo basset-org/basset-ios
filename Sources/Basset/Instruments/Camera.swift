@@ -617,7 +617,7 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
 
     static let id: InstrumentID = .cameraSessionConfiguration
     static let entity = Entity.ID.captureSession
-    static let defaultConfig: Config = .init(callers: false)
+    static let defaultConfig: Config = .init(callers: true)
 
     private let observations: Observations = .init()
     private let config: Config
