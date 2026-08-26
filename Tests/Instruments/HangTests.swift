@@ -158,7 +158,7 @@ struct HangWatchTests {
     }
 
     @Test func debuggerSuppressionIsSaidAtOnceAndThenRestated() {
-        let attached = Date(timeIntervalSince1970: 1000)
+        let attached = MonotonicTime(nanoseconds: 1000000000000)
         #expect(
             HangWatch.debuggerSuppressionDue(is: true, lastSaid: nil, now: attached)
         )
@@ -166,20 +166,22 @@ struct HangWatchTests {
             !HangWatch.debuggerSuppressionDue(
                 is: true,
                 lastSaid: attached,
-                now: attached.addingTimeInterval(1)
+                now: MonotonicTime(nanoseconds: attached.nanoseconds + 1000000000)
             )
         )
         #expect(
             HangWatch.debuggerSuppressionDue(
                 is: true,
                 lastSaid: attached,
-                now: attached.addingTimeInterval(HangWatch.suppressionRestatedEvery)
+                now: MonotonicTime(
+                    nanoseconds: attached.nanoseconds + HangWatch.suppressionRestatedEvery
+                )
             )
         )
     }
 
     @Test func nothingIsSaidWhileNoDebuggerIsAttached() {
-        let now = Date(timeIntervalSince1970: 1000)
+        let now = MonotonicTime(nanoseconds: 1000000000000)
         #expect(!HangWatch.debuggerSuppressionDue(is: false, lastSaid: nil, now: now))
         #expect(!HangWatch.debuggerSuppressionDue(is: false, lastSaid: now, now: now))
     }

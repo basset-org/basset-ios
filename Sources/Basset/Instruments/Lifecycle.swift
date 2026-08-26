@@ -32,8 +32,12 @@ final class AppState: Streamable, PlainInstrument {
         }
         // Silent unless the app itself called beginGeneratingDeviceOrientationNotifications:
         // starting that here would power the accelerometer and unbalance the app's own count.
-        watch(UIDevice.orientationDidChangeNotification, context) { [weak self] in
-            self?.report(ApplicationPresence.state, context: context)
+        watch(UIDevice.orientationDidChangeNotification, context) {
+            // Not `report`: the app's state has not changed, and a reading carrying it again
+            // reads as a transition that never happened.
+            context.emitIfChanged { out in
+                out.put(.interfaceOrientation(ApplicationPresence.orientation))
+            }
         }
         // Distinguishes a genuine gap in readings from the app having simply been backgrounded.
         watch(UIApplication.didBecomeActiveNotification, context) { [weak self] in

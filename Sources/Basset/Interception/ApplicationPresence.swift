@@ -27,7 +27,17 @@ enum ApplicationPresence {
     /// `beginGeneratingDeviceOrientationNotifications`, which powers the accelerometer and is
     /// reference counted — a library calling it can leave an app's own `end` unbalanced.
     static var orientation: String {
-        rotation.withLock { $0 }
+        #if canImport(UIKit)
+        // Read here when the caller is already on main: the cached value is refreshed from a
+        // main-queued observer, which has not run yet inside a synchronous notification block.
+        if Thread.isMainThread {
+            let read = readOrientation()
+            rotation.withLock { $0 = read }
+            return read
+        }
+        #endif
+
+        return rotation.withLock { $0 }
     }
 
     /// Called from `start`; subscribes from any thread, reads state on main asynchronously.

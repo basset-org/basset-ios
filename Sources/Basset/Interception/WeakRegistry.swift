@@ -59,14 +59,22 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
     /// object is gone, and for one that arrived through a path that does not record it.
     public func callers(ofInstance instance: UInt32) -> [UInt64] {
         guarded.withLock { state in
-            state.boxes.first { $0.instance == instance }?.callers ?? []
+            state.forgetReleased()
+            return state.boxes.first { $0.instance == instance }?.callers ?? []
         }
     }
 
     /// Answers the object's number whether it just got one or already had one.
     @discardableResult
     public func add(_ tracked: Tracked) -> UInt32 {
-        // Walked before the lock: it allocates, and every chokepoint on this class waits here.
+        // Answered before walking anything: a chokepoint that re-sees an object it already
+        // holds pays nothing, and the walk itself stays outside the lock every caller waits on.
+        if let known = guarded.withLock({ state -> UInt32? in
+            state.boxes.first { $0.tracked === tracked }?.instance
+        }) {
+            return known
+        }
+
         let callers = CallerStack.here()
         let (instance, waiting) = guarded
             .withLock { state -> (UInt32, [(Tracked, UInt32) -> Void]?) in

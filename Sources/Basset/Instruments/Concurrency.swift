@@ -28,14 +28,14 @@ struct HangWatch {
     }
 
     /// Restated while attached: a reader must not hunt for the one poll it began on.
-    static let suppressionRestatedEvery: TimeInterval = 60
+    static let suppressionRestatedEvery: UInt64 = 60 * 1000000000
 
     let threshold: UInt64
 
     static func debuggerSuppressionDue(
         is debugged: Bool,
-        lastSaid: Date?,
-        now: Date
+        lastSaid: MonotonicTime?,
+        now: MonotonicTime
     ) -> Bool {
         guard debugged else {
             return false
@@ -44,7 +44,7 @@ struct HangWatch {
             return true
         }
 
-        return now.timeIntervalSince(lastSaid) >= suppressionRestatedEvery
+        return now.nanoseconds &- lastSaid.nanoseconds >= suppressionRestatedEvery
     }
 
     func step(_ state: inout State, _ poll: Poll) -> Verdict {
@@ -152,7 +152,7 @@ final class MainThreadHang: Streamable, Configurable {
             1000000000
         let watching = Thread { [heartbeat, watch, clock] in
             var state = HangWatch.State()
-            var saidSuppressed: Date?
+            var saidSuppressed: MonotonicTime?
             var faultId: UInt32?
 
             while !Thread.current.isCancelled {
@@ -163,12 +163,13 @@ final class MainThreadHang: Streamable, Configurable {
                 }
 
                 let debugged = Debugger.isAttached
+                let sampledAt = clock.now()
                 if HangWatch.debuggerSuppressionDue(
                     is: debugged,
                     lastSaid: saidSuppressed,
-                    now: Date()
+                    now: sampledAt
                 ) {
-                    saidSuppressed = Date()
+                    saidSuppressed = sampledAt
                     context.emit { out in
                         out.put(.debuggerAttached(true))
                         out.put(

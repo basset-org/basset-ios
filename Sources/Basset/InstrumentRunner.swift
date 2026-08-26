@@ -323,6 +323,7 @@ final class InstrumentRunner: @unchecked Sendable {
     }
 
     private func convergeInstruments() {
+        let before = active
         var wanted = [InstrumentID: Registration]()
         var configData = [InstrumentID: Data]()
         // Ascending by requestId, so the highest wins — `live` promises no order of its own.
@@ -349,7 +350,6 @@ final class InstrumentRunner: @unchecked Sendable {
             deactivate(id)
             active.remove(id)
         }
-        let before = active
         defer {
             if active != before {
                 emitActiveSet()
