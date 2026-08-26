@@ -2,8 +2,6 @@ import BassetECS
 import Foundation
 
 /// Core Image renders into a Metal texture, and the images built back out of one.
-///
-/// A round trip flips the image: `CIImage` puts its origin bottom left, a texture top left.
 final class ImagingRenderPasses: Streamable, PlainInstrument {
     private enum Slot {
         static let toTexture: TallySlot = .init(0)
