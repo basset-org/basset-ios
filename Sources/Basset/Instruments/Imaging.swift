@@ -66,8 +66,9 @@ final class ImagingRenderPasses: Streamable, PlainInstrument {
             NSSelectorFromString(Self.imageSelector),
             takingTwoObjects: (),
             kind: .type
-        ) { _, _, _, _ in
-            guard hot.isActive else {
+        ) { _, _, _, made in
+            // Core Image answers a texture it cannot wrap with nothing, not an error.
+            guard hot.isActive, made != nil else {
                 return
             }
 

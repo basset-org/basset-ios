@@ -32,11 +32,10 @@ public enum BinaryImages {
     private static let textSegmentName: Array = .init(SEG_TEXT.utf8)
 
     /// Each image's start/end, ascending, no strings built — naming them cost the most.
-    /// The walk costs ~87µs over 347 images and the set only changes when something is
-    /// dlopened, so it is held and rebuilt on the count moving. A remove and an add between
-    /// two reads nets the same count and serves a stale table — the cost of that is an
-    /// address nothing resolves, never an address resolved to the wrong image.
-    private static let held: Mutex<(count: UInt32, spans: [ImageSpan])> = .init((0, []))
+    /// Every image is described where it is walked, so nothing is later looked up by a dyld
+    /// index a dlopen could have moved. A hold stale by an unload and a load of equal count
+    /// can answer with an image that is gone, never name the wrong one.
+    private static let held: Mutex<(count: UInt32, images: [BinaryImage])> = .init((0, []))
 
     public static func loaded() -> [BinaryImage] {
         var images = [BinaryImage]()
@@ -85,19 +84,19 @@ public enum BinaryImages {
 
     /// Only images an address lands in; a process maps hundreds, a stack touches a few.
     public static func covering(_ addresses: some Sequence<UInt64>) -> [BinaryImage] {
-        let spans = mappedSpans()
-        var matched = Set<UInt32>()
+        let images = mappedImages()
+        var matched = [String: BinaryImage]()
         for address in addresses {
-            guard let index = spans.index(containing: address) else {
+            guard let image = images.first(where: {
+                address >= $0.loadAddress && address < $0.loadAddress &+ $0.size
+            }) else {
                 continue
             }
 
-            matched.insert(index)
+            matched[image.uuid] = image
         }
 
-        return matched
-            .compactMap { describe(at: $0) }
-            .sorted { $0.loadAddress < $1.loadAddress }
+        return matched.values.sorted { $0.loadAddress < $1.loadAddress }
     }
 
     /// The nearest enclosing bundle, or the executable's directory when there is none.
@@ -118,13 +117,15 @@ public enum BinaryImages {
         return (executable as NSString).deletingLastPathComponent
     }
 
-    private static func mappedSpans() -> [ImageSpan] {
+    private static func mappedImages() -> [BinaryImage] {
         let counted = _dyld_image_count()
-        if let cached = held.withLock({ $0.count == counted ? $0.spans : nil }) {
+        if let cached = held.withLock({ $0.count == counted ? $0.images : nil }) {
             return cached
         }
 
-        let walked = walkMappedSpans()
+        let walked = (0 ..< counted)
+            .compactMap { describe(at: $0) }
+            .sorted { $0.loadAddress < $1.loadAddress }
         held.withLock { $0 = (counted, walked) }
         return walked
     }

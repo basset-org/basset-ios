@@ -30,8 +30,7 @@ enum ApplicationPresence {
         #if canImport(UIKit)
         // Read here when the caller is already on main: the cached value is refreshed from a
         // main-queued observer, which has not run yet inside a synchronous notification block.
-        if Thread.isMainThread {
-            let read = readOrientation()
+        if Thread.isMainThread, let read = readOrientation() {
             rotation.withLock { $0 = read }
             return read
         }
@@ -104,20 +103,24 @@ enum ApplicationPresence {
 
     private static func read() {
         #if canImport(UIKit)
-        rotation.withLock { $0 = readOrientation() }
+        // Kept when there is nothing to read: backgrounding leaves no active scene, and the
+        // last orientation the app was in is a better answer than none.
+        if let read = readOrientation() {
+            rotation.withLock { $0 = read }
+        }
         #endif
         readPresence()
     }
 
     #if canImport(UIKit)
-    private static func readOrientation() -> String {
+    private static func readOrientation() -> String? {
         // A backgrounded scene in a multi-window app answers with its own last orientation.
         let scene = HostApplication.shared?
             .connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first { $0.activationState == .foregroundActive }
         guard let scene else {
-            return "unknown"
+            return nil
         }
 
         return switch scene.interfaceOrientation {
@@ -125,7 +128,7 @@ enum ApplicationPresence {
         case .portraitUpsideDown: "portraitUpsideDown"
         case .landscapeLeft: "landscapeLeft"
         case .landscapeRight: "landscapeRight"
-        default: "unknown"
+        default: nil
         }
     }
     #endif

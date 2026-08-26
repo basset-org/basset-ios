@@ -1156,9 +1156,9 @@ public extension InstrumentID {
                 summary: "Which instruments this capture is running, restated whenever that set changes",
                 whenToUse: "read alongside anything else: a gap in one instrument's readings means it was quiet only if it was running at the time",
                 reveals: [
-                    "every instrument this request has running on the device, at the moment the set last changed",
+                    "every instrument this request has running on the device, each named by its own id",
                     "the seam where a request's instruments were changed, so readings either side are not read as one set",
-                    "nothing while a set holds steady, so a capture with one of these was never changed after it began",
+                    "nothing at activation, when every reading in the capture already answers to the opening set — only a later change earns a record",
                 ],
                 related: ["basset.configRefused", "device.info"],
                 mechanism: .none,

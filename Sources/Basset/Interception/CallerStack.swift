@@ -13,6 +13,8 @@ public enum CallerStack {
 
     /// Around 235ns for a full 32 frames on an M-series Mac, one allocation for the
     /// result. The scratch buffer is stack memory: a heap one measured 340ns.
+    /// Never inlined: the frames skipped below are counted, so they have to exist.
+    @inline(never)
     public static func here() -> [UInt64] {
         withUnsafeTemporaryAllocation(
             of: UnsafeMutableRawPointer?.self,

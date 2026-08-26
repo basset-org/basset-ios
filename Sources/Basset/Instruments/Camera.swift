@@ -448,6 +448,13 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
         // Emitted every interval, even empty — silence and a starved camera read the same.
         context.flush(every: .seconds(1)) { [weak self] out, window in
             guard let self, self.isWatchingSomething, self.isCarrying else {
+                // Drained anyway: what a stopped camera counted must not surface in the
+                // window after it starts again, dated to the wrong second.
+                _ = context.tally.take(Self.delivered)
+                _ = context.tally.take(Self.dropped)
+                _ = context.tally.take(Self.reason)
+                _ = context.tally.take(Self.delegateDurationTotal)
+                _ = context.tally.take(Self.delegateDurationPeak)
                 return
             }
 

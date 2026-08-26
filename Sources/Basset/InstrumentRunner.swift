@@ -89,6 +89,8 @@ final class InstrumentRunner: @unchecked Sendable {
     private var buffered: [(requestId: UInt64, frame: Data)] = []
     /// Per request, not per launch: an image sent to one capture is absent from another.
     private var reportedImages: [UInt64: Set<String>] = [:]
+    /// Requests whose set changed before anything was open to tell.
+    private var owesActiveSet: Set<UInt64> = []
     private let maxBuffered = 1024
     private var expiryTimer: DispatchSourceTimer?
 
@@ -255,6 +257,7 @@ final class InstrumentRunner: @unchecked Sendable {
         evicted.removeValue(forKey: requestId)
         buffered.removeAll { $0.requestId == requestId }
         reportedImages.removeValue(forKey: requestId)
+        owesActiveSet.remove(requestId)
     }
 
     /// False on the reading path: rebuilding the timer there would push its own deadline out.
@@ -351,7 +354,9 @@ final class InstrumentRunner: @unchecked Sendable {
             active.remove(id)
         }
         defer {
-            if active != before {
+            // Only a change to a set that already existed: the opening set is what every
+            // reading in the capture is already attributed to, and needs no separate record.
+            if !before.isEmpty, active != before {
                 emitActiveSet()
             }
         }
@@ -513,7 +518,6 @@ final class InstrumentRunner: @unchecked Sendable {
             for (requestId, request) in live
                 where request.instruments.contains(filterName)
             {
-                emitImages(placing, into: requestId, request)
                 guard let frame else {
                     evicted[requestId, default: 0] += 1
                     continue
@@ -522,6 +526,8 @@ final class InstrumentRunner: @unchecked Sendable {
                     hold(frame, for: requestId)
                     continue
                 }
+
+                emitImages(placing, into: requestId, request, over: transport)
 
                 // A cap the request asked for, not a fault; `refused` says it happened.
                 guard transport.refused == nil,
@@ -554,7 +560,7 @@ final class InstrumentRunner: @unchecked Sendable {
             record.add(.occurrenceCount(UInt64(mine.count)))
             // Repeated, innermost order irrelevant — the set is what matters, not a sequence.
             for id in mine {
-                record.add(.activeInstrument(id.rawValue))
+                record.add(.instrument(id.rawValue))
             }
 
             let payload = encoder.encode(record)
@@ -562,12 +568,14 @@ final class InstrumentRunner: @unchecked Sendable {
                 continue
             }
 
-            // Never opens one: convergence must not flush a buffer that a reading is still
-            // deciding the fate of. A request with no transport yet learns its set on the
-            // next change, once something else has opened it.
+            // Owed rather than held: the backlog is for readings, and a marker queued in it
+            // would take a reading's place. Sent the moment this request opens a transport.
             let frame = encoder.frame(payload)
-            guard let transport = transports[requestId],
-                  transport.refused == nil,
+            guard let transport = transports[requestId] else {
+                owesActiveSet.insert(requestId)
+                continue
+            }
+            guard transport.refused == nil,
                   framesLeft(for: requestId, request) > 0
             else {
                 continue
@@ -583,11 +591,10 @@ final class InstrumentRunner: @unchecked Sendable {
     private func emitImages(
         _ images: [BinaryImage],
         into requestId: UInt64,
-        _ request: BassetRequest
+        _ request: BassetRequest,
+        over transport: Transport
     ) {
-        for image in images
-            where reportedImages[requestId, default: []].insert(image.uuid).inserted
-        {
+        for image in images where !reportedImages[requestId, default: []].contains(image.uuid) {
             var record = Entity(.binaryImage)
             record.add(.imageName(image.name))
             record.add(.imageLoadAddress(image.loadAddress))
@@ -596,13 +603,15 @@ final class InstrumentRunner: @unchecked Sendable {
 
             let payload = encoder.encode(record)
             guard UInt64(payload.count) <= FrameReader.maxFrameLength,
-                  let transport = transports[requestId],
                   transport.refused == nil,
                   framesLeft(for: requestId, request) > 0
             else {
                 continue
             }
 
+            // Marked only once away: an image recorded against a request that never carried
+            // it leaves every address in that capture with nothing to resolve against.
+            reportedImages[requestId, default: []].insert(image.uuid)
             transport.send(encoder.frame(payload))
             sent[requestId, default: 0] += 1
         }
@@ -621,6 +630,10 @@ final class InstrumentRunner: @unchecked Sendable {
         }
 
         transports[requestId] = opened
+        if owesActiveSet.remove(requestId) != nil {
+            emitActiveSet()
+        }
+
         flushBuffer(for: requestId, request, over: opened)
         return opened
     }

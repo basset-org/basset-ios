@@ -67,8 +67,7 @@ public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
     /// Answers the object's number whether it just got one or already had one.
     @discardableResult
     public func add(_ tracked: Tracked) -> UInt32 {
-        // Answered before walking anything: a chokepoint that re-sees an object it already
-        // holds pays nothing, and the walk itself stays outside the lock every caller waits on.
+        // Answered first: re-seeing a held object costs nothing, and the walk stays unlocked.
         if let known = guarded.withLock({ state -> UInt32? in
             state.boxes.first { $0.tracked === tracked }?.instance
         }) {

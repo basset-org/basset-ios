@@ -136,7 +136,6 @@ public extension Component.ID {
 
         case .accuracyClass,
              .activeColorSpace,
-             .activeInstrument,
              .alertStyle,
              .appState,
              .appVersion,

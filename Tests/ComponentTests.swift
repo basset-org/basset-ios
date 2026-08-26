@@ -230,7 +230,6 @@ struct ComponentTests {
             (.emptyResultCount(0), .emptyResultCount),
             (.debuggerAttached(false), .debuggerAttached),
             (.interfaceOrientation(""), .interfaceOrientation),
-            (.activeInstrument(0), .activeInstrument),
         ]
 
         for (component, expected) in all {
