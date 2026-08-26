@@ -214,6 +214,7 @@ public extension Component.ID {
              .remoteAddress,
              .renderDestination,
              .requestURL,
+             .retiredActiveInstrument,
              .runtimeClassName,
              .sdkVersion,
              .serverVersion,

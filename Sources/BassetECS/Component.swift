@@ -403,6 +403,7 @@ public struct Component: Equatable, Sendable {
         case emptyResultCount = 242
         case debuggerAttached = 243
         case interfaceOrientation = 244
+        case retiredActiveInstrument = 245
     }
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.

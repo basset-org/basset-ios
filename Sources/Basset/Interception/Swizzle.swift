@@ -64,7 +64,8 @@ struct HookShape: Equatable {
         arguments: 7,
         returns: "v",
         firstArgument: "@",
-        pointerArgument: 6
+        pointerArgument: 6,
+        argumentEncodings: [3: "@", 4: "@", 5: "{CGRect"]
     )
 
     /// `-captureOutput:didOutputSampleBuffer:fromConnection:` and its drop counterpart.
@@ -85,6 +86,9 @@ struct HookShape: Equatable {
     let firstArgument: String?
     /// Raw-pointer argument, not an object — CMSampleBufferRef would be wrongly retained.
     var pointerArgument: Int?
+    /// Every other argument that has to be what the thunk reads it as. Without these a
+    /// selector of the same arity installs and the thunk reads a wrong register as an object.
+    var argumentEncodings: [Int: String] = [:]
 
     static func factory(objects count: Int) -> HookShape {
         HookShape(
@@ -883,6 +887,12 @@ public final class Swizzle: @unchecked Sendable {
             // Object encodings can be qualified; matched by prefix, BOOL must be exact.
             let matches = wanted == "@" ? found.hasPrefix("@") : found == wanted
             guard matches else {
+                return .argumentKindMismatch(shape: shape.name)
+            }
+        }
+        for (index, wanted) in shape.argumentEncodings {
+            let found = Self.argumentEncoding(inherited, at: index) ?? "?"
+            guard found.hasPrefix(wanted) else {
                 return .argumentKindMismatch(shape: shape.name)
             }
         }

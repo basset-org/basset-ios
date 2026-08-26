@@ -521,11 +521,23 @@ final class InstrumentRunner: @unchecked Sendable {
                     continue
                 }
                 guard let transport = transport(for: requestId, request) else {
+                    // Images first, and held with it: a reading flushed out of the backlog
+                    // later would otherwise arrive with addresses nothing can place.
+                    for image in imageFrames(placing, into: requestId) {
+                        hold(image, for: requestId)
+                    }
+
                     hold(frame, for: requestId)
                     continue
                 }
 
-                emitImages(placing, into: requestId, request, over: transport)
+                for image in imageFrames(placing, into: requestId) {
+                    guard transport.refused == nil else {
+                        break
+                    }
+
+                    transport.send(image)
+                }
 
                 // A cap the request asked for, not a fault; `refused` says it happened.
                 guard transport.refused == nil,
@@ -543,9 +555,9 @@ final class InstrumentRunner: @unchecked Sendable {
 
     /// What each live request is running, now that it changed. Without it a capture spanning
     /// an update cannot tell an instrument that was quiet from one that was not yet on.
-    private func emitActiveSet() {
+    private func emitActiveSet(only wanted: UInt64? = nil) {
         let running = active
-        for (requestId, request) in live {
+        for (requestId, request) in live where wanted == nil || wanted == requestId {
             let named = request.instruments.compactMap { byName[$0]?.id }
             let mine = named.filter { running.contains($0) }.sorted { $0.rawValue < $1.rawValue }
             guard !mine.isEmpty else {
@@ -585,12 +597,13 @@ final class InstrumentRunner: @unchecked Sendable {
 
     /// An address is unreadable without the image holding it, and each capture is read on
     /// its own — so every request needs its own copy, once.
-    private func emitImages(
+    /// Not counted against the request's cap: max_readings bounds what a device was asked
+    /// for, and an address the reader cannot place is not one of them.
+    private func imageFrames(
         _ images: [BinaryImage],
-        into requestId: UInt64,
-        _ request: BassetRequest,
-        over transport: Transport
-    ) {
+        into requestId: UInt64
+    ) -> [Data] {
+        var frames = [Data]()
         for image in images where !reportedImages[requestId, default: []].contains(image.uuid) {
             var record = Entity(.binaryImage)
             record.add(.imageName(image.name))
@@ -599,17 +612,14 @@ final class InstrumentRunner: @unchecked Sendable {
             record.add(.launchId(LaunchIdentity.current))
 
             let payload = encoder.encode(record)
-            guard UInt64(payload.count) <= FrameReader.maxFrameLength,
-                  transport.refused == nil
-            else {
+            guard UInt64(payload.count) <= FrameReader.maxFrameLength else {
                 continue
             }
 
-            // Not counted against the request's cap: max_readings bounds what a device was
-            // asked for, and an address the reader cannot place is not one of them.
             reportedImages[requestId, default: []].insert(image.uuid)
-            transport.send(encoder.frame(payload))
+            frames.append(encoder.frame(payload))
         }
+        return frames
     }
 
     private func transport(for requestId: UInt64,
@@ -626,7 +636,7 @@ final class InstrumentRunner: @unchecked Sendable {
 
         transports[requestId] = opened
         if owesActiveSet.remove(requestId) != nil {
-            emitActiveSet()
+            emitActiveSet(only: requestId)
         }
 
         flushBuffer(for: requestId, request, over: opened)

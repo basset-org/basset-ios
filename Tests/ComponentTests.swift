@@ -247,6 +247,7 @@ struct ComponentTests {
             .retiredSyncEventType,
             .retiredSyncSucceeded,
             .retiredChangedKeyCount,
+            .retiredActiveInstrument,
         ])
     }
 
