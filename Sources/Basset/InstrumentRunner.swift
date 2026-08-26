@@ -95,6 +95,10 @@ final class InstrumentRunner: @unchecked Sendable {
     /// evicting one would leave it marked as reported and every address in it unplaceable.
     private var owedImages: [UInt64: [BinaryImage]] = [:]
     private let maxBuffered = 1024
+    /// Naturally bounded by the images a process maps, but per request and under backpressure
+    /// that is still a number worth stating. Dropping one costs nothing lasting: an image is
+    /// only marked as reported once it is sent, so the next address in it owes it again.
+    private let maxOwedImages = 64
     private var expiryTimer: DispatchSourceTimer?
 
     /// Injectable: a deferred system wake can't be arranged by a test waiting on it.
@@ -603,6 +607,10 @@ final class InstrumentRunner: @unchecked Sendable {
     private func owe(_ images: [BinaryImage], for requestId: UInt64) {
         var already = Set((owedImages[requestId] ?? []).map(\.uuid))
         for image in images where already.insert(image.uuid).inserted {
+            guard owedImages[requestId, default: []].count < maxOwedImages else {
+                return
+            }
+
             owedImages[requestId, default: []].append(image)
         }
     }
