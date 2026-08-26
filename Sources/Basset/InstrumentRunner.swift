@@ -354,8 +354,6 @@ final class InstrumentRunner: @unchecked Sendable {
             active.remove(id)
         }
         defer {
-            // Only a change to a set that already existed: the opening set is what every
-            // reading in the capture is already attributed to, and needs no separate record.
             if !before.isEmpty, active != before {
                 emitActiveSet()
             }
@@ -575,14 +573,13 @@ final class InstrumentRunner: @unchecked Sendable {
                 owesActiveSet.insert(requestId)
                 continue
             }
-            guard transport.refused == nil,
-                  framesLeft(for: requestId, request) > 0
-            else {
+            guard transport.refused == nil else {
                 continue
             }
 
+            // Uncounted, like the images: saying what a capture is running is not a reading
+            // the request asked for, and a small cap must not be spent describing itself.
             transport.send(frame)
-            sent[requestId, default: 0] += 1
         }
     }
 
@@ -603,17 +600,15 @@ final class InstrumentRunner: @unchecked Sendable {
 
             let payload = encoder.encode(record)
             guard UInt64(payload.count) <= FrameReader.maxFrameLength,
-                  transport.refused == nil,
-                  framesLeft(for: requestId, request) > 0
+                  transport.refused == nil
             else {
                 continue
             }
 
-            // Marked only once away: an image recorded against a request that never carried
-            // it leaves every address in that capture with nothing to resolve against.
+            // Not counted against the request's cap: max_readings bounds what a device was
+            // asked for, and an address the reader cannot place is not one of them.
             reportedImages[requestId, default: []].insert(image.uuid)
             transport.send(encoder.frame(payload))
-            sent[requestId, default: 0] += 1
         }
     }
 

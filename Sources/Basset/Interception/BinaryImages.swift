@@ -11,8 +11,8 @@ public struct BinaryImage: Sendable {
     /// Kept to say where an image came from; never emitted — a full path leaks install dirs.
     public let path: String
 
-    /// Whether the image was shipped inside the app rather than by the OS.
-    public func isShipped(under directory: String) -> Bool {
+    /// Whether the image came from the app bundle rather than from the OS.
+    public func isInAppBundle(under directory: String) -> Bool {
         guard !directory.isEmpty else {
             return false
         }
@@ -67,7 +67,7 @@ public enum BinaryImages {
     }
 
     /// The app's own directory, by mach-o type — `Bundle.main` is the test host, not the app.
-    public static func shippedDirectory() -> String {
+    public static func appBundleDirectory() -> String {
         for index in 0 ..< _dyld_image_count() {
             guard let header = _dyld_get_image_header(index),
                   header.pointee.filetype == UInt32(MH_EXECUTE),

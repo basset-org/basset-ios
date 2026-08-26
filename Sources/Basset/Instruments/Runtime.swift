@@ -283,7 +283,7 @@ struct StackWindow {
     }
 }
 
-/// What's mapped into the process and what the app shipped; statics are invisible here.
+/// What's mapped into the process and what came from the app bundle; statics are invisible.
 final class LinkedLibraries: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .linkedLibraries
     static let entity = Entity.ID.binaryImage
@@ -295,7 +295,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
 
     static func write(
         _ images: [BinaryImage],
-        shippedUnder directory: String,
+        inAppBundleUnder directory: String,
         into out: inout Readings
     ) {
         guard !images.isEmpty else {
@@ -303,7 +303,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
             return
         }
 
-        let bundled = images.filter { $0.isShipped(under: directory) }
+        let bundled = images.filter { $0.isInAppBundle(under: directory) }
             .sorted { $0.size > $1.size }
         guard let first = bundled.first else {
             // Nothing but the OS — the answer for an app with no linked dependencies.
@@ -346,7 +346,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
     func reading(_ out: inout Readings) {
         Self.write(
             BinaryImages.loaded(),
-            shippedUnder: BinaryImages.shippedDirectory(),
+            inAppBundleUnder: BinaryImages.appBundleDirectory(),
             into: &out
         )
     }

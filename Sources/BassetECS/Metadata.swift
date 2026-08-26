@@ -348,7 +348,7 @@ public extension InstrumentID {
                     InstrumentMetadata.ConfigField(
                         key: "callers",
                         type: .bool,
-                        description: "Report which of the app's own code built each session, as return addresses into the images it shipped. Frames inside the OS are left out: they say nothing about the caller. Default true."
+                        description: "Report which of the app's own code built each session, as return addresses into the images from its own bundle. Frames inside the OS are left out: they say nothing about the caller. Default true."
                     ),
                 ]
             )
@@ -1020,7 +1020,7 @@ public extension InstrumentID {
             )
         case .linkedLibraries:
             InstrumentMetadata(
-                summary: "Every image mapped into this process, and which of them the app shipped rather than the OS",
+                summary: "Every image mapped into this process, and which of them came from the app bundle rather than the OS",
                 whenToUse: "launch is slow, the binary is larger than anyone expects, or two dependencies are suspected of fighting over the same behaviour",
                 reveals: [
                     "how many images the process maps in total, against how many of them came inside the app",
@@ -1158,7 +1158,7 @@ public extension InstrumentID {
                 reveals: [
                     "every instrument this request has running on the device, each named by its own id",
                     "the seam where a request's instruments were changed, so readings either side are not read as one set",
-                    "nothing at activation, when every reading in the capture already answers to the opening set — only a later change earns a record",
+                    "every change to the set of instruments a capture is running, as it happens",
                 ],
                 related: ["basset.configRefused", "device.info"],
                 mechanism: .none,

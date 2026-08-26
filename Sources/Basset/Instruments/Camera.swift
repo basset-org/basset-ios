@@ -708,7 +708,7 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
             if config.callers,
                let sessionClass = objc_getClass("AVCaptureSession") as? AnyClass
             {
-                let own = CallerStack.shipped(
+                let own = CallerStack.inAppImages(
                     context.callers(class: sessionClass, instance: instance)
                 )
 

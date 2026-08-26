@@ -38,12 +38,12 @@ public enum CallerStack {
         }
     }
 
-    /// Only the frames inside images the app shipped.
+    /// Only the frames inside images that came from the app bundle, not the OS.
     ///
     /// Kept out of `here`: this reads every mapped image, which a chokepoint must not pay for.
-    static func shipped(_ frames: [UInt64]) -> [UInt64] {
-        let directory = BinaryImages.shippedDirectory()
-        let images = BinaryImages.covering(frames).filter { $0.isShipped(under: directory) }
+    static func inAppImages(_ frames: [UInt64]) -> [UInt64] {
+        let directory = BinaryImages.appBundleDirectory()
+        let images = BinaryImages.covering(frames).filter { $0.isInAppBundle(under: directory) }
         guard !images.isEmpty else {
             return []
         }
