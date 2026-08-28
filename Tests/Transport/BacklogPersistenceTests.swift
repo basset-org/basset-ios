@@ -42,8 +42,11 @@ extension DeliveryTests {
         channel.send(Data([7, 7, 7]))
 
         #expect(await eventually { StubbedResponses.seen >= 1 }, "the first attempt was sent")
+        // Polled, not read once: the attempt being seen and the batch reaching disk are
+        // two writes, and a loaded runner can land them far enough apart to read between.
+        // Nothing answers this attempt, so once on disk it stays there for the assertion.
         #expect(
-            !PersistedBacklog.load(for: requestId, in: directory).isEmpty,
+            await eventually { !PersistedBacklog.load(for: requestId, in: directory).isEmpty },
             "on disk before it's answered, not only after it first fails"
         )
         channel.close()
