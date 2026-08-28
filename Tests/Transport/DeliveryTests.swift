@@ -126,11 +126,16 @@ struct DeliveryTests {
     /// A POST lost to a dying connection used to take its batch down silently with it.
     @Test func abatchLostToADeadConnectionIsSentAgain() async {
         StubbedResponses.reset([(nil, true), (200, false)])
-        let channel = stubbedChannel()
+        // The retry is only observable after its backoff, so 20s covers that and a
+        // slow machine; the poll returns as soon as it lands.
+        let channel = stubbedChannel(initialBackoff: 0.1)
 
         channel.send(Data([1, 2, 3]))
 
-        #expect(await eventually { StubbedResponses.seen >= 2 }, "the failure was retried")
+        #expect(
+            await eventually(within: .seconds(20)) { StubbedResponses.seen >= 2 },
+            "the failure was retried"
+        )
         #expect(channel.dropped == 0, "and nothing was written off")
     }
 

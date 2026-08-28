@@ -42,14 +42,24 @@ public enum Basset {
         ApplicationPresence.capture()
 
         lock.lock()
-        defer { lock.unlock() }
         guard loop == nil else {
+            lock.unlock()
             return
         }
 
         let started = DeviceLoop(config: config)
         loop = started
+
+        // Started under the lock: startFromDisk restores what the last run persisted,
+        // and an attached document converging first would be replaced by it.
         started.start()
+        lock.unlock()
+
+        // Outside the lock: replaying reaches converge, which takes it again, and it
+        // is not reentrant — holding it here deadlocks the thread an app launches on.
+        #if DEBUG
+        AttachedBridge.applyWhatArrivedBeforeTheLoop()
+        #endif
     }
 
     /// Associates this device with one of your users, so a request can target them by id.
@@ -72,6 +82,39 @@ public enum Basset {
         lock.unlock()
         return running?.currentState()
     }
+
+    #if DEBUG
+    /// Undoes `start`, which is otherwise permanent for the life of the process. A
+    /// test that starts the SDK and cannot stop it leaves every later test in that
+    /// process running against a started one.
+    static func stopForTesting() {
+        lock.lock()
+        let running = loop
+        loop = nil
+        lock.unlock()
+        running?.stop()
+    }
+
+    static func forgetAttachedTransports() {
+        lock.lock()
+        let running = loop
+        lock.unlock()
+        running?.forgetTransports()
+    }
+
+    @discardableResult
+    static func converge(to state: DesiredState) -> Bool {
+        lock.lock()
+        let running = loop
+        lock.unlock()
+        guard let running else {
+            return false
+        }
+
+        running.converge(to: state)
+        return true
+    }
+    #endif
 }
 
 /// Launch, then poll, holding between calls — everything the device asks the control plane.
@@ -119,6 +162,23 @@ final class DeviceLoop: @unchecked Sendable {
         }
     }
 
+    #if DEBUG
+    func stop() {
+        following?.cancel()
+        following = nil
+        runner.expire(at: .distantFuture)
+    }
+
+    func forgetTransports() {
+        runner.forgetTransports()
+    }
+
+    func converge(to state: DesiredState) {
+        guarded.withLock { $0.ingestEndpoint = state.ingestEndpoint }
+        runner.converge(to: state.requests, ingestEndpoint: state.ingestEndpoint)
+    }
+    #endif
+
     /// No forced refresh here — the loop's next poll reads userId fresh on its own.
     func identify(userId: String?) {
         guarded.withLock { $0.userId = userId }
@@ -159,11 +219,24 @@ final class DeviceLoop: @unchecked Sendable {
         }
 
         record(.accepted(requestCount: response.requests.count))
+
+        // Recorded even while attached: skipping it leaves the version stale, and the
+        // control plane then answers every poll at once rather than holding one.
         guarded.withLock {
             $0.ingestEndpoint = response.ingestEndpoint
             $0.stateVersion = response.stateVersion
         }
+
+        // A machine on this desk owns what runs while it is attached, and the check
+        // has to be taken with the convergence or an attachment landing between the
+        // two lets this response overwrite what that machine just asked for.
+        #if DEBUG
+        AttachedBridge.whileNothingIsAttached {
+            runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
+        }
+        #else
         runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
+        #endif
     }
 
     private func record(_ outcome: CtrlResponse.Outcome) {
@@ -255,6 +328,14 @@ struct IngestTransports: TransportOpener {
     }
 
     func open(request: BassetRequest, ingestEndpoint: String) -> Transport? {
+        #if DEBUG
+        // An attached machine dialled us; readings go back down that socket rather
+        // than out to an ingest host this build may not even be able to reach.
+        if let channel = AttachedBridge.channel {
+            return AttachedTransport(channel)
+        }
+        #endif
+
         guard
             let host = hostname(ingestEndpoint),
             let token = request.requestToken,

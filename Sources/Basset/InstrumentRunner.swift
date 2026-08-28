@@ -189,6 +189,17 @@ final class InstrumentRunner: @unchecked Sendable {
         queue.sync { expireLocked(at: moment) }
     }
 
+    #if DEBUG
+    /// A transport is kept per request, so a machine attaching or leaving after one
+    /// is open would otherwise keep sending down the path chosen before it changed.
+    func forgetTransports() {
+        queue.sync {
+            transports.values.forEach { $0.close() }
+            transports.removeAll()
+        }
+    }
+    #endif
+
     func settle() {
         queue.sync {}
     }
