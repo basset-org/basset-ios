@@ -42,25 +42,36 @@ struct ControlClient: Sendable {
 
     private let session: URLSession
 
-    init(endpoint: URL, apiKey: String, hold: TimeInterval = 35) {
+    init(
+        endpoint: URL,
+        apiKey: String,
+        hold: TimeInterval = 35,
+        session: URLSession? = nil
+    ) {
         self.endpoint = endpoint
         self.apiKey = apiKey
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = hold
         configuration.waitsForConnectivity = true
-        self.session = URLSession(
+        self.session = session ?? URLSession(
             configuration: configuration,
             delegate: RedirectRefusal.shared,
             delegateQueue: nil
         )
 
-        IgnoredSessions.add(session)
+        IgnoredSessions.add(self.session)
     }
 
-    /// Held server-side until the desired state changes or the hold elapses — every
-    /// call carries the full identity, since nothing is remembered between calls.
-    func requests(_ identity: DeviceIdentity, userId: String?) async throws -> DesiredState {
+    /// Answered at once when `stateVersion` is not what the control plane now holds —
+    /// including the empty version a fresh launch carries — and held until it moves
+    /// otherwise. Every call carries the full identity, since nothing is remembered
+    /// between calls.
+    func requests(
+        _ identity: DeviceIdentity,
+        userId: String?,
+        stateVersion: String? = nil
+    ) async throws -> DesiredState {
         guard endpoint.scheme?.lowercased() == "https" else {
             throw ControlError.insecureEndpoint
         }
@@ -80,6 +91,10 @@ struct ControlClient: Sendable {
         if let userId, !userId.isEmpty {
             body["user_id"] = userId
         }
+        // Always sent, empty when this launch holds nothing yet: a control plane that
+        // sees the key can answer at once, and one that never sees it must keep holding
+        // or an older device would poll in a loop.
+        body["state_version"] = stateVersion ?? ""
 
         var request = URLRequest(url: endpoint.appendingPathComponent("requests"))
         request.httpMethod = "POST"

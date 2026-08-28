@@ -159,10 +159,13 @@ struct DesiredState: Decodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case ingestEndpoint = "ingest_endpoint"
         case requests
+        case stateVersion = "state_version"
     }
 
     let ingestEndpoint: String
     let requests: [BassetRequest]
+    /// Echoed on the next poll so the control plane answers at once when it has moved on.
+    let stateVersion: String?
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -170,6 +173,7 @@ struct DesiredState: Decodable, Sendable {
         requests = try container
             .decodeIfPresent(LenientRequestList.self, forKey: .requests)?
             .requests ?? []
+        stateVersion = try? container.decodeIfPresent(String.self, forKey: .stateVersion)
     }
 }
 

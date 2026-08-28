@@ -41,6 +41,33 @@ struct RejectionBackoffTests {
 }
 
 struct DesiredStateDecodingTests {
+    @Test func aStateVersionIsCarriedWhenTheControlPlaneSendsOne() throws {
+        let response = try decode(
+            """
+            {"ingest_endpoint":"in","state_version":"a1b2c3","requests":[]}
+            """
+        )
+
+        #expect(response.stateVersion == "a1b2c3")
+    }
+
+    @Test func aControlPlaneThatSendsNoStateVersionStillDecodes() throws {
+        let response = try decode("""
+        {"ingest_endpoint":"in","requests":[]}
+        """)
+
+        #expect(response.stateVersion == nil)
+    }
+
+    @Test func aMalformedStateVersionIsTreatedAsAbsentRatherThanFatal() throws {
+        let response = try decode("""
+        {"ingest_endpoint":"in","state_version":42,"requests":[]}
+        """)
+
+        #expect(response.stateVersion == nil)
+        #expect(response.ingestEndpoint == "in")
+    }
+
     @Test func arealCtrlResponseDecodes() throws {
         let response = try decode(
             """
