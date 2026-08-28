@@ -31,7 +31,7 @@ let package = Package(
         .executableTarget(name: "BassetDemo", dependencies: ["Basset"], path: "Demo"),
         .testTarget(
             name: "BassetTests",
-            dependencies: ["Basset", "BassetECS"],
+            dependencies: ["Basset", "BassetAttached", "BassetECS"],
             path: "Tests",
             exclude: ["ECS"]
         ),

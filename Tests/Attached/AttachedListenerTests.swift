@@ -28,17 +28,23 @@ struct AttachedListenerTests {
         }
     }
 
-    @Test func runningOutOfPortsSaysSoRatherThanFailingQuietly() throws {
+    @Test func runningOutOfPortsSaysSoRatherThanFailingQuietly() {
+        // How much of the range is already taken depends on what else is running on
+        // this machine, so open until one is refused rather than assuming ten are free.
         var held = [AttachedLink]()
         defer { held.forEach { $0.stop() } }
 
-        for _ in 0 ..< BassetAttached.portsToTry {
-            try held.append(AttachedLink())
+        var refusal: (any Error)?
+        for _ in 0...BassetAttached.portsToTry {
+            do {
+                try held.append(AttachedLink())
+            } catch {
+                refusal = error
+                break
+            }
         }
 
-        #expect(throws: BassetAttached.Failure.self) {
-            _ = try AttachedLink()
-        }
+        #expect(refusal is BassetAttached.Failure)
     }
 }
 #endif
