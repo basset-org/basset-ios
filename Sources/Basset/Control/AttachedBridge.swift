@@ -11,7 +11,10 @@ public protocol AttachedChannel: AnyObject, Sendable {
 /// release build entirely: applying desired state from inside the process would
 /// otherwise let anything linked into a shipped app activate instruments.
 public enum AttachedBridge {
-    private static let lock: NSLock = .init()
+    /// Recursive because convergence runs under it and reaches back through
+    /// IngestTransports to read `channel` on the same thread. A plain NSLock
+    /// deadlocks there, and only when a request has frames waiting to send.
+    private static let lock: NSRecursiveLock = .init()
     private nonisolated(unsafe) static var attached: AttachedChannel?
     /// Held so the order of `Basset.start` and `BassetAttached.listen` does not
     /// matter: state arriving before there is a loop to apply it to is applied once

@@ -81,6 +81,29 @@ struct AttachedBridgeOrderTests {
         #expect(answered, "Basset.start did not return, so a launch would hang")
     }
 
+    @Test func convergingUnderTheBridgeCanStillReadTheChannel() {
+        // Convergence runs under this lock and reaches back through IngestTransports
+        // to read `channel` on the same thread, which a plain NSLock deadlocks on —
+        // and only when a request has frames waiting, so nothing else here catches it.
+        let settled = DispatchSemaphore(value: 0)
+        let outcome = NSLock()
+        var returned = false
+
+        Thread.detachNewThread {
+            AttachedBridge.whileNothingIsAttached {
+                _ = AttachedBridge.channel
+            }
+            outcome.withLock { returned = true }
+            settled.signal()
+        }
+        _ = settled.wait(timeout: .now() + 5)
+
+        #expect(
+            outcome.withLock { returned },
+            "reading the channel from under the bridge deadlocked"
+        )
+    }
+
     @Test func aDocumentThatIsNotDesiredStateIsRefused() {
         #expect(throws: (any Error).self) {
             try AttachedBridge.apply(Data("not a desired state".utf8))
