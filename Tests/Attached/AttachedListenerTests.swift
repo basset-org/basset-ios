@@ -58,6 +58,8 @@ struct AttachedBridgeOrderTests {
         // start holds a lock that converge takes again, so replaying pending state
         // under it deadlocks the thread an app launches on. Nothing here asserts a
         // value: the failure this covers is start never returning at all.
+        defer { Basset.stopForTesting() }
+
         let settled = DispatchSemaphore(value: 0)
         let outcome = NSLock()
         var returned = false

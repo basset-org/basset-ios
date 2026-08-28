@@ -84,6 +84,17 @@ public enum Basset {
     }
 
     #if DEBUG
+    /// Undoes `start`, which is otherwise permanent for the life of the process. A
+    /// test that starts the SDK and cannot stop it leaves every later test in that
+    /// process running against a started one.
+    static func stopForTesting() {
+        lock.lock()
+        let running = loop
+        loop = nil
+        lock.unlock()
+        running?.stop()
+    }
+
     static func forgetAttachedTransports() {
         lock.lock()
         let running = loop
@@ -152,6 +163,12 @@ final class DeviceLoop: @unchecked Sendable {
     }
 
     #if DEBUG
+    func stop() {
+        following?.cancel()
+        following = nil
+        runner.expire(at: .distantFuture)
+    }
+
     func forgetTransports() {
         runner.forgetTransports()
     }
