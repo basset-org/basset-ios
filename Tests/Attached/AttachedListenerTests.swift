@@ -58,8 +58,6 @@ struct AttachedBridgeOrderTests {
         // start holds a lock that converge takes again, so replaying pending state
         // under it deadlocks the thread an app launches on. Nothing here asserts a
         // value: the failure this covers is start never returning at all.
-        defer { Basset.stopForTesting() }
-
         let settled = DispatchSemaphore(value: 0)
         let outcome = NSLock()
         var returned = false
@@ -77,6 +75,13 @@ struct AttachedBridgeOrderTests {
         }
         _ = settled.wait(timeout: .now() + 5)
         let answered = outcome.withLock { returned }
+
+        // Torn down only when start returned. The failure this guards leaves the lock
+        // held on the detached thread, and stopForTesting waits on that lock — so
+        // tearing down unconditionally would wedge the suite instead of failing here.
+        if answered {
+            Basset.stopForTesting()
+        }
 
         #expect(answered, "Basset.start did not return, so a launch would hang")
     }
