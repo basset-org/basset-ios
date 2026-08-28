@@ -104,11 +104,13 @@ extension DeliveryTests {
         let requestId: UInt64 = 13
         StubbedResponses.reset([(nil, true)])
         // A backoff far longer than the deadline below, so a slow runner cannot be what
-        // satisfies the retry: only the reconnect can fire it that early.
+        // satisfies the retry: only the reconnect can fire it that early. Both scale
+        // together — a loaded runner has taken 12s to get here, and the gap between them
+        // is what the assertion rests on.
         let channel = stubbedChannel(
             requestId: requestId,
             backlogDirectory: directory,
-            initialBackoff: 30
+            initialBackoff: 120
         )
         channel.send(Data([1, 2, 3]))
         #expect(await eventually {
@@ -118,7 +120,7 @@ extension DeliveryTests {
         StubbedResponses.reset([(200, false)])
         channel.reconnected()
 
-        #expect(await eventually(within: .seconds(5)) { StubbedResponses.seen >= 1 })
+        #expect(await eventually(within: .seconds(20)) { StubbedResponses.seen >= 1 })
         #expect(await eventually {
             PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })

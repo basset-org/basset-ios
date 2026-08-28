@@ -33,17 +33,60 @@ struct ThreadCPUUsageConfigTests {
 }
 
 struct ThreadCPUUsageWindowTests {
+    private let window: UInt64 = 5000000000
+
     @Test func aThreadBornAndGoneWithinOneWindowIsStillReported() {
         let instrument = ThreadCPUUsage(config: .init(windowSeconds: 5))
 
-        let seeding = instrument.consumed(in: [sample(1, cpu: 900)])
+        let seeding = instrument.consumed(in: snapshot([sample(1, cpu: 900)]), within: window)
         #expect(seeding.isEmpty, "the first window has nothing to measure against")
 
-        let burned = instrument.consumed(in: [sample(1, cpu: 900), sample(2, cpu: 4000000)])
+        let burned = instrument.consumed(
+            in: snapshot([sample(1, cpu: 900), sample(2, cpu: 4000000)]),
+            within: window
+        )
         #expect(
             burned.contains { $0.sample.identifier == 2 },
             "a thread that appeared and burned a core inside one window was dropped"
         )
+    }
+
+    @Test func aThreadMissingFromARefusedWindowIsNotCountedAsBornInTheNext() {
+        let instrument = ThreadCPUUsage(config: .init(windowSeconds: 5))
+
+        _ = instrument.consumed(in: snapshot([sample(1, cpu: 10)]), within: window)
+        _ = instrument.consumed(
+            in: snapshot([sample(1, cpu: 20)], complete: false),
+            within: window
+        )
+
+        let after = instrument.consumed(
+            in: snapshot([sample(1, cpu: 30), sample(2, cpu: 600000000000)]),
+            within: window
+        )
+        #expect(
+            !after.contains { $0.sample.identifier == 2 },
+            "a thread the kernel refused once was reported as burning its whole life"
+        )
+    }
+
+    @Test func aNewThreadIsNeverCreditedWithMoreThanItsWindow() {
+        let instrument = ThreadCPUUsage(config: .init(windowSeconds: 5))
+
+        _ = instrument.consumed(in: snapshot([sample(1, cpu: 10)]), within: window)
+        let after = instrument.consumed(
+            in: snapshot([sample(1, cpu: 20), sample(2, cpu: window * 100)]),
+            within: window
+        )
+
+        #expect(after.first { $0.sample.identifier == 2 }?.nanoseconds == window)
+    }
+
+    private func snapshot(
+        _ samples: [ThreadSample],
+        complete: Bool = true
+    ) -> ThreadInventory.Snapshot {
+        ThreadInventory.Snapshot(samples: samples, isComplete: complete)
     }
 
     private func sample(_ identifier: UInt64, cpu: UInt64) -> ThreadSample {

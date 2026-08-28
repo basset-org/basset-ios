@@ -6,6 +6,11 @@ final class ThreadCPUUsage: Streamable, Configurable {
         let windowSeconds: Int
     }
 
+    struct Baseline {
+        var totals: [UInt64: UInt64] = [:]
+        var sawEveryThread = false
+    }
+
     struct Consumed {
         let sample: ThreadSample
         let nanoseconds: UInt64
@@ -22,7 +27,7 @@ final class ThreadCPUUsage: Streamable, Configurable {
 
     let windowSeconds: Int
 
-    private let previous: Mutex<[UInt64: UInt64]> = .init([:])
+    private let previous: Mutex<Baseline> = .init(Baseline())
 
     init(config: Config) {
         windowSeconds = min(
@@ -37,28 +42,36 @@ final class ThreadCPUUsage: Streamable, Configurable {
                 return
             }
 
-            self.write(ThreadInventory.read(), over: window, into: &out)
+            self.write(ThreadInventory.snapshot(), over: window, into: &out)
         }
     }
 
     func stopObserving() {
-        previous.withLock { $0.removeAll() }
+        previous.withLock { $0 = Baseline() }
     }
 
-    func consumed(in samples: [ThreadSample]) -> [Consumed] {
+    func consumed(in taken: ThreadInventory.Snapshot,
+                  within windowNanoseconds: UInt64) -> [Consumed]
+    {
         previous.withLock { previous in
             // A thread absent from the last window was created since it, so all of its
             // time was spent inside this one. Skipping it instead would hide any thread
             // that does not outlive two windows, however much of a core it burned.
-            let hasBaseline = !previous.isEmpty
+            // Only a window that saw every thread can say a thread was absent from it;
+            // one the kernel refused a thread in would report a lifetime as a window.
+            let absenceMeansNew = !previous.totals.isEmpty && previous.sawEveryThread
             var current = [UInt64: UInt64]()
             var consumed = [Consumed]()
-            for sample in samples where sample.identifier != 0 {
+            for sample in taken.samples where sample.identifier != 0 {
                 let total = sample.cpuNanoseconds
                 current[sample.identifier] = total
-                guard let before = previous[sample.identifier] else {
-                    if hasBaseline, total > 0 {
-                        consumed.append(Consumed(sample: sample, nanoseconds: total))
+                guard let before = previous.totals[sample.identifier] else {
+                    if absenceMeansNew, total > 0 {
+                        consumed.append(Consumed(
+                            sample: sample,
+                            // One thread cannot burn more than the window it ran in.
+                            nanoseconds: min(total, windowNanoseconds)
+                        ))
                     }
                     continue
                 }
@@ -69,17 +82,17 @@ final class ThreadCPUUsage: Streamable, Configurable {
                 consumed.append(Consumed(sample: sample, nanoseconds: total - before))
             }
 
-            previous = current
+            previous = Baseline(totals: current, sawEveryThread: taken.isComplete)
             return consumed
         }
     }
 
     private func write(
-        _ samples: [ThreadSample],
+        _ taken: ThreadInventory.Snapshot,
         over window: Context.FlushWindow,
         into out: inout Readings
     ) {
-        let busy = consumed(in: samples)
+        let busy = consumed(in: taken, within: window.nanoseconds)
             .sorted { $0.nanoseconds > $1.nanoseconds }
 
         guard let first = busy.first else {

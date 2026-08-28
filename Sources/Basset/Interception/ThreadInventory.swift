@@ -31,13 +31,26 @@ public struct ThreadSample: Sendable, Equatable {
 
 /// ThreadWalker's counterpart: two Mach calls per thread; never suspends the world.
 public enum ThreadInventory {
+    /// What one enumeration saw, and whether it saw all of it.
+    public struct Snapshot: Sendable {
+        public let samples: [ThreadSample]
+        /// False when the kernel refused a thread mid-enumeration, which it does for one
+        /// exiting as it is read. An id absent from an incomplete snapshot proves nothing
+        /// about whether that thread was running.
+        public let isComplete: Bool
+    }
+
     public static func read() -> [ThreadSample] {
+        snapshot().samples
+    }
+
+    public static func snapshot() -> Snapshot {
         var list: thread_act_array_t?
         var count = mach_msg_type_number_t(0)
         guard task_threads(mach_task_self_, &list, &count) == KERN_SUCCESS,
               let threads = list
         else {
-            return []
+            return Snapshot(samples: [], isComplete: false)
         }
 
         // A send right per thread, plus the array — unreleased, ports overflow in hours.
@@ -56,9 +69,11 @@ public enum ThreadInventory {
         var samples = [ThreadSample]()
         samples.reserveCapacity(Int(count))
 
+        var refused = false
         for index in 0 ..< Int(count) {
             let thread = threads[index]
             guard let extended = extended(thread) else {
+                refused = true
                 continue
             }
 
@@ -81,7 +96,7 @@ public enum ThreadInventory {
                 )
             )
         }
-        return samples
+        return Snapshot(samples: samples, isComplete: !refused)
     }
 
     private static func extended(_ thread: thread_t) -> thread_extended_info_data_t? {
