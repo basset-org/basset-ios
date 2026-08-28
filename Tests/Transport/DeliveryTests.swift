@@ -126,10 +126,8 @@ struct DeliveryTests {
     /// A POST lost to a dying connection used to take its batch down silently with it.
     @Test func abatchLostToADeadConnectionIsSentAgain() async {
         StubbedResponses.reset([(nil, true), (200, false)])
-        // The retry waits out a backoff before it is observable, so the deadline has
-        // to hold both that and however slow the machine running this is. Five
-        // seconds is enough here and not on a loaded CI runner, where the same suite
-        // takes seventeen times as long as it does locally.
+        // The retry is only observable after its backoff, so 20s covers that and a
+        // slow machine; the poll returns as soon as it lands.
         let channel = stubbedChannel(initialBackoff: 0.1)
 
         channel.send(Data([1, 2, 3]))
