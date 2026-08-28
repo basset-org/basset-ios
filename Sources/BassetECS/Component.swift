@@ -404,6 +404,7 @@ public struct Component: Equatable, Sendable {
         case debuggerAttached = 243
         case interfaceOrientation = 244
         case retiredActiveInstrument = 245
+        case bootTimeMicroseconds = 246
     }
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.
@@ -600,6 +601,10 @@ public extension Component {
     static func exitReason(_ value: String) -> Component { .init(.exitReason, value) }
     static func intervalEndMicroseconds(_ value: UInt64) -> Component { .init(
         .intervalEndMicroseconds,
+        value
+    ) }
+    static func bootTimeMicroseconds(_ value: UInt64) -> Component { .init(
+        .bootTimeMicroseconds,
         value
     ) }
     static func permissionSubject(_ value: String) -> Component { .init(.permissionSubject, value) }

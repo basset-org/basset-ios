@@ -31,3 +31,35 @@ struct ThreadCPUUsageConfigTests {
         #expect(highest.windowSeconds == range.upperBound)
     }
 }
+
+struct ThreadCPUUsageWindowTests {
+    @Test func aThreadBornAndGoneWithinOneWindowIsStillReported() {
+        let instrument = ThreadCPUUsage(config: .init(windowSeconds: 5))
+
+        let seeding = instrument.consumed(in: [sample(1, cpu: 900)])
+        #expect(seeding.isEmpty, "the first window has nothing to measure against")
+
+        let burned = instrument.consumed(in: [sample(1, cpu: 900), sample(2, cpu: 4000000)])
+        #expect(
+            burned.contains { $0.sample.identifier == 2 },
+            "a thread that appeared and burned a core inside one window was dropped"
+        )
+    }
+
+    private func sample(_ identifier: UInt64, cpu: UInt64) -> ThreadSample {
+        ThreadSample(
+            index: Int(identifier),
+            identifier: identifier,
+            name: "basset.busy.\(identifier)",
+            runState: "running",
+            isIdle: false,
+            requestedQos: "userInitiated",
+            isMain: false,
+            cpuUsageRatio: 1,
+            userNanoseconds: cpu,
+            systemNanoseconds: 0,
+            currentPriority: 31,
+            basePriority: 31
+        )
+    }
+}

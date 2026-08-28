@@ -6,7 +6,7 @@ final class ThreadCPUUsage: Streamable, Configurable {
         let windowSeconds: Int
     }
 
-    private struct Consumed {
+    struct Consumed {
         let sample: ThreadSample
         let nanoseconds: UInt64
     }
@@ -45,6 +45,35 @@ final class ThreadCPUUsage: Streamable, Configurable {
         previous.withLock { $0.removeAll() }
     }
 
+    func consumed(in samples: [ThreadSample]) -> [Consumed] {
+        previous.withLock { previous in
+            // A thread absent from the last window was created since it, so all of its
+            // time was spent inside this one. Skipping it instead would hide any thread
+            // that does not outlive two windows, however much of a core it burned.
+            let hasBaseline = !previous.isEmpty
+            var current = [UInt64: UInt64]()
+            var consumed = [Consumed]()
+            for sample in samples where sample.identifier != 0 {
+                let total = sample.cpuNanoseconds
+                current[sample.identifier] = total
+                guard let before = previous[sample.identifier] else {
+                    if hasBaseline, total > 0 {
+                        consumed.append(Consumed(sample: sample, nanoseconds: total))
+                    }
+                    continue
+                }
+                guard total > before else {
+                    continue
+                }
+
+                consumed.append(Consumed(sample: sample, nanoseconds: total - before))
+            }
+
+            previous = current
+            return consumed
+        }
+    }
+
     private func write(
         _ samples: [ThreadSample],
         over window: Context.FlushWindow,
@@ -69,27 +98,6 @@ final class ThreadCPUUsage: Streamable, Configurable {
         out.also(Self.entity) { sibling in
             sibling.put(.windowNanoseconds(window.nanoseconds))
             sibling.put(.mechanismStatus("truncated: \(busy.count - Self.ceiling) more"))
-        }
-    }
-
-    private func consumed(in samples: [ThreadSample]) -> [Consumed] {
-        previous.withLock { previous in
-            var current = [UInt64: UInt64]()
-            var consumed = [Consumed]()
-            for sample in samples where sample.identifier != 0 {
-                let total = sample.cpuNanoseconds
-                current[sample.identifier] = total
-                guard let before = previous[sample.identifier],
-                      total > before
-                else {
-                    continue
-                }
-
-                consumed.append(Consumed(sample: sample, nanoseconds: total - before))
-            }
-
-            previous = current
-            return consumed
         }
     }
 

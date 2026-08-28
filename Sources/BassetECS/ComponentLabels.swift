@@ -113,6 +113,7 @@ public extension Component.ID {
         case .memoryPressureScope: "Pressure reported for"
         case .exitReason: "Exit reason"
         case .intervalEndMicroseconds: "Measured through"
+        case .bootTimeMicroseconds: "Booted at"
         case .permissionSubject: "Permission"
         case .authorizationStatus: "Authorization"
         case .usageDescriptionDeclared: "Usage description shipped"
