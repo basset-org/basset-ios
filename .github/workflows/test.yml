@@ -1,9 +1,14 @@
 name: test
 
+# Pull requests do not trigger this. A fork supplies both the workflow file and
+# the code it runs, and the runners here are physical machines rather than
+# throwaway cloud VMs, so a run is started by pushing a branch to this
+# repository — which only a writer can do. A contributed pull request is tested
+# by pushing its commits to a branch here after reading them.
 on:
-  pull_request:
   push:
-    branches: [main]
+    branches: ["**"]
+  workflow_dispatch:
 
 concurrency:
   group: test-${{ github.ref }}
@@ -12,23 +17,15 @@ concurrency:
 jobs:
   simulator:
     # The name is a contract: branch protection requires `simulator (oldest)`
-    # and `simulator (newest)` by name, and a matrix that adds the runner to the
-    # generated name leaves those two contexts permanently unreported, which
+    # and `simulator (newest)` by name, and a matrix that adds anything else to
+    # the generated name leaves those two contexts permanently unreported, which
     # blocks every merge rather than failing anything.
     name: simulator (${{ matrix.runtime }})
-    # Oldest runtime pinned to macos-15: the floor is what catches a decoder
-    # that works on the newest OS and returns nothing below it.
-    runs-on: ${{ matrix.runner }}
+    runs-on: [self-hosted, macOS, ARM64, tartelet]
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runtime: oldest
-            runner: macos-15
-            sharedSimulator: "true"
-          - runtime: newest
-            runner: macos-26
-            sharedSimulator: "false"
+        runtime: [oldest, newest]
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +36,7 @@ jobs:
       # decoded no requests at all and reported nothing — which reads exactly
       # like a fleet nobody asked anything of.
       #
-      # Chosen from what the image has rather than pinned, so an image that
+      # Chosen from what the machine has rather than pinned, so an image that
       # drops a runtime fails by testing a different version rather than by
       # failing to find one.
       - name: Choose a simulator
@@ -67,9 +64,11 @@ jobs:
           echo "version=$(echo "$udid" | cut -f1)" >> "$GITHUB_OUTPUT"
           echo "udid=$(echo "$udid" | cut -f2)" >> "$GITHUB_OUTPUT"
 
-      # An image that drops the old runtimes narrows the matrix without failing,
-      # which reads as a green run over a version nobody tested. The oldest job
-      # says which runtime it got and refuses one that is not old.
+      # Both runtimes come from one machine image, so an image built without the
+      # floor runtime installed narrows the matrix to two runs of the newest one
+      # without failing — which reads as a green run over a version nobody
+      # tested. The oldest job says which runtime it got and refuses one that is
+      # not old.
       - name: Refuse a matrix that quietly narrowed
         if: matrix.runtime == 'oldest'
         run: |
@@ -82,8 +81,6 @@ jobs:
           fi
 
       - name: Test on iOS ${{ steps.simulator.outputs.version }}
-        env:
-          TEST_RUNNER_BASSET_SHARED_SIMULATOR: ${{ matrix.sharedSimulator }}
         run: |
           xcodebuild test \
             -scheme Basset-Package \
@@ -112,7 +109,7 @@ jobs:
   # BinaryImageTests and ReadingsSiblingTests with it, and neither suspends
   # anything.
   races:
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64, tartelet]
     steps:
       - uses: actions/checkout@v4
 

@@ -1,15 +1,14 @@
 name: format
 
 # Every Swift file here is swiftformat's output, and this job is what enforces
-# it — on a contributor's pull request as much as on a push to main.
-# `.githooks/pre-commit` formats on the way in for anyone who ran
-# `git config core.hooksPath .githooks`; nobody outside can be assumed to have.
+# it. `.githooks/pre-commit` formats on the way in for anyone who ran
+# `git config core.hooksPath .githooks`; nobody can be assumed to have.
+#
+# Pull requests do not trigger this, for the reason given in test.yml.
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
+    branches: ["**"]
   workflow_dispatch:
 
 concurrency:
@@ -26,15 +25,13 @@ jobs:
     # run failed with "organizeDeclarations rule timed out" on around twenty of
     # them while nothing in the tree was misformatted. The macOS binary takes
     # roughly 300ms on the slowest of them.
-    runs-on: macos-latest
+    runs-on: [self-hosted, macOS, ARM64, tartelet]
     steps:
       - uses: actions/checkout@v7.0.1
 
-      # No install step: SwiftFormat is preinstalled on the macOS runner images,
-      # which is what upstream's own GitHub Actions instructions rely on. The
-      # image carries 0.62.1, and `--min-version` in .swiftformat is what refuses
-      # a build that ever ships an older one rather than letting it disagree
-      # quietly with the hook.
+      # No install step: the runner image carries SwiftFormat. `--min-version`
+      # in .swiftformat is what refuses a build that ever ships an older one
+      # rather than letting the image disagree quietly with the hook.
       #
       # `--reporter github-actions-log` puts each violation on the line it is on
       # in the diff, so a contributor reads the finding rather than the log.
