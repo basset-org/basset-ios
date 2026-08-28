@@ -2,9 +2,10 @@ import Basset
 import Foundation
 import Network
 
-/// Linking this module is what lets a developer's machine reach an app on the same
-/// desk. It is a separate product so a shipped build cannot link it by accident, and
-/// every symbol is compiled away outside a debug build.
+// Linking this module is what lets a developer's machine reach an app on the same
+// desk. It is a separate product so a shipped build cannot link it by accident, and
+// every symbol is compiled away outside a debug build.
+#if DEBUG
 public enum BassetAttached {
     public enum Failure: Error, CustomStringConvertible {
         case noFreePort(from: UInt16, tried: Int)
@@ -25,7 +26,6 @@ public enum BassetAttached {
     public static let firstPort: UInt16 = 30950
     public static let portsToTry = 10
 
-    #if DEBUG
     private static let lock: NSLock = .init()
     private nonisolated(unsafe) static var link: AttachedLink?
 
@@ -57,5 +57,5 @@ public enum BassetAttached {
             link = nil
         }
     }
-    #endif
 }
+#endif

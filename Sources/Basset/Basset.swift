@@ -42,15 +42,19 @@ public enum Basset {
         ApplicationPresence.capture()
 
         lock.lock()
-        defer { lock.unlock() }
         guard loop == nil else {
+            lock.unlock()
             return
         }
 
         let started = DeviceLoop(config: config)
         loop = started
+        lock.unlock()
+
         started.start()
 
+        // Outside the lock: replaying reaches converge, which takes it again, and it
+        // is not reentrant — holding it here deadlocks the thread an app launches on.
         #if DEBUG
         AttachedBridge.applyWhatArrivedBeforeTheLoop()
         #endif
@@ -78,6 +82,13 @@ public enum Basset {
     }
 
     #if DEBUG
+    static func forgetAttachedTransports() {
+        lock.lock()
+        let running = loop
+        lock.unlock()
+        running?.forgetTransports()
+    }
+
     @discardableResult
     static func converge(to state: DesiredState) -> Bool {
         lock.lock()
@@ -139,6 +150,10 @@ final class DeviceLoop: @unchecked Sendable {
     }
 
     #if DEBUG
+    func forgetTransports() {
+        runner.forgetTransports()
+    }
+
     func converge(to state: DesiredState) {
         guarded.withLock { $0.ingestEndpoint = state.ingestEndpoint }
         runner.converge(to: state.requests, ingestEndpoint: state.ingestEndpoint)
@@ -185,6 +200,15 @@ final class DeviceLoop: @unchecked Sendable {
         }
 
         record(.accepted(requestCount: response.requests.count))
+
+        // A machine on this desk owns what runs while it is attached, so a poll that
+        // still reaches the control plane must not converge its list over the top.
+        #if DEBUG
+        if AttachedBridge.channel != nil {
+            return
+        }
+        #endif
+
         guarded.withLock {
             $0.ingestEndpoint = response.ingestEndpoint
             $0.stateVersion = response.stateVersion

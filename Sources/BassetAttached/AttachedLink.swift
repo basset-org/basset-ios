@@ -89,7 +89,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
     }
 
     func stop() {
-        AttachedBridge.close()
+        AttachedBridge.close(self)
         lock.withLock {
             connection?.cancel()
             connection = nil
@@ -101,6 +101,10 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
     func send(_ frame: Data) {
         let open = lock.withLock { connection }
         open?.send(content: frame, completion: .idempotent)
+    }
+
+    private func isCurrent(_ candidate: NWConnection) -> Bool {
+        lock.withLock { connection === candidate }
     }
 
     private func accept(_ incoming: NWConnection) {
@@ -140,7 +144,9 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
                 drain()
             }
             guard error == nil, !isComplete else {
-                AttachedBridge.close()
+                if isCurrent(connection) {
+                    AttachedBridge.close(self)
+                }
                 return
             }
 

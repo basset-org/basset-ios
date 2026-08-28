@@ -51,15 +51,26 @@ struct AttachedListenerTests {
 
 @Suite(.serialized)
 struct AttachedBridgeOrderTests {
-    @Test func stateArrivingBeforeTheLoopIsNotLost() throws {
+    @Test func stateArrivingBeforeStartDoesNotWedgeTheLaunch() throws {
         AttachedBridge.close()
-
-        // Nothing has started yet, so this cannot be applied when it arrives.
         try AttachedBridge.apply(desiredState("cpu.thread.usage"))
 
-        // Applying it a second time once a loop exists is what start() does; here
-        // the point is only that the document was kept rather than dropped.
-        AttachedBridge.applyWhatArrivedBeforeTheLoop()
+        // start holds a lock that converge takes again, so replaying pending state
+        // under it deadlocks the thread an app launches on. Nothing here asserts a
+        // value: the failure this covers is start never returning at all.
+        let settled = DispatchSemaphore(value: 0)
+        let outcome = NSLock()
+        var returned = false
+
+        Thread.detachNewThread {
+            Basset.start(Config(apiKey: "bk_attached_test"))
+            outcome.withLock { returned = true }
+            settled.signal()
+        }
+        _ = settled.wait(timeout: .now() + 5)
+        let answered = outcome.withLock { returned }
+
+        #expect(answered, "Basset.start did not return, so a launch would hang")
     }
 
     @Test func aDocumentThatIsNotDesiredStateIsRefused() {

@@ -24,10 +24,29 @@ public enum AttachedBridge {
 
     public static func open(_ channel: AttachedChannel) {
         lock.withLock { attached = channel }
+        Basset.forgetAttachedTransports()
     }
 
-    public static func close() {
-        lock.withLock { attached = nil }
+    /// Only the channel that is current may close it: an old connection cancelling
+    /// after a new one has opened would otherwise switch the live one off.
+    public static func close(_ channel: AttachedChannel? = nil) {
+        let closed = lock.withLock { () -> Bool in
+            guard let channel else {
+                attached = nil
+                return true
+            }
+            guard attached === channel else {
+                return false
+            }
+
+            attached = nil
+            return true
+        }
+        guard closed else {
+            return
+        }
+
+        Basset.forgetAttachedTransports()
     }
 
     /// The same document the control plane answers a poll with, pushed down the
@@ -52,10 +71,6 @@ public enum AttachedBridge {
 
 final class AttachedTransport: Transport, @unchecked Sendable {
     private let channel: AttachedChannel
-
-    var kind: TransportType? {
-        .http2
-    }
 
     init(_ channel: AttachedChannel) {
         self.channel = channel
