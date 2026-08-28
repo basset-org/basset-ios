@@ -49,9 +49,11 @@ public enum Basset {
 
         let started = DeviceLoop(config: config)
         loop = started
-        lock.unlock()
 
+        // Started under the lock: startFromDisk restores what the last run persisted,
+        // and an attached document converging first would be replaced by it.
         started.start()
+        lock.unlock()
 
         // Outside the lock: replaying reaches converge, which takes it again, and it
         // is not reentrant — holding it here deadlocks the thread an app launches on.
@@ -201,19 +203,23 @@ final class DeviceLoop: @unchecked Sendable {
 
         record(.accepted(requestCount: response.requests.count))
 
-        // A machine on this desk owns what runs while it is attached, so a poll that
-        // still reaches the control plane must not converge its list over the top.
-        #if DEBUG
-        if AttachedBridge.channel != nil {
-            return
-        }
-        #endif
-
+        // Recorded even while attached: skipping it leaves the version stale, and the
+        // control plane then answers every poll at once rather than holding one.
         guarded.withLock {
             $0.ingestEndpoint = response.ingestEndpoint
             $0.stateVersion = response.stateVersion
         }
+
+        // A machine on this desk owns what runs while it is attached, and the check
+        // has to be taken with the convergence or an attachment landing between the
+        // two lets this response overwrite what that machine just asked for.
+        #if DEBUG
+        AttachedBridge.whileNothingIsAttached {
+            runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
+        }
+        #else
         runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
+        #endif
     }
 
     private func record(_ outcome: CtrlResponse.Outcome) {

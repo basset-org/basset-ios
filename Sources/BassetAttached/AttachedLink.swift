@@ -123,7 +123,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
                 AttachedBridge.open(self)
             case .cancelled,
                  .failed:
-                AttachedBridge.close()
+                AttachedBridge.close(self)
             default:
                 break
             }

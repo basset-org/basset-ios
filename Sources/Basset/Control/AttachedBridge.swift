@@ -28,7 +28,9 @@ public enum AttachedBridge {
     }
 
     /// Only the channel that is current may close it: an old connection cancelling
-    /// after a new one has opened would otherwise switch the live one off.
+    /// after a new one has opened would otherwise switch the live one off. Passing
+    /// nothing closes whatever is open and is for tearing the process down, never
+    /// for a connection reporting its own end.
     public static func close(_ channel: AttachedChannel? = nil) {
         let closed = lock.withLock { () -> Bool in
             guard let channel else {
@@ -49,13 +51,23 @@ public enum AttachedBridge {
         Basset.forgetAttachedTransports()
     }
 
-    /// The same document the control plane answers a poll with, pushed down the
-    /// socket instead. Decoded by the same decoder, so the two cannot disagree.
     public static func apply(_ desiredState: Data) throws {
         let state = try JSONDecoder().decode(DesiredState.self, from: desiredState)
         guard Basset.converge(to: state) else {
             lock.withLock { pending = desiredState }
             return
+        }
+    }
+
+    /// The same document the control plane answers a poll with, pushed down the
+    /// socket instead. Decoded by the same decoder, so the two cannot disagree.
+    static func whileNothingIsAttached(_ converge: () -> Void) {
+        lock.withLock {
+            guard attached == nil else {
+                return
+            }
+
+            converge()
         }
     }
 

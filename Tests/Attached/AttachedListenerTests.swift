@@ -63,7 +63,13 @@ struct AttachedBridgeOrderTests {
         var returned = false
 
         Thread.detachNewThread {
-            Basset.start(Config(apiKey: "bk_attached_test"))
+            // Loopback, never ctrl.basset.dev: the loop this starts polls forever and
+            // nothing stops it, so a default config would point a test suite at
+            // production for the life of the process.
+            Basset.start(Config(
+                apiKey: "bk_attached_test",
+                control: URL(string: "https://127.0.0.1:1")!
+            ))
             outcome.withLock { returned = true }
             settled.signal()
         }
