@@ -80,6 +80,7 @@ final class DeviceLoop: @unchecked Sendable {
         var userId: String?
         var lastCtrlResponse: CtrlResponse?
         var ingestEndpoint: String?
+        var stateVersion: String?
     }
 
     private let config: Config
@@ -143,18 +144,25 @@ final class DeviceLoop: @unchecked Sendable {
     }
 
     private func poll() async throws {
-        let user = guarded.withLock { $0.userId }
+        let (user, version) = guarded.withLock { ($0.userId, $0.stateVersion) }
 
         let response: DesiredState
         do {
-            response = try await control.client().requests(identity, userId: user)
+            response = try await control.client().requests(
+                identity,
+                userId: user,
+                stateVersion: version
+            )
         } catch {
             record(outcome(for: error))
             throw error
         }
 
         record(.accepted(requestCount: response.requests.count))
-        guarded.withLock { $0.ingestEndpoint = response.ingestEndpoint }
+        guarded.withLock {
+            $0.ingestEndpoint = response.ingestEndpoint
+            $0.stateVersion = response.stateVersion
+        }
         runner.converge(to: response.requests, ingestEndpoint: response.ingestEndpoint)
     }
 
