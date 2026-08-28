@@ -1,3 +1,4 @@
+@testable import Basset
 @testable import BassetAttached
 import Foundation
 import Testing
@@ -41,3 +42,31 @@ struct AttachedListenerTests {
     }
 }
 #endif
+
+@Suite(.serialized)
+struct AttachedBridgeOrderTests {
+    @Test func stateArrivingBeforeTheLoopIsNotLost() throws {
+        AttachedBridge.close()
+
+        // Nothing has started yet, so this cannot be applied when it arrives.
+        try AttachedBridge.apply(desiredState("cpu.thread.usage"))
+
+        // Applying it a second time once a loop exists is what start() does; here
+        // the point is only that the document was kept rather than dropped.
+        AttachedBridge.applyWhatArrivedBeforeTheLoop()
+    }
+
+    @Test func aDocumentThatIsNotDesiredStateIsRefused() {
+        #expect(throws: (any Error).self) {
+            try AttachedBridge.apply(Data("not a desired state".utf8))
+        }
+    }
+
+    private func desiredState(_ instrument: String) -> Data {
+        Data("""
+        {"ingest_endpoint":"attached","state_version":"v1","requests":[
+          {"request_id":1,"instruments":["\(instrument)"],"at_launch":false,
+           "expires_at":"2099-01-01T00:00:00Z","request_token":"attached"}]}
+        """.utf8)
+    }
+}

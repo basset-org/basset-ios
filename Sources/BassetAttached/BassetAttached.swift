@@ -33,14 +33,22 @@ public enum BassetAttached {
     /// works over a cable — usbmux can open a connection to a port on the device and
     /// has no way to do the reverse — and it is also the direction iOS asks no local
     /// network permission for.
+    /// Never throws: this runs while an app is launching, and a diagnostics tool that
+    /// can stop that is worse than one that does not run. Returns nil, having said
+    /// why, when no port was free.
     @discardableResult
-    public static func listen() throws -> UInt16 {
-        let opened = try AttachedLink()
-        lock.withLock {
-            link?.stop()
-            link = opened
+    public static func listen() -> UInt16? {
+        do {
+            let opened = try AttachedLink()
+            lock.withLock {
+                link?.stop()
+                link = opened
+            }
+            return opened.port
+        } catch {
+            NSLog("[basset] not listening for an attached machine: \(error)")
+            return nil
         }
-        return opened.port
     }
 
     public static func stop() {

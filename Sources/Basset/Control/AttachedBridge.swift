@@ -13,6 +13,10 @@ public protocol AttachedChannel: AnyObject, Sendable {
 public enum AttachedBridge {
     private static let lock: NSLock = .init()
     private nonisolated(unsafe) static var attached: AttachedChannel?
+    /// Held so the order of `Basset.start` and `BassetAttached.listen` does not
+    /// matter: state arriving before there is a loop to apply it to is applied once
+    /// there is one.
+    private nonisolated(unsafe) static var pending: Data?
 
     static var channel: AttachedChannel? {
         lock.withLock { attached }
@@ -30,7 +34,19 @@ public enum AttachedBridge {
     /// socket instead. Decoded by the same decoder, so the two cannot disagree.
     public static func apply(_ desiredState: Data) throws {
         let state = try JSONDecoder().decode(DesiredState.self, from: desiredState)
-        Basset.converge(to: state)
+        guard Basset.converge(to: state) else {
+            lock.withLock { pending = desiredState }
+            return
+        }
+    }
+
+    static func applyWhatArrivedBeforeTheLoop() {
+        guard let waiting = lock.withLock({ pending }) else {
+            return
+        }
+
+        lock.withLock { pending = nil }
+        try? apply(waiting)
     }
 }
 

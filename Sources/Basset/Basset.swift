@@ -50,6 +50,10 @@ public enum Basset {
         let started = DeviceLoop(config: config)
         loop = started
         started.start()
+
+        #if DEBUG
+        AttachedBridge.applyWhatArrivedBeforeTheLoop()
+        #endif
     }
 
     /// Associates this device with one of your users, so a request can target them by id.
@@ -74,11 +78,17 @@ public enum Basset {
     }
 
     #if DEBUG
-    static func converge(to state: DesiredState) {
+    @discardableResult
+    static func converge(to state: DesiredState) -> Bool {
         lock.lock()
         let running = loop
         lock.unlock()
-        running?.converge(to: state)
+        guard let running else {
+            return false
+        }
+
+        running.converge(to: state)
+        return true
     }
     #endif
 }
