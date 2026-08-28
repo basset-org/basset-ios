@@ -72,6 +72,15 @@ public enum Basset {
         lock.unlock()
         return running?.currentState()
     }
+
+    #if DEBUG
+    static func converge(to state: DesiredState) {
+        lock.lock()
+        let running = loop
+        lock.unlock()
+        running?.converge(to: state)
+    }
+    #endif
 }
 
 /// Launch, then poll, holding between calls — everything the device asks the control plane.
@@ -118,6 +127,13 @@ final class DeviceLoop: @unchecked Sendable {
             await follow()
         }
     }
+
+    #if DEBUG
+    func converge(to state: DesiredState) {
+        guarded.withLock { $0.ingestEndpoint = state.ingestEndpoint }
+        runner.converge(to: state.requests, ingestEndpoint: state.ingestEndpoint)
+    }
+    #endif
 
     /// No forced refresh here — the loop's next poll reads userId fresh on its own.
     func identify(userId: String?) {
@@ -255,6 +271,14 @@ struct IngestTransports: TransportOpener {
     }
 
     func open(request: BassetRequest, ingestEndpoint: String) -> Transport? {
+        #if DEBUG
+        // An attached machine dialled us; readings go back down that socket rather
+        // than out to an ingest host this build may not even be able to reach.
+        if let channel = AttachedBridge.channel {
+            return AttachedTransport(channel)
+        }
+        #endif
+
         guard
             let host = hostname(ingestEndpoint),
             let token = request.requestToken,

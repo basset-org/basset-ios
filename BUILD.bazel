@@ -42,6 +42,15 @@ swift_library(
     ],
 )
 
+swift_library(
+    name = "BassetAttached",
+    srcs = glob(["Sources/BassetAttached/**/*.swift"]),
+    module_name = "BassetAttached",
+    target_compatible_with = APPLE_ONLY,
+    visibility = ["//visibility:public"],
+    deps = [":Basset"],
+)
+
 # The wire vocabulary both halves speak: pure Swift, no Apple frameworks, so a
 # reader can decode a capture on any platform while the device library above
 # encodes against the same types rather than a second copy of them. An
@@ -74,6 +83,7 @@ swift_library(
     target_compatible_with = APPLE_ONLY,
     deps = [
         ":Basset",
+        ":BassetAttached",
         ":BassetECS",
     ],
 )
@@ -90,6 +100,7 @@ swift_test(
     target_compatible_with = APPLE_ONLY,
     deps = [
         ":Basset",
+        ":BassetAttached",
         ":BassetECS",
     ],
 )
