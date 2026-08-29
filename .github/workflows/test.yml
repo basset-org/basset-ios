@@ -80,7 +80,10 @@ jobs:
             exit 1
           fi
 
+      # Two virtual machines share one host; the races job runs these unconstrained.
       - name: Test on iOS ${{ steps.simulator.outputs.version }}
+        env:
+          TEST_RUNNER_BASSET_SHARED_SIMULATOR: "true"
         run: |
           xcodebuild test \
             -scheme Basset-Package \
