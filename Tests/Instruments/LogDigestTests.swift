@@ -25,7 +25,7 @@ struct LogDigestTests {
     @Test func messagesDifferingOnlyInATokenBecomeOneSubject() {
         let digest = LogDigest(
             [
-                record("checkout failed for jeff@example.com"),
+                record("checkout failed for dana@example.com"),
                 record("checkout failed for amy@example.com"),
             ],
             ceiling: 10
