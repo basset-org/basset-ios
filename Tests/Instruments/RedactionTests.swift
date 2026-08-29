@@ -75,7 +75,7 @@ struct RedactionTests {
     /// An app logging a secret as public leaks it verbatim unless the message is scrubbed.
     @Test func tokenShapedRunsLeaveALogMessage() {
         let cases = [
-            "login failed for jeff@example.com": "login failed for :id",
+            "login failed for dana@example.com": "login failed for :id",
             "charging card 4111111111111111 now": "charging card :id now",
             // A card number is often logged in its printed, space-grouped form.
             "charging card 4111 1111 1111 1111 now": "charging card :id now",
