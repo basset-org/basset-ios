@@ -1,6 +1,6 @@
 import Foundation
 
-/// A reading's own identity within this process, for `entityParent` to point back at. One
+/// A reading's own identity within this process, for `viewParent` to point back at. One
 /// counter shared by every instrument — never reset while the process runs — so two entities
 /// can never collide regardless of which instrument produced them or how many times it fired.
 /// Paired with `launchId`, which rides every reading automatically, for uniqueness across a
