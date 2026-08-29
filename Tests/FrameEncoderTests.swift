@@ -10,8 +10,7 @@ struct EncoderTests {
     private let headerWidth = 11
 
     @Test func entityCarriesItsKindIdAndCaptureTimestamp() {
-        var device = Entity(.device, capturedAt: 0x0102030405060708)
-        device.add(.fps(60))
+        let device = Entity(.device, capturedAt: 0x0102030405060708, components: [.fps(60)])
 
         let payload = encoder.encode(device)
 
@@ -25,9 +24,11 @@ struct EncoderTests {
     }
 
     @Test func everyComponentIsTaggedWithItsScalar() {
-        var device = Entity(.device, capturedAt: 0)
-        device.add(.memoryUsedBytes(4096))
-        device.add(.deviceModel("iPhone17,2"))
+        let device = Entity(
+            .device,
+            capturedAt: 0,
+            components: [.memoryUsedBytes(4096), .deviceModel("iPhone17,2")]
+        )
 
         let components = encoder.encode(device).dropFirst(headerWidth + 1)
 
@@ -69,9 +70,11 @@ struct EncoderTests {
     }
 
     @Test func boolRidesTheWireAsASingleByte() {
-        var session = Entity(.captureSession, capturedAt: 0)
-        session.add(.sessionRunning(true))
-        session.add(.sessionInterrupted(false))
+        let session = Entity(
+            .captureSession,
+            capturedAt: 0,
+            components: [.sessionRunning(true), .sessionInterrupted(false)]
+        )
 
         let components = Array(encoder.encode(session).dropFirst(headerWidth + 1))
 

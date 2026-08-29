@@ -145,7 +145,7 @@ struct PermissionStatusTests {
         var out = readings()
         PermissionStatus.write([], into: &out)
 
-        #expect(out.componentsWritten == [.mechanismStatus])
+        #expect(out.build().componentIDs == [.mechanismStatus])
     }
 
     @Test func eachFindingBecomesItsOwnReading() {
@@ -168,10 +168,10 @@ struct PermissionStatusTests {
             into: &out
         )
 
-        #expect(out.sealedSiblings().count == 1)
-        #expect(rendered(out.sealed(), .permissionSubject) == "camera")
-        #expect(rendered(out.sealed(), .authorizationStatus) == "denied")
-        #expect(rendered(out.sealedSiblings()[0], .usageDescriptionDeclared) == "false")
+        #expect(out.additionalEntities().count == 1)
+        #expect(rendered(out.build(), .permissionSubject) == "camera")
+        #expect(rendered(out.build(), .authorizationStatus) == "denied")
+        #expect(rendered(out.additionalEntities()[0], .usageDescriptionDeclared) == "false")
     }
 
     /// Status and usage-description share a row so a reader sees the pairing without a join.
@@ -189,15 +189,12 @@ struct PermissionStatusTests {
             into: &out
         )
 
-        #expect(rendered(out.sealed(), .authorizationStatus) == "notDetermined")
-        #expect(rendered(out.sealed(), .usageDescriptionDeclared) == "false")
+        #expect(rendered(out.build(), .authorizationStatus) == "notDetermined")
+        #expect(rendered(out.build(), .usageDescriptionDeclared) == "false")
     }
 
     private func readings() -> Readings {
-        Readings(
-            entity: .permission,
-            instrumentName: "permissions.status"
-        )
+        Readings(.permission)
     }
 
     private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {

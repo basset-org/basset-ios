@@ -139,9 +139,9 @@ struct ViewHierarchyWalkTests {
     }
 
     private func rows(at point: CGPoint, in root: UIView, parent: UInt32 = 0) -> [Entity] {
-        var out = Readings(entity: .viewHierarchy, instrumentName: InstrumentID.viewHierarchy.name)
+        var out = Readings(.viewHierarchy)
         ViewHierarchy.writeMatches(at: point, in: root, parent: parent, into: &out)
-        return [out.sealed()] + out.sealedSiblings()
+        return [out.build()] + out.additionalEntities()
     }
 
     private func value(_ id: Component.ID, in entity: Entity) -> String? {

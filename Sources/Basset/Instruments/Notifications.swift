@@ -39,9 +39,9 @@ final class NotificationSettings: Streamable, PlainInstrument {
         let withheld = settings.switches.filter { $0.state != "enabled" }
         out.put(.occurrenceCount(UInt64(withheld.count)))
         for setting in withheld {
-            out.also(out.entity) { sibling in
-                sibling.put(.notificationSetting(setting.name))
-                sibling.put(.settingState(setting.state))
+            out.also(out.entity) { additional in
+                additional.put(.notificationSetting(setting.name))
+                additional.put(.settingState(setting.state))
             }
         }
     }
@@ -78,7 +78,7 @@ final class NotificationSettings: Streamable, PlainInstrument {
 
     func observe(_ context: Context) {
         read { settings in
-            context.emit { out in
+            context.emit(.notificationSetting) { out in
                 Self.write(settings, into: &out)
             }
         }

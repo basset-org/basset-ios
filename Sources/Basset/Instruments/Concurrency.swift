@@ -169,7 +169,7 @@ final class MainThreadHang: Streamable, Configurable {
                     now: sampledAt
                 ) {
                     saidSuppressed = sampledAt
-                    context.emit { out in
+                    context.emit(.mainThread) { out in
                         out.put(.debuggerAttached(true))
                         out.put(
                             .mechanismStatus(
@@ -201,7 +201,7 @@ final class MainThreadHang: Streamable, Configurable {
                     // hang's own reading against the stack it caused without a time-window guess.
                     let id = EntityIdentity.next()
                     faultId = id
-                    context.emit { out in
+                    context.emit(.mainThread) { out in
                         out.put(.hangNanoseconds(nanoseconds))
                         out.put(.hangResolved(false))
                         out.put(.runLoopTurnCount(turns))
@@ -210,7 +210,7 @@ final class MainThreadHang: Streamable, Configurable {
                     // While still stuck — anything else enabled here reads the frozen process.
                     context.fault(.hang, id)
                 case .ended(let nanoseconds, let turns):
-                    context.emit { out in
+                    context.emit(.mainThread) { out in
                         out.put(.hangNanoseconds(nanoseconds))
                         out.put(.hangResolved(true))
                         out.put(.runLoopTurnCount(turns))
@@ -251,7 +251,7 @@ final class QueueLatency: Streamable, PlainInstrument, @unchecked Sendable {
     init() {}
 
     func observe(_ context: Context) {
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(1), into: .dispatchQueue) { [weak self] out, window in
             guard let self else {
                 return
             }
@@ -339,10 +339,10 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
         // Count rides the first row, not its own row, so reading one entity still learns the total.
         put(first, of: samples.count, into: &out)
         for sample in samples.dropFirst(1).prefix(ceiling - 1) {
-            out.also(out.entity) { sibling in put(
+            out.also(out.entity) { additional in put(
                 sample,
                 of: samples.count,
-                into: &sibling
+                into: &additional
             ) }
         }
 
@@ -350,9 +350,9 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
             return
         }
 
-        out.also(out.entity) { sibling in
-            sibling.put(.occurrenceCount(UInt64(samples.count)))
-            sibling.put(.mechanismStatus("truncated: \(samples.count - ceiling) more"))
+        out.also(out.entity) { additional in
+            additional.put(.occurrenceCount(UInt64(samples.count)))
+            additional.put(.mechanismStatus("truncated: \(samples.count - ceiling) more"))
         }
     }
 
@@ -380,7 +380,9 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
         out.put(.threadRequestedQos(sample.requestedQos))
     }
 
-    func reading(_ out: inout Readings) {
+    func reading() -> Readings {
+        var out = Readings(.thread)
         Self.write(ThreadInventory.read(), into: &out)
+        return out
     }
 }

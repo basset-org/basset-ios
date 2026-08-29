@@ -51,7 +51,7 @@ final class DelegateSilence: Streamable, PlainInstrument, LoadTimeInstall {
 
     func observe(_ context: Context) {
         guard let manager = objc_getClass(Self.managerClassName) as? AnyClass else {
-            context.emit { out in
+            context.emit(.locationDelegate) { out in
                 out.put(.callbackImplemented(false))
                 out.put(.mechanismStatus("unavailable: this app does not use location"))
             }
@@ -79,7 +79,7 @@ final class DelegateSilence: Streamable, PlainInstrument, LoadTimeInstall {
             $0.startedAt = now
             $0.delivered = 0
         }
-        context.emit { out in
+        context.emit(.locationDelegate) { out in
             out.put(.callbackImplemented(true))
             out.put(.accuracyClass(Self.accuracy(of: receiver)))
             out.put(.mechanismStatus("updates requested"))
@@ -88,7 +88,7 @@ final class DelegateSilence: Streamable, PlainInstrument, LoadTimeInstall {
 
     private func watch(_ delegateClass: AnyClass, _ context: Context) {
         guard class_getInstanceMethod(delegateClass, Self.didUpdate) != nil else {
-            context.emit { out in
+            context.emit(.locationDelegate) { out in
                 out.put(.callbackImplemented(false))
                 out.put(.delegateClass(NSStringFromClass(delegateClass)))
                 out.put(
@@ -119,7 +119,7 @@ final class DelegateSilence: Streamable, PlainInstrument, LoadTimeInstall {
             return (clock.now().nanoseconds &- startedAt.nanoseconds, state.delivered)
         }
 
-        context.emit { out in
+        context.emit(.locationDelegate) { out in
             out.put(.callbackImplemented(true))
             out.put(.delegateClass(NSStringFromClass(delegateClass)))
             out.put(.callbackCount(count))

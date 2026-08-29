@@ -25,7 +25,7 @@ public extension Instrument {
 
 /// What the runner dispatches to — plain and `Configurable` instruments both conform.
 public protocol Snapshotable: Instrument {
-    func reading(_ out: inout Readings)
+    func reading() -> Readings
 }
 
 public protocol Streamable: Instrument {
@@ -34,7 +34,7 @@ public protocol Streamable: Instrument {
 }
 
 public protocol Faultable: Instrument {
-    func fault(_ kind: FaultKind, _ out: inout Readings)
+    func fault(_ kind: FaultKind) -> Readings
 }
 
 /// `init()` lives here, not on `Instrument`, so a `Configurable` instrument need not have one.
@@ -63,7 +63,6 @@ public struct Registration: @unchecked Sendable {
     public let id: InstrumentID
     public let name: String
     public let domain: Domain
-    public let entity: Entity.ID
     public let availability: Availability
     public let delivery: Delivery
     public let tallySlots: Int
@@ -81,7 +80,6 @@ public struct Registration: @unchecked Sendable {
 
     private init<I: Instrument>(
         _ type: I.Type,
-        entity: Entity.ID,
         delivery: Delivery,
         defaultConfigJSON: Data? = nil,
         build: @escaping @Sendable (Data?) -> (instrument: any Instrument, configRefused: Bool)
@@ -89,7 +87,6 @@ public struct Registration: @unchecked Sendable {
         self.id = I.id
         self.name = I.name
         self.domain = I.domain
-        self.entity = entity
         self.availability = I.id.availability
         self.delivery = delivery
         self.tallySlots = I.tallySlots
@@ -103,25 +100,13 @@ public struct Registration: @unchecked Sendable {
         self.defaultConfigJSON = defaultConfigJSON
     }
 
-    public static func reading(
-        _ type: (some Snapshotable & PlainInstrument).Type,
-        entity: Entity.ID
-    ) -> Registration {
-        Registration(
-            type,
-            entity: entity,
-            delivery: .reading,
-            build: { data in (type.init(), data != nil) }
-        )
+    public static func reading(_ type: (some Snapshotable & PlainInstrument).Type) -> Registration {
+        Registration(type, delivery: .reading, build: { data in (type.init(), data != nil) })
     }
 
-    public static func reading<I: Snapshotable & Configurable>(
-        _ type: I.Type,
-        entity: Entity.ID
-    ) -> Registration {
+    public static func reading<I: Snapshotable & Configurable>(_ type: I.Type) -> Registration {
         Registration(
             type,
-            entity: entity,
             delivery: .reading,
             defaultConfigJSON: try? JSONEncoder().encode(I.defaultConfig),
             build: { data in
@@ -131,25 +116,13 @@ public struct Registration: @unchecked Sendable {
         )
     }
 
-    public static func stream(
-        _ type: (some Streamable & PlainInstrument).Type,
-        entity: Entity.ID
-    ) -> Registration {
-        Registration(
-            type,
-            entity: entity,
-            delivery: .stream,
-            build: { data in (type.init(), data != nil) }
-        )
+    public static func stream(_ type: (some Streamable & PlainInstrument).Type) -> Registration {
+        Registration(type, delivery: .stream, build: { data in (type.init(), data != nil) })
     }
 
-    public static func stream<I: Streamable & Configurable>(
-        _ type: I.Type,
-        entity: Entity.ID
-    ) -> Registration {
+    public static func stream<I: Streamable & Configurable>(_ type: I.Type) -> Registration {
         Registration(
             type,
-            entity: entity,
             delivery: .stream,
             defaultConfigJSON: try? JSONEncoder().encode(I.defaultConfig),
             build: { data in
@@ -159,25 +132,13 @@ public struct Registration: @unchecked Sendable {
         )
     }
 
-    public static func fault(
-        _ type: (some Faultable & PlainInstrument).Type,
-        entity: Entity.ID
-    ) -> Registration {
-        Registration(
-            type,
-            entity: entity,
-            delivery: .fault,
-            build: { data in (type.init(), data != nil) }
-        )
+    public static func fault(_ type: (some Faultable & PlainInstrument).Type) -> Registration {
+        Registration(type, delivery: .fault, build: { data in (type.init(), data != nil) })
     }
 
-    public static func fault<I: Faultable & Configurable>(
-        _ type: I.Type,
-        entity: Entity.ID
-    ) -> Registration {
+    public static func fault<I: Faultable & Configurable>(_ type: I.Type) -> Registration {
         Registration(
             type,
-            entity: entity,
             delivery: .fault,
             defaultConfigJSON: try? JSONEncoder().encode(I.defaultConfig),
             build: { data in

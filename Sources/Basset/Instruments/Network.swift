@@ -84,7 +84,7 @@ final class PathTransitions: Streamable, PlainInstrument, @unchecked Sendable {
                 return
             }
 
-            context.emit { out in
+            context.emit(.networkPath) { out in
                 out.put(.interfaceKind(now.interface))
                 out.put(.pathSatisfied(now.satisfied))
                 out.put(.expensiveInterface(now.expensive))
@@ -125,7 +125,7 @@ final class SessionConfiguration: Streamable, PlainInstrument {
         into context: Context
     ) {
         let configuration = session.configuration
-        context.emit { out in
+        context.emit(.networkSession) { out in
             out.put(.instanceId(instance))
             out
                 .put(.requestTimeoutSeconds(Float(configuration
@@ -372,7 +372,7 @@ final class TaskMetrics: Streamable, PlainInstrument, LoadTimeInstall {
             return
         }
 
-        context.emit { out in
+        context.emit(.networkTask) { out in
             out.put(.instanceId(instance))
             out.put(.detail(path))
             out.put(.requestURL(Redaction.url(task.originalRequest?.url)))
@@ -412,7 +412,7 @@ final class TaskMetrics: Streamable, PlainInstrument, LoadTimeInstall {
         into context: Context
     ) {
         let failure = error as NSError
-        context.emit { out in
+        context.emit(.networkTask) { out in
             out.put(.instanceId(instance))
             out.put(.requestURL(Redaction.url(task.originalRequest?.url)))
             out.put(.errorDomain(failure.domain))
@@ -504,7 +504,7 @@ final class TaskMetrics: Streamable, PlainInstrument, LoadTimeInstall {
         // `detail` is left alone: on every other reading here it names which of
         // the two delegates a callback landed on, and a status carrying one
         // would read as a request that had been made.
-        context.emit { out in
+        context.emit(.networkTask) { out in
             out.put(
                 .mechanismStatus(
                     "\(NSStringFromClass(delegateClass)): "
@@ -722,24 +722,26 @@ final class TransportSecurity: Snapshotable, PlainInstrument {
         // Sorted so two captures of one build list exceptions in the same order.
         for name in domains.keys.sorted() {
             let exception = domains[name] as? [String: Any] ?? [:]
-            out.also(out.entity) { sibling in
-                sibling.put(.exceptionDomain(name))
-                sibling.put(
+            out.also(out.entity) { additional in
+                additional.put(.exceptionDomain(name))
+                additional.put(
                     .insecureLoadsAllowed(
                         exception["NSExceptionAllowsInsecureHTTPLoads"] as? Bool ?? false
                     )
                 )
                 if let minimum = exception["NSExceptionMinimumTLSVersion"] as? String {
-                    sibling.put(.minimumTLSVersion(minimum))
+                    additional.put(.minimumTLSVersion(minimum))
                 }
             }
         }
     }
 
-    func reading(_ out: inout Readings) {
+    func reading() -> Readings {
+        var out = Readings(.transportSecurity)
         Self.write(
             Bundle.main.object(forInfoDictionaryKey: Self.key) as? [String: Any],
             into: &out
         )
+        return out
     }
 }

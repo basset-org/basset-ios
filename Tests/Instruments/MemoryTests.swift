@@ -40,18 +40,15 @@ struct MemoryLedgerTests {
         var footprintOnly = readings()
         MemoryLedger(usedBytes: 400, availableBytes: nil).write(into: &footprintOnly)
 
-        #expect(complete.componentsWritten == [
+        #expect(complete.build().componentIDs == [
             .memoryUsedBytes,
             .memoryAvailableBytes,
             .memoryLimitBytes,
         ])
-        #expect(footprintOnly.componentsWritten == [.memoryUsedBytes])
+        #expect(footprintOnly.build().componentIDs == [.memoryUsedBytes])
     }
 
     private func readings() -> Readings {
-        Readings(
-            entity: .process,
-            instrumentName: "memory.footprint"
-        )
+        Readings(.process)
     }
 }

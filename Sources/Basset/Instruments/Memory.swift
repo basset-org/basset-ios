@@ -10,8 +10,10 @@ final class MemoryFootprint: Snapshotable, PlainInstrument {
 
     init() {}
 
-    func reading(_ out: inout Readings) {
+    func reading() -> Readings {
+        var out = Readings(.process)
         MemoryLedger.read()?.write(into: &out)
+        return out
     }
 }
 
@@ -75,7 +77,7 @@ final class MemoryPressure: Streamable, PlainInstrument {
         // Critical only: a thread walk on every warning would cost more than it explains.
         let faultId: UInt32? = level == "critical" ? EntityIdentity.next() : nil
 
-        context.emit { out in
+        context.emit(.memoryPressure) { out in
             out.put(.memoryPressureLevel(level))
             out.put(.memoryPressureScope(scope))
             MemoryLedger.read()?.write(into: &out)

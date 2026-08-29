@@ -57,7 +57,7 @@ final class CoreDataChanges: Streamable, PlainInstrument {
             self?.count(note)
         }
 
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(1), into: .managedObjectContext) { [weak self] out, window in
             guard let self, let taken = self.take() else {
                 return
             }
@@ -230,7 +230,7 @@ final class CoreDataSave: Streamable, PlainInstrument {
             (change, change.count(in: note.userInfo))
         }
 
-        context.emit { out in
+        context.emit(.managedObjectContext) { out in
             for (change, count) in counts {
                 switch change {
                 case .inserted: out.put(.insertedCount(UInt32(count)))

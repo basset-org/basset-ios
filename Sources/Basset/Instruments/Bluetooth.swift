@@ -49,7 +49,7 @@ final class CentralState: Streamable, PlainInstrument, LoadTimeInstall {
 
     func observe(_ context: Context) {
         guard let manager = objc_getClass(Self.managerClassName) as? AnyClass else {
-            context.emit { out in
+            context.emit(.bluetoothCentral) { out in
                 out.put(.bluetoothState("unknown"))
                 out.put(.mechanismStatus("unavailable: CoreBluetooth is not loaded"))
             }
@@ -69,7 +69,7 @@ final class CentralState: Streamable, PlainInstrument, LoadTimeInstall {
 
     private func watch(_ delegateClass: AnyClass, _ context: Context) {
         guard class_getInstanceMethod(delegateClass, Self.didUpdateState) != nil else {
-            context.emit { out in
+            context.emit(.bluetoothCentral) { out in
                 out.put(.bluetoothState("unknown"))
                 out.put(.delegateClass(NSStringFromClass(delegateClass)))
                 out.put(.callbackImplemented(false))
@@ -95,7 +95,7 @@ final class CentralState: Streamable, PlainInstrument, LoadTimeInstall {
         of delegateClass: AnyClass,
         into context: Context
     ) {
-        context.emit { out in
+        context.emit(.bluetoothCentral) { out in
             out.put(.bluetoothState(Self.state(of: central)))
             out.put(.delegateClass(NSStringFromClass(delegateClass)))
             out.put(.callbackImplemented(true))

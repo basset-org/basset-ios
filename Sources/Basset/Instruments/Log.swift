@@ -180,16 +180,16 @@ final class LogFaults: Streamable, Configurable {
                 put(subject, over: window, into: &out)
                 continue
             }
-            out.also(out.entity) { sibling in put(subject, over: window, into: &sibling) }
+            out.also(out.entity) { additional in put(subject, over: window, into: &additional) }
         }
 
         guard digest.omitted > 0 else {
             return
         }
 
-        out.also(out.entity) { sibling in
-            sibling.put(.windowNanoseconds(window.nanoseconds))
-            sibling.put(.mechanismStatus("truncated: \(digest.omitted) more"))
+        out.also(out.entity) { additional in
+            additional.put(.windowNanoseconds(window.nanoseconds))
+            additional.put(.mechanismStatus("truncated: \(digest.omitted) more"))
         }
     }
 
@@ -198,7 +198,7 @@ final class LogFaults: Streamable, Configurable {
         over window: Context.FlushWindow,
         into out: inout Readings
     ) {
-        // On every row, not only the first — a sibling count needs it to divide by.
+        // On every row, not only the first — an additional-entity count needs it to divide by.
         out.put(.windowNanoseconds(window.nanoseconds))
         out.put(.logSubsystem(subject.subsystem))
         out.put(.logCategory(subject.category))
@@ -209,7 +209,7 @@ final class LogFaults: Streamable, Configurable {
 
     func observe(_ context: Context) {
         // 15s: an OSLogStore drain measured ~10s on device regardless of what's read.
-        context.flush(every: .seconds(15)) { [reader] out, window in
+        context.flush(every: .seconds(15), into: .logRecord) { [reader] out, window in
             switch reader.drain() {
             case .unavailable(let reason):
                 out.put(.windowNanoseconds(window.nanoseconds))
@@ -225,9 +225,9 @@ final class LogFaults: Streamable, Configurable {
                     return
                 }
 
-                out.also(out.entity) { sibling in
-                    sibling.put(.windowNanoseconds(window.nanoseconds))
-                    sibling.put(
+                out.also(out.entity) { additional in
+                    additional.put(.windowNanoseconds(window.nanoseconds))
+                    additional.put(
                         .mechanismStatus("read stopped on its ceiling; more unread")
                     )
                 }
@@ -261,17 +261,17 @@ final class LogSubsystems: Streamable, Configurable {
                 put(source, over: window, into: &out)
                 continue
             }
-            out.also(out.entity) { sibling in put(source, over: window, into: &sibling) }
+            out.also(out.entity) { additional in put(source, over: window, into: &additional) }
         }
 
         guard traffic.omitted > 0 else {
             return
         }
 
-        out.also(out.entity) { sibling in
-            sibling.put(.windowNanoseconds(window.nanoseconds))
-            sibling.put(.occurrenceCount(traffic.total))
-            sibling.put(.mechanismStatus("truncated: \(traffic.omitted) more"))
+        out.also(out.entity) { additional in
+            additional.put(.windowNanoseconds(window.nanoseconds))
+            additional.put(.occurrenceCount(traffic.total))
+            additional.put(.mechanismStatus("truncated: \(traffic.omitted) more"))
         }
     }
 
@@ -291,7 +291,7 @@ final class LogSubsystems: Streamable, Configurable {
     }
 
     func observe(_ context: Context) {
-        context.flush(every: .seconds(15)) { [reader] out, window in
+        context.flush(every: .seconds(15), into: .logRecord) { [reader] out, window in
             switch reader.drain() {
             case .unavailable(let reason):
                 out.put(.windowNanoseconds(window.nanoseconds))
@@ -308,9 +308,9 @@ final class LogSubsystems: Streamable, Configurable {
                 }
 
                 // A cut read describes the start of the window, not the whole thing.
-                out.also(out.entity) { sibling in
-                    sibling.put(.windowNanoseconds(window.nanoseconds))
-                    sibling.put(
+                out.also(out.entity) { additional in
+                    additional.put(.windowNanoseconds(window.nanoseconds))
+                    additional.put(
                         .mechanismStatus("read stopped on its ceiling; more unread")
                     )
                 }

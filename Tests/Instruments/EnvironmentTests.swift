@@ -17,9 +17,9 @@ struct AccessibilityFlagsTests {
             into: &out
         )
 
-        #expect(rendered(out.sealed(), .settingName) == "reduceMotion")
-        #expect(out.sealedSiblings().count == 1)
-        #expect(rendered(out.sealedSiblings()[0], .settingName) == "grayscale")
+        #expect(rendered(out.build(), .settingName) == "reduceMotion")
+        #expect(out.additionalEntities().count == 1)
+        #expect(rendered(out.additionalEntities()[0], .settingName) == "grayscale")
     }
 
     /// Nothing turned on is itself a finding — an empty reading looks like a failed instrument.
@@ -30,9 +30,9 @@ struct AccessibilityFlagsTests {
             into: &out
         )
 
-        #expect(rendered(out.sealed(), .occurrenceCount) == "0")
-        #expect(out.componentsWritten.contains(.mechanismStatus))
-        #expect(out.sealedSiblings().isEmpty)
+        #expect(rendered(out.build(), .occurrenceCount) == "0")
+        #expect(out.build().componentIDs.contains(.mechanismStatus))
+        #expect(out.additionalEntities().isEmpty)
     }
 
     @Test func theCountIsOfWhatIsOnRatherThanOfWhatWasChecked() {
@@ -42,14 +42,11 @@ struct AccessibilityFlagsTests {
             into: &out
         )
 
-        #expect(rendered(out.sealed(), .occurrenceCount) == "3")
+        #expect(rendered(out.build(), .occurrenceCount) == "3")
     }
 
     private func readings() -> Readings {
-        Readings(
-            entity: .deviceSetting,
-            instrumentName: "environment.accessibility"
-        )
+        Readings(.deviceSetting)
     }
 
     private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {
@@ -63,8 +60,8 @@ struct LocaleSettingsTests {
         var out = readings()
         LocaleSettings.write(Locale(identifier: "ja_JP"), into: &out)
 
-        #expect(rendered(out.sealed(), .languageCode) == "ja")
-        #expect(rendered(out.sealed(), .regionCode) == "JP")
+        #expect(rendered(out.build(), .languageCode) == "ja")
+        #expect(rendered(out.build(), .regionCode) == "JP")
     }
 
     /// Follows the language, not the region — likeliest setting to break an untested layout.
@@ -75,8 +72,8 @@ struct LocaleSettingsTests {
         var english = readings()
         LocaleSettings.write(Locale(identifier: "en_US"), into: &english)
 
-        #expect(rendered(arabic.sealed(), .layoutDirection) == "rightToLeft")
-        #expect(rendered(english.sealed(), .layoutDirection) == "leftToRight")
+        #expect(rendered(arabic.build(), .layoutDirection) == "rightToLeft")
+        #expect(rendered(english.build(), .layoutDirection) == "leftToRight")
     }
 
     /// Punjabi's script decides direction — code alone reads `leftToRight` either way.
@@ -87,15 +84,15 @@ struct LocaleSettingsTests {
         var gurmukhiScript = readings()
         LocaleSettings.write(Locale(identifier: "pa_Guru_IN"), into: &gurmukhiScript)
 
-        #expect(rendered(arabicScript.sealed(), .layoutDirection) == "rightToLeft")
-        #expect(rendered(gurmukhiScript.sealed(), .layoutDirection) == "leftToRight")
+        #expect(rendered(arabicScript.build(), .layoutDirection) == "rightToLeft")
+        #expect(rendered(gurmukhiScript.build(), .layoutDirection) == "leftToRight")
     }
 
     @Test func aNonGregorianCalendarIsReportedAsItself() {
         var out = readings()
         LocaleSettings.write(Locale(identifier: "fa_IR@calendar=persian"), into: &out)
 
-        #expect(rendered(out.sealed(), .calendarIdentifier) == "persian")
+        #expect(rendered(out.build(), .calendarIdentifier) == "persian")
     }
 
     @Test func theMeasurementSystemFollowsTheRegion() {
@@ -105,8 +102,8 @@ struct LocaleSettingsTests {
         var american = readings()
         LocaleSettings.write(Locale(identifier: "en_US"), into: &american)
 
-        #expect(rendered(french.sealed(), .usesMetricSystem) == "true")
-        #expect(rendered(american.sealed(), .usesMetricSystem) == "false")
+        #expect(rendered(french.build(), .usesMetricSystem) == "true")
+        #expect(rendered(american.build(), .usesMetricSystem) == "false")
     }
 
     /// Reads the locale's time format, not region — the user's override is what the app sees.
@@ -117,15 +114,12 @@ struct LocaleSettingsTests {
         var american = readings()
         LocaleSettings.write(Locale(identifier: "en_US"), into: &american)
 
-        #expect(rendered(british.sealed(), .uses24HourTime) == "true")
-        #expect(rendered(american.sealed(), .uses24HourTime) == "false")
+        #expect(rendered(british.build(), .uses24HourTime) == "true")
+        #expect(rendered(american.build(), .uses24HourTime) == "false")
     }
 
     private func readings() -> Readings {
-        Readings(
-            entity: .deviceSetting,
-            instrumentName: "environment.locale"
-        )
+        Readings(.deviceSetting)
     }
 
     private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {

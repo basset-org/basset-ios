@@ -164,8 +164,8 @@ struct ChangeGatedEmissionTests {
         nonisolated(unsafe) var sent = [Entity]()
         let context = context { sent.append($0) }
 
-        context.emitIfChanged { $0.put(.appState("foreground")) }
-        context.emitIfChanged { $0.put(.appState("foreground")) }
+        context.emitIfChanged(.appLifecycle) { $0.put(.appState("foreground")) }
+        context.emitIfChanged(.appLifecycle) { $0.put(.appState("foreground")) }
 
         #expect(sent.count == 1)
     }
@@ -174,9 +174,9 @@ struct ChangeGatedEmissionTests {
         nonisolated(unsafe) var sent = [Entity]()
         let context = context { sent.append($0) }
 
-        context.emitIfChanged { $0.put(.appState("foreground")) }
-        context.emitIfChanged { $0.put(.appState("background")) }
-        context.emitIfChanged { $0.put(.appState("foreground")) }
+        context.emitIfChanged(.appLifecycle) { $0.put(.appState("foreground")) }
+        context.emitIfChanged(.appLifecycle) { $0.put(.appState("background")) }
+        context.emitIfChanged(.appLifecycle) { $0.put(.appState("foreground")) }
 
         #expect(sent.count == 3, "returning to a state is a change, not a repeat")
     }
@@ -186,9 +186,9 @@ struct ChangeGatedEmissionTests {
         nonisolated(unsafe) var sent = [Entity]()
         let context = context { sent.append($0) }
 
-        context.emitIfChanged(of: "camera-a") { $0.put(.appState("running")) }
-        context.emitIfChanged(of: "camera-b") { $0.put(.appState("running")) }
-        context.emitIfChanged(of: "camera-a") { $0.put(.appState("running")) }
+        context.emitIfChanged(.appLifecycle, of: "camera-a") { $0.put(.appState("running")) }
+        context.emitIfChanged(.appLifecycle, of: "camera-b") { $0.put(.appState("running")) }
+        context.emitIfChanged(.appLifecycle, of: "camera-a") { $0.put(.appState("running")) }
 
         #expect(sent.count == 2, "each subject is judged against its own last reading")
     }
@@ -197,9 +197,9 @@ struct ChangeGatedEmissionTests {
         nonisolated(unsafe) var sent = [Entity]()
         let context = context { sent.append($0) }
 
-        context.emitIfChanged { $0.put(.appState("foreground")) }
+        context.emitIfChanged(.appLifecycle) { $0.put(.appState("foreground")) }
         context.teardown()
-        context.emitIfChanged { $0.put(.appState("foreground")) }
+        context.emitIfChanged(.appLifecycle) { $0.put(.appState("foreground")) }
 
         #expect(
             sent.count == 2,
@@ -208,12 +208,9 @@ struct ChangeGatedEmissionTests {
     }
 
     @Test func twoReadingsSayingTheSameThingShareAFingerprint() {
-        var first = Entity(.appLifecycle, capturedAt: 1)
-        first.add(.appState("foreground"))
-        var second = Entity(.appLifecycle, capturedAt: 999)
-        second.add(.appState("foreground"))
-        var different = Entity(.appLifecycle, capturedAt: 1)
-        different.add(.appState("background"))
+        let first = Entity(.appLifecycle, capturedAt: 1, components: [.appState("foreground")])
+        let second = Entity(.appLifecycle, capturedAt: 999, components: [.appState("foreground")])
+        let different = Entity(.appLifecycle, capturedAt: 1, components: [.appState("background")])
 
         #expect(
             first.fingerprint == second.fingerprint,
@@ -226,8 +223,6 @@ struct ChangeGatedEmissionTests {
         let status = AtomicStatus()
         status.activate()
         return Context(
-            instrumentName: "lifecycle.app.state",
-            defaultEntity: .appLifecycle,
             status: status,
             swizzle: Swizzle(),
             registries: Registries(),
@@ -951,8 +946,6 @@ struct RuntimeClassHookTests {
         let status = AtomicStatus()
         status.activate()
         let context = Context(
-            instrumentName: "test",
-            defaultEntity: .appLifecycle,
             status: status,
             swizzle: hooks.swizzle,
             registries: registries,

@@ -71,15 +71,12 @@ struct TransactionPhasesTests {
     }
 
     @Test func onlyThePhasesThatHappenedAreWritten() {
-        var out = Readings(
-            entity: .networkTask,
-            instrumentName: "network.urlSession.taskMetrics"
-        )
+        var out = Readings(.networkTask)
         phases(dns: 0 ..< 0.05, connect: 0.05 ..< 0.1, server: 0.1 ..< 0.2)
             .write(into: &out)
 
-        #expect(out.componentsWritten.contains(.dnsNanoseconds))
-        #expect(out.componentsWritten.contains(.responseNanoseconds) == false)
+        #expect(out.build().componentIDs.contains(.dnsNanoseconds))
+        #expect(out.build().componentIDs.contains(.responseNanoseconds) == false)
     }
 
     /// `Date` is a `Double` of seconds — nanosecond conversion lands a few tens of ns off.

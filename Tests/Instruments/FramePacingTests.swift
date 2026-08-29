@@ -20,9 +20,9 @@ struct FramePacingTests {
         var out = readings()
         FramePacing.write(tally, over: window(), into: &out)
 
-        #expect(rendered(out.sealed(), .occurrenceCount) == "120")
-        #expect(out.componentsWritten.contains(.deadlineMissCount) == false)
-        #expect(out.componentsWritten.contains(.deadlineOverrunNanoseconds) == false)
+        #expect(rendered(out.build(), .occurrenceCount) == "120")
+        #expect(out.build().componentIDs.contains(.deadlineMissCount) == false)
+        #expect(out.build().componentIDs.contains(.deadlineOverrunNanoseconds) == false)
     }
 
     @Test func missesArriveWithTheWorstOverrunThatCausedThem() {
@@ -34,8 +34,8 @@ struct FramePacingTests {
         var out = readings()
         FramePacing.write(tally, over: window(), into: &out)
 
-        #expect(rendered(out.sealed(), .deadlineMissCount) == "9")
-        #expect(rendered(out.sealed(), .deadlineOverrunNanoseconds) == "4000000")
+        #expect(rendered(out.build(), .deadlineMissCount) == "9")
+        #expect(rendered(out.build(), .deadlineOverrunNanoseconds) == "4000000")
     }
 
     /// The window rides along so a miss count can be read as a rate, not just a raw number.
@@ -46,7 +46,7 @@ struct FramePacingTests {
         var out = readings()
         FramePacing.write(tally, over: window(nanoseconds: 2000000000), into: &out)
 
-        #expect(rendered(out.sealed(), .windowNanoseconds) == "2000000000")
+        #expect(rendered(out.build(), .windowNanoseconds) == "2000000000")
     }
 
     @Test func commitTimeIsReportedAsBothTheTotalAndTheWorstOne() {
@@ -58,8 +58,8 @@ struct FramePacingTests {
         var out = readings()
         FramePacing.write(tally, over: window(), into: &out)
 
-        #expect(rendered(out.sealed(), .totalNanoseconds) == "25000000")
-        #expect(rendered(out.sealed(), .peakNanoseconds) == "7000000")
+        #expect(rendered(out.build(), .totalNanoseconds) == "25000000")
+        #expect(rendered(out.build(), .peakNanoseconds) == "7000000")
     }
 
     /// Draining makes the next window independent — an unemptied tally repeats the same frames.
@@ -74,7 +74,7 @@ struct FramePacingTests {
         var second = readings()
         FramePacing.write(tally, over: window(), into: &second)
 
-        #expect(rendered(first.sealed(), .occurrenceCount) == "30")
+        #expect(rendered(first.build(), .occurrenceCount) == "30")
         #expect(second.isEmpty)
     }
 
@@ -83,10 +83,7 @@ struct FramePacingTests {
     }
 
     private func readings() -> Readings {
-        Readings(
-            entity: .displayUpdate,
-            instrumentName: "render.frame.pacing"
-        )
+        Readings(.displayUpdate)
     }
 
     private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {

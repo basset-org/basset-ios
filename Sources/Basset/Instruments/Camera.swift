@@ -446,7 +446,7 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
         }
 
         // Emitted every interval, even empty — silence and a starved camera read the same.
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(1), into: .videoFrames) { [weak self] out, window in
             guard let self, self.isWatchingSomething, self.isCarrying else {
                 // Drained anyway: what a stopped camera counted must not surface in the
                 // window after it starts again, dated to the wrong second.
@@ -527,7 +527,7 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
             return
         }
 
-        context.emit { out in
+        context.emit(.videoFrames) { out in
             out.put(.delegateClass(NSStringFromClass(subject)))
         }
 
@@ -691,7 +691,7 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
         let inputs = session.value(forKey: "inputs") as? [AnyObject] ?? []
         let outputs = session.value(forKey: "outputs") as? [AnyObject] ?? []
 
-        context.emit { out in
+        context.emit(.captureSession) { out in
             out.put(.instanceId(instance))
             out.put(.sessionClass(String(describing: type(of: session))))
             out.put(.sessionPreset(session.value(forKey: "sessionPreset") as? String ?? ""))
@@ -798,7 +798,7 @@ final class CameraSessionState: Streamable, PlainInstrument, LoadTimeInstall {
         instance: UInt32,
         into context: Context
     ) {
-        context.emit { out in
+        context.emit(.captureSession) { out in
             out.put(.instanceId(instance))
             out.put(.sessionRunning((session.value(forKey: "isRunning") as? Bool) ?? false))
             out.put(.sessionInterrupted((session.value(forKey: "isInterrupted") as? Bool) ?? false))

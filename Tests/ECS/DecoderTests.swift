@@ -6,12 +6,14 @@ struct DecoderTests {
     private let encoder: FrameEncoder = .init()
 
     @Test func roundTripsEveryScalar() throws {
-        var entity = Entity(.device, capturedAt: 1700000000000123)
-        entity.add(.cpuUsageRatio(0.29))
-        entity.add(.memoryUsedBytes(4294967296))
-        entity.add(.deviceModel("iPhone17,2"))
-        entity.add(.instrument(3))
-        entity.add(.sessionRunning(true))
+        let entity = Entity(
+            .device,
+            capturedAt: 1700000000000123,
+            components: [
+                .cpuUsageRatio(0.29), .memoryUsedBytes(4294967296), .deviceModel("iPhone17,2"),
+                .instrument(3), .sessionRunning(true),
+            ]
+        )
 
         let frames = try FrameReader.frames(in: framed([entity]))
 
@@ -103,9 +105,11 @@ struct DecoderTests {
 
     @Test func walksManyFramesInOrder() throws {
         let entities = (0 ..< 5).map { index -> Entity in
-            var entity = Entity(.process, capturedAt: UInt64(index))
-            entity.add(.memoryUsedBytes(UInt64(index) * 1024))
-            return entity
+            Entity(
+                .process,
+                capturedAt: UInt64(index),
+                components: [.memoryUsedBytes(UInt64(index) * 1024)]
+            )
         }
 
         let frames = try FrameReader.frames(in: framed(entities))
@@ -121,8 +125,7 @@ struct DecoderTests {
     }
 
     @Test func aStreamCutMidFrameIsRefusedRatherThanGuessed() {
-        var entity = Entity(.device, capturedAt: 1)
-        entity.add(.fps(60))
+        let entity = Entity(.device, capturedAt: 1, components: [.fps(60)])
         let complete = framed([entity])
 
         for cut in 1 ..< complete.count {
@@ -181,8 +184,11 @@ struct DecoderTests {
 
     /// A string cut past the ceiling must land on a character boundary, not mid-UTF-8.
     @Test func astringTooLongToFitIsCutOnACharacterBoundary() throws {
-        var entity = Entity(.device, capturedAt: 1)
-        entity.add(.deviceModel(String(repeating: "é", count: 200)))
+        let entity = Entity(
+            .device,
+            capturedAt: 1,
+            components: [.deviceModel(String(repeating: "é", count: 200))]
+        )
 
         let frames = try FrameReader.frames(in: encoder.frame(encoder.encode(entity)))
 

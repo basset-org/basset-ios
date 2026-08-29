@@ -63,7 +63,7 @@ final class FramePacing: Streamable, PlainInstrument {
     func observe(_ context: Context) {
         #if canImport(UIKit)
         guard #available(iOS 18.0, *) else {
-            context.emit { out in
+            context.emit(.displayUpdate) { out in
                 out.put(.mechanismStatus("unavailable: UIUpdateLink needs iOS 18"))
             }
             return
@@ -75,7 +75,7 @@ final class FramePacing: Streamable, PlainInstrument {
                 return
             }
             guard let scene = Self.activeScene() else {
-                context.emit { out in
+                context.emit(.displayUpdate) { out in
                     out.put(
                         .mechanismStatus("unavailable: no foreground window scene")
                     )
@@ -92,9 +92,12 @@ final class FramePacing: Streamable, PlainInstrument {
             self.link = update
 
             // Registered only once a link exists, else it wakes the app every second for nothing.
-            context.flush(every: .seconds(1)) { [tally = context.tally] out, window in
-                Self.write(tally, over: window, into: &out)
-            }
+            context
+                .flush(every: .seconds(1),
+                       into: .displayUpdate)
+                { [tally = context.tally] out, window in
+                    Self.write(tally, over: window, into: &out)
+                }
         }
         #endif
     }

@@ -25,8 +25,6 @@ final class InstrumentHarness<Instrument: Streamable & PlainInstrument>: @unchec
     func start() {
         status.activate()
         let context = Context(
-            instrumentName: Instrument.name,
-            defaultEntity: .unknown,
             status: status,
             swizzle: Swizzle(),
             registries: registries,

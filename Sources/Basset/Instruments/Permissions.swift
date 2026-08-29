@@ -68,7 +68,7 @@ final class PermissionChanges: Streamable, PlainInstrument {
                 seen[finding.subject] = status
             }
         }
-        context.emit { out in
+        context.emit(.permission) { out in
             PermissionStatus.write(findings, into: &out)
         }
     }
@@ -392,11 +392,13 @@ final class PermissionStatus: Snapshotable, PlainInstrument {
 
         first.write(into: &out)
         for finding in findings.dropFirst() {
-            out.also(out.entity) { sibling in finding.write(into: &sibling) }
+            out.also(out.entity) { additional in finding.write(into: &additional) }
         }
     }
 
-    func reading(_ out: inout Readings) {
+    func reading() -> Readings {
+        var out = Readings(.permission)
         Self.write(PermissionProbe.findings(), into: &out)
+        return out
     }
 }

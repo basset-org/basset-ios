@@ -252,8 +252,7 @@ final class InstrumentRunner: @unchecked Sendable {
         }
 
         for contributor in faultContributors {
-            var readings = contributor.context.readings()
-            contributor.instrument.fault(kind, &readings)
+            var readings = contributor.instrument.fault(kind)
             if !readings.isEmpty {
                 readings.tagEveryEntity(with: .faultId(id))
             }
@@ -397,8 +396,6 @@ final class InstrumentRunner: @unchecked Sendable {
 
         // Its own hook table handle, so deactivating releases only this instrument's observers.
         let context = contexts[id] ?? Context(
-            instrumentName: registration.name,
-            defaultEntity: registration.entity,
             status: status,
             swizzle: Swizzle(),
             registries: registries,
@@ -430,9 +427,7 @@ final class InstrumentRunner: @unchecked Sendable {
         if registration.delivery == .reading,
            let snapshot = instrument as? any Snapshotable
         {
-            var readings = context.readings()
-            snapshot.reading(&readings)
-            context.deliver(readings)
+            context.deliver(snapshot.reading())
         }
         if let streaming = instrument as? any Streamable {
             streaming.observe(context)
@@ -441,8 +436,10 @@ final class InstrumentRunner: @unchecked Sendable {
 
     /// Bypasses `Instrument`: the trigger is another instrument's own config decode failing.
     private func emitConfigRefused(for registration: Registration, activation: AtomicStatus) {
-        var entity = Entity(.instrumentConfig)
-        entity.add(.instrument(registration.id.rawValue))
+        let entity = Entity(
+            .instrumentConfig,
+            components: [.instrument(registration.id.rawValue)]
+        )
         emit(
             entity,
             instrumentId: .configRefused,
@@ -494,10 +491,16 @@ final class InstrumentRunner: @unchecked Sendable {
         matchingRequestsNaming filterName: String,
         activation: AtomicStatus
     ) {
-        var record = entity
-        record.add(.instrument(instrumentId.rawValue))
-        // Rides every reading, not just one, so a capture spanning a relaunch stays attributable.
-        record.add(.launchId(LaunchIdentity.current))
+        let record = Entity(
+            entity.id,
+            capturedAt: entity.capturedAt,
+            components: entity.components + [
+                .instrument(instrumentId.rawValue),
+                // Rides every reading, not just one, so a capture spanning a relaunch stays
+                // attributable.
+                .launchId(LaunchIdentity.current),
+            ]
+        )
 
         // Refused before framing: sent, an oversized payload is discarded whole at the far end.
         let payload = encoder.encode(record)
@@ -580,14 +583,16 @@ final class InstrumentRunner: @unchecked Sendable {
                 continue
             }
 
-            var record = Entity(.activeInstruments)
-            record.add(.instrument(InstrumentID.instrumentsActive.rawValue))
-            record.add(.launchId(LaunchIdentity.current))
-            record.add(.occurrenceCount(UInt64(mine.count)))
+            var components: [Component] = [
+                .instrument(InstrumentID.instrumentsActive.rawValue),
+                .launchId(LaunchIdentity.current),
+                .occurrenceCount(UInt64(mine.count)),
+            ]
             // Repeated, innermost order irrelevant — the set is what matters, not a sequence.
             for id in mine {
-                record.add(.instrument(id.rawValue))
+                components.append(.instrument(id.rawValue))
             }
+            let record = Entity(.activeInstruments, components: components)
 
             let payload = encoder.encode(record)
             guard UInt64(payload.count) <= FrameReader.maxFrameLength else {
@@ -632,11 +637,12 @@ final class InstrumentRunner: @unchecked Sendable {
     ) -> [Data] {
         var frames = [Data]()
         for image in images where !reportedImages[requestId, default: []].contains(image.uuid) {
-            var record = Entity(.binaryImage)
-            record.add(.imageName(image.name))
-            record.add(.imageLoadAddress(image.loadAddress))
-            record.add(.imageUUID(image.uuid))
-            record.add(.launchId(LaunchIdentity.current))
+            let record = Entity(.binaryImage, components: [
+                .imageName(image.name),
+                .imageLoadAddress(image.loadAddress),
+                .imageUUID(image.uuid),
+                .launchId(LaunchIdentity.current),
+            ])
 
             let payload = encoder.encode(record)
             guard UInt64(payload.count) <= FrameReader.maxFrameLength else {

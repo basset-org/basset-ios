@@ -38,7 +38,7 @@ final class ProviderActions: Streamable, PlainInstrument, LoadTimeInstall {
 
     func observe(_ context: Context) {
         guard let provider = objc_getClass(Self.providerClassName) as? AnyClass else {
-            context.emit { out in
+            context.emit(.callProvider) { out in
                 out.put(.callAction("none"))
                 out.put(.mechanismStatus("unavailable: this app does not use CallKit"))
             }
@@ -74,7 +74,7 @@ final class ProviderActions: Streamable, PlainInstrument, LoadTimeInstall {
         let handled = Self.watched.filter {
             class_getInstanceMethod(delegateClass, Selector(($0.selector))) != nil
         }
-        context.emit { out in
+        context.emit(.callProvider) { out in
             out.put(.callAction("watching"))
             out.put(.delegateClass(NSStringFromClass(delegateClass)))
             out.put(.occurrenceCount(UInt64(handled.count)))
@@ -98,7 +98,7 @@ final class ProviderActions: Streamable, PlainInstrument, LoadTimeInstall {
             state.counts[action, default: 0] += 1
             return state.counts[action] ?? 1
         }
-        context.emit { out in
+        context.emit(.callProvider) { out in
             out.put(.callAction(action))
             out.put(.delegateClass(NSStringFromClass(delegateClass)))
             out.put(.occurrenceCount(count))

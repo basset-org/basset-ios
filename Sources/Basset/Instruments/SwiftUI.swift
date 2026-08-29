@@ -77,7 +77,7 @@ final class DisplayListChurn: Streamable, PlainInstrument {
         timer.activate()
         sampler = timer
 
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(1), into: .swiftUIDisplayList) { [weak self] out, window in
             guard let self else {
                 return
             }
@@ -267,7 +267,7 @@ final class HostAppear: Streamable, PlainInstrument {
 
         let root = SwiftUIHost.rootView(of: receiver)
 
-        context.emit { out in
+        context.emit(.swiftUIHost) { out in
             out.put(.hostKind(kind.rawValue))
             out.put(.hostRootViewType(root.name))
             out.put(.hostRootViewOpaque(root.isOpaque))
@@ -326,7 +326,7 @@ final class HostUpdates: Streamable, PlainInstrument, @unchecked Sendable {
             SwiftUIHost.onScreen().forEach { self?.appeared($0, context) }
         }
 
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(1), into: .swiftUIHost) { [weak self] out, window in
             let passes = context.tally.take(Self.passes)
             guard passes > 0 else {
                 return
@@ -463,7 +463,7 @@ final class Presentation: Streamable, PlainInstrument {
         }
 
         let root = SwiftUIHost.rootView(of: receiver)
-        context.emit { out in
+        context.emit(.swiftUIPresentation) { out in
             out.put(.detail(transition))
             out.put(.presentationKind(Self.style(of: controller)))
             out.put(.presentedRootViewType(root.name))
@@ -575,7 +575,7 @@ final class RuntimeIssues: Streamable, PlainInstrument {
 
     init() {}
 
-    /// On every row, not only the first — a sibling count needs it to divide by.
+    /// On every row, not only the first — an additional-entity count needs it to divide by.
     private static func write(
         _ digest: RuntimeIssueDigest,
         over window: Context.FlushWindow,
@@ -586,17 +586,17 @@ final class RuntimeIssues: Streamable, PlainInstrument {
                 put(subject, over: window, into: &out)
                 continue
             }
-            out.also(Entity.ID.swiftUIRuntimeIssue) { sibling in
-                put(subject, over: window, into: &sibling)
+            out.also(Entity.ID.swiftUIRuntimeIssue) { additional in
+                put(subject, over: window, into: &additional)
             }
         }
         guard digest.omitted > 0 else {
             return
         }
 
-        out.also(Entity.ID.swiftUIRuntimeIssue) { sibling in
-            sibling.put(.windowNanoseconds(window.nanoseconds))
-            sibling.put(.mechanismStatus("truncated: \(digest.omitted) more"))
+        out.also(Entity.ID.swiftUIRuntimeIssue) { additional in
+            additional.put(.windowNanoseconds(window.nanoseconds))
+            additional.put(.mechanismStatus("truncated: \(digest.omitted) more"))
         }
     }
 
@@ -614,7 +614,7 @@ final class RuntimeIssues: Streamable, PlainInstrument {
 
     func observe(_ context: Context) {
         // 15s: an OSLogStore drain measured ~10s on device regardless of what's read.
-        context.flush(every: .seconds(15)) { [reader] out, window in
+        context.flush(every: .seconds(15), into: .swiftUIRuntimeIssue) { [reader] out, window in
             switch reader.drain() {
             case .unavailable(let reason):
                 out.put(.windowNanoseconds(window.nanoseconds))

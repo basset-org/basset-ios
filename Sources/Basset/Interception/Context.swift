@@ -36,8 +36,6 @@ public final class Context: @unchecked Sendable {
 
     let status: AtomicStatus
 
-    private let instrumentName: String
-    private let defaultEntity: Entity.ID
     private let sink: @Sendable (Entity) -> Void
     /// Carries the raising activation's status so a late fault attributes correctly.
     private let raise: @Sendable (FaultKind, UInt32, AtomicStatus) -> Void
@@ -56,8 +54,6 @@ public final class Context: @unchecked Sendable {
     }
 
     init(
-        instrumentName: String,
-        defaultEntity: Entity.ID,
         status: AtomicStatus,
         swizzle: Swizzle,
         registries: Registries,
@@ -67,8 +63,6 @@ public final class Context: @unchecked Sendable {
         raise: @escaping @Sendable (FaultKind, UInt32, AtomicStatus) -> Void = { _, _, _ in }
     ) {
         tally = Tally(slots: tallySlots)
-        self.instrumentName = instrumentName
-        self.defaultEntity = defaultEntity
         self.status = status
         self.swizzle = swizzle
         self.registries = registries
@@ -122,35 +116,28 @@ public final class Context: @unchecked Sendable {
         registries.registry(runtimeClass: trackedClass).callers(ofInstance: instance)
     }
 
-    public func readings(_ entity: Entity.ID? = nil) -> Readings {
-        Readings(
-            entity: entity ?? defaultEntity,
-            instrumentName: instrumentName
-        )
-    }
-
     public func deliver(_ readings: Readings) {
         guard status.isActive, !readings.isEmpty else {
             return
         }
 
-        sink(readings.sealed())
-        readings.sealedSiblings().forEach(sink)
+        sink(readings.build())
+        readings.additionalEntities().forEach(sink)
     }
 
-    public func emit(_ entity: Entity.ID? = nil, _ build: (inout Readings) -> Void) {
+    public func emit(_ entity: Entity.ID, _ build: (inout Readings) -> Void) {
         guard status.isActive else {
             return
         }
 
-        var readings = self.readings(entity)
+        var readings = Readings(entity)
         build(&readings)
         deliver(readings)
     }
 
     /// For state, never a sample — emitted only when changed from the last one sent.
     public func emitIfChanged(
-        _ entity: Entity.ID? = nil,
+        _ entity: Entity.ID,
         of subject: String = "",
         _ build: (inout Readings) -> Void
     ) {
@@ -158,13 +145,13 @@ public final class Context: @unchecked Sendable {
             return
         }
 
-        var readings = self.readings(entity)
+        var readings = Readings(entity)
         build(&readings)
         guard !readings.isEmpty else {
             return
         }
 
-        let record = readings.sealed()
+        let record = readings.build()
         let key = "\(record.id.rawValue)/\(subject)"
         let fingerprint = record.fingerprint
 
@@ -178,12 +165,12 @@ public final class Context: @unchecked Sendable {
         }
 
         sink(record)
-        readings.sealedSiblings().forEach(sink)
+        readings.additionalEntities().forEach(sink)
     }
 
     public func flush(
         every interval: Duration,
-        into entity: Entity.ID? = nil,
+        into entity: Entity.ID,
         _ body: @escaping (inout Readings, FlushWindow) -> Void
     ) {
         let timer = DispatchSource.makeTimerSource(queue: timerQueue)

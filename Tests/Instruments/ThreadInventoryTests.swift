@@ -221,7 +221,7 @@ struct ThreadInventoryReadingTests {
         var out = readings()
         ThreadInventoryReading.write([], into: &out)
 
-        #expect(out.componentsWritten == [.mechanismStatus])
+        #expect(out.build().componentIDs == [.mechanismStatus])
     }
 
     /// The count rides every row, so a reader taking only one entity still learns the total.
@@ -232,16 +232,16 @@ struct ThreadInventoryReadingTests {
             into: &out
         )
 
-        #expect(out.sealedSiblings().count == 2)
-        #expect(rendered(out.sealed(), .occurrenceCount) == "3")
-        #expect(rendered(out.sealedSiblings()[0], .occurrenceCount) == "3")
+        #expect(out.additionalEntities().count == 2)
+        #expect(rendered(out.build(), .occurrenceCount) == "3")
+        #expect(rendered(out.additionalEntities()[0], .occurrenceCount) == "3")
     }
 
     @Test func anUnnamedThreadOmitsTheNameRatherThanSendingAnEmptyOne() {
         var out = readings()
         ThreadInventoryReading.write([named("")], into: &out)
 
-        #expect(out.componentsWritten.contains(.threadName) == false)
+        #expect(out.build().componentIDs.contains(.threadName) == false)
     }
 
     private func named(_ name: String) -> ThreadSample {
@@ -262,10 +262,7 @@ struct ThreadInventoryReadingTests {
     }
 
     private func readings() -> Readings {
-        Readings(
-            entity: .thread,
-            instrumentName: "concurrency.thread.inventory"
-        )
+        Readings(.thread)
     }
 
     private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {

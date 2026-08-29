@@ -36,7 +36,7 @@ final class ThreadCPUUsage: Streamable, Configurable {
     }
 
     func observe(_ context: Context) {
-        context.flush(every: .seconds(windowSeconds)) { [weak self] out, window in
+        context.flush(every: .seconds(windowSeconds), into: .thread) { [weak self] out, window in
             guard let self else {
                 return
             }
@@ -100,16 +100,16 @@ final class ThreadCPUUsage: Streamable, Configurable {
 
         put(first, over: window, into: &out)
         for entry in busy.dropFirst(1).prefix(Self.ceiling - 1) {
-            out.also(out.entity) { sibling in put(entry, over: window, into: &sibling) }
+            out.also(out.entity) { additional in put(entry, over: window, into: &additional) }
         }
 
         guard busy.count > Self.ceiling else {
             return
         }
 
-        out.also(out.entity) { sibling in
-            sibling.put(.windowNanoseconds(window.nanoseconds))
-            sibling.put(.mechanismStatus("truncated: \(busy.count - Self.ceiling) more"))
+        out.also(out.entity) { additional in
+            additional.put(.windowNanoseconds(window.nanoseconds))
+            additional.put(.mechanismStatus("truncated: \(busy.count - Self.ceiling) more"))
         }
     }
 
@@ -138,7 +138,7 @@ final class Wakeups: Streamable, PlainInstrument {
     init() {}
 
     func observe(_ context: Context) {
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(1), into: .process) { [weak self] out, window in
             guard let self else {
                 return
             }
