@@ -4,7 +4,7 @@ name: format
 # it. `.githooks/pre-commit` formats on the way in for anyone who ran
 # `git config core.hooksPath .githooks`; nobody can be assumed to have.
 #
-# Pull requests do not trigger this, for the reason given in test.yml.
+# Pull requests do not trigger this — a fork would choose what runs on a physical machine.
 
 on:
   push:
