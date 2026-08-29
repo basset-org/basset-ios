@@ -113,6 +113,31 @@ struct ViewHierarchyWalkTests {
         }
     }
 
+    @Test func everyRowNamesTheTouchTheSnapshotWasTakenFor() {
+        let root = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        let child = UIView(frame: CGRect(x: 10, y: 10, width: 50, height: 50))
+        root.addSubview(child)
+
+        let touchId: UInt32 = 4242
+        let hits = rows(at: CGPoint(x: 20, y: 20), in: root, parent: touchId)
+
+        #expect(hits.count > 1, "a root and a child both contain the point")
+        for entity in hits {
+            #expect(
+                value(.touchId, in: entity) == "\(touchId)",
+                "a row could only be tied to its touch through viewParent on the root"
+            )
+        }
+    }
+
+    @Test func aSnapshotNoTouchAskedForNamesNoTouch() {
+        let root = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+
+        for entity in rows(at: CGPoint(x: 5, y: 5), in: root) {
+            #expect(value(.touchId, in: entity) == nil)
+        }
+    }
+
     private func rows(at point: CGPoint, in root: UIView, parent: UInt32 = 0) -> [Entity] {
         var out = Readings(entity: .viewHierarchy, instrumentName: InstrumentID.viewHierarchy.name)
         ViewHierarchy.writeMatches(at: point, in: root, parent: parent, into: &out)
