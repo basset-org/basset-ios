@@ -1,0 +1,53 @@
+name: measure
+
+on:
+  push:
+    branches: ["ci/measure-bazel-on-the-runner"]
+  workflow_dispatch:
+
+concurrency:
+  group: measure
+  cancel-in-progress: false
+
+jobs:
+  cold:
+    name: bazel, no cache
+    runs-on: [self-hosted, macOS, ARM64, tartelet]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versions
+        run: |
+          bazel --version
+          xcodebuild -version
+          xcrun simctl list runtimes | grep -i iOS
+
+      - name: Time bazel test with an empty cache
+        run: |
+          start=$(date +%s)
+          set +e
+          bazel test //... --test_output=errors --verbose_failures --curses=no --color=no
+          status=$?
+          set -e
+          echo "::notice::bazel test //... cold: $(( $(date +%s) - start ))s, exit $status"
+
+  cached:
+    name: bazel, disk cache
+    runs-on: [self-hosted, macOS, ARM64, tartelet]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: measure
+          repository-cache: true
+
+      - name: Time bazel test with a restored disk cache
+        run: |
+          start=$(date +%s)
+          set +e
+          bazel test //... --test_output=errors --verbose_failures --curses=no --color=no
+          status=$?
+          set -e
+          echo "::notice::bazel test //... disk cache: $(( $(date +%s) - start ))s, exit $status"
