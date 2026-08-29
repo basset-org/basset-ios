@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -51,16 +51,13 @@ struct MethodOwnersTests {
     }
 
     private func emit(from owners: [MethodOwners.Owner]) -> [Entity] {
-        var out = Readings(
-            entity: MethodOwners.entity,
-            instrumentName: MethodOwners.name
-        )
+        var out = Readings(.method)
         MethodOwners.write(owners, into: &out)
         guard !out.isEmpty else {
             return []
         }
 
-        return [out.sealed()] + out.sealedSiblings()
+        return [out.build()] + out.additionalEntities()
     }
 
     private func owner(

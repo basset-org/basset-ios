@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -116,7 +116,7 @@ private final class Recorder: @unchecked Sendable {
         lock.lock()
         let context = self.context
         lock.unlock()
-        context?.emit { out in out.put(.detail("reading")) }
+        context?.emit(.unknown) { out in out.put(.detail("reading")) }
     }
 
     /// A reading past the read ceiling, built from the widest string the format carries.
@@ -127,7 +127,7 @@ private final class Recorder: @unchecked Sendable {
 
         let widest = String(repeating: "x", count: 255)
         let enough = Int(FrameReader.maxFrameLength) / widest.utf8.count + 1
-        context?.emit { out in
+        context?.emit(.unknown) { out in
             for _ in 0 ..< enough {
                 out.put(.detail(widest))
             }
@@ -153,7 +153,6 @@ private final class FakeMemory: FakeInstrument {
     static let id: InstrumentID = .memoryFootprint
     static let name = "memory.footprint"
     static let domain: Domain = .memory
-    static let entity = Entity.ID.process
 
     let recorder: Recorder = .init()
 
@@ -164,7 +163,6 @@ private final class FakeThermal: FakeInstrument {
     static let id: InstrumentID = .thermalState
     static let name = "power.thermalState"
     static let domain: Domain = .power
-    static let entity = Entity.ID.thermal
 
     let recorder: Recorder = .init()
 
@@ -180,14 +178,13 @@ private final class FakeHooked: Streamable, PlainInstrument {
     static let id: InstrumentID = .viewLayoutPass
     static let name = "uikit.view.layoutPass"
     static let domain: Domain = .uikit
-    static let entity = Entity.ID.process
 
     init() {}
 
     func observe(_ context: Context) {
         _ = context.swizzle
             .after(HookedSubject.self, #selector(HookedSubject.work)) { _ in
-                context.emit { out in out.put(.detail("pass")) }
+                context.emit(.unknown) { out in out.put(.detail("pass")) }
             }
     }
 
@@ -199,7 +196,6 @@ private final class FakeDetector: Streamable, PlainInstrument, @unchecked Sendab
     static let id: InstrumentID = .mainThreadHang
     static let name = "concurrency.mainThreadHang"
     static let domain: Domain = .concurrency
-    static let entity = Entity.ID.mainThread
 
     private let lock: NSLock = .init()
     private var context: Context?
@@ -233,7 +229,6 @@ private final class FakeContributor: Faultable, PlainInstrument, @unchecked Send
     static let id: InstrumentID = .threadSnapshot
     static let name = "runtime.threadSnapshot"
     static let domain: Domain = .runtime
-    static let entity = Entity.ID.thread
 
     private(set) var asked: [FaultKind] = []
 
@@ -247,11 +242,13 @@ private final class FakeContributor: Faultable, PlainInstrument, @unchecked Send
 
     init() {}
 
-    func fault(_ kind: FaultKind, _ out: inout Readings) {
+    func fault(_ kind: FaultKind) -> Readings {
         lock.lock()
         asked.append(kind)
         lock.unlock()
+        var out = Readings(.thread)
         out.put(.detail("stack"))
+        return out
     }
 }
 
@@ -1379,7 +1376,6 @@ private struct FakeConfig: Codable, Sendable, Equatable {
 
 private final class FakeConfigurable: Streamable, Configurable {
     static let id: InstrumentID = .queueLatency
-    static let entity = Entity.ID.dispatchQueue
     static let defaultConfig: FakeConfig = .init(thresholdMs: 250)
 
     let config: FakeConfig
@@ -1557,7 +1553,10 @@ struct ConfigurableInstrumentTests {
     }
 
     @Test func theRefusalReachesOnlyRequestsThatNamedTheRefusedInstrument() {
-        let (subject, opener) = runtime([.stream(FakeConfigurable.self), .stream(FakeMemory.self)])
+        let (subject, opener) = runtime([
+            .stream(FakeConfigurable.self),
+            .stream(FakeMemory.self),
+        ])
 
         subject.converge(
             to: [
@@ -1605,7 +1604,6 @@ private enum SlotProbe {
 /// Declares more counters than default and writes the highest.
 private final class SlotHungry: Streamable, PlainInstrument {
     static let id: InstrumentID = .swiftUIDisplayListChurn
-    static let entity = Entity.ID.displayUpdate
     static let tallySlots = 6
 
     init() {}
@@ -1621,7 +1619,6 @@ private final class SlotHungry: Streamable, PlainInstrument {
 /// Declares nothing, so the shared default decides its slot count; writes both sides.
 private final class SlotDefaulting: Streamable, PlainInstrument {
     static let id: InstrumentID = .memoryFootprint
-    static let entity = Entity.ID.process
 
     init() {}
 

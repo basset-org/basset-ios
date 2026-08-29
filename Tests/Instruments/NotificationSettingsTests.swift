@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -19,10 +19,10 @@ struct NotificationSettingsTests {
             into: &out
         )
 
-        #expect(rendered(out.sealed(), .authorizationStatus) == "authorized")
-        #expect(rendered(out.sealed(), .occurrenceCount) == "1")
-        #expect(rendered(out.sealedSiblings()[0], .notificationSetting) == "alert")
-        #expect(rendered(out.sealedSiblings()[0], .settingState) == "disabled")
+        #expect(rendered(out.build(), .authorizationStatus) == "authorized")
+        #expect(rendered(out.build(), .occurrenceCount) == "1")
+        #expect(rendered(out.additionalEntities()[0], .notificationSetting) == "alert")
+        #expect(rendered(out.additionalEntities()[0], .settingState) == "disabled")
     }
 
     /// Everything enabled needs no rows; the finding is always the switch turned off.
@@ -36,8 +36,8 @@ struct NotificationSettingsTests {
             into: &out
         )
 
-        #expect(rendered(out.sealed(), .occurrenceCount) == "0")
-        #expect(out.sealedSiblings().isEmpty)
+        #expect(rendered(out.build(), .occurrenceCount) == "0")
+        #expect(out.additionalEntities().isEmpty)
     }
 
     /// A setting the device cannot offer is not a setting the user switched off.
@@ -71,7 +71,7 @@ struct NotificationSettingsTests {
         var out = readings()
         NotificationSettings.write(NotificationSettingsReading(), into: &out)
 
-        #expect(out.componentsWritten == [.mechanismStatus])
+        #expect(out.build().componentIDs == [.mechanismStatus])
     }
 
     /// Read through the runtime — a non-settings object returns nil, not a raise.
@@ -91,10 +91,7 @@ struct NotificationSettingsTests {
     }
 
     private func readings() -> Readings {
-        Readings(
-            entity: .notificationSetting,
-            instrumentName: "notifications.settings"
-        )
+        Readings(.notificationSetting)
     }
 
     private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {

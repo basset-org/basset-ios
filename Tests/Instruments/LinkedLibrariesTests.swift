@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -85,16 +85,13 @@ struct LinkedLibrariesTests {
     }
 
     private func emit(from images: [BinaryImage]) -> [Entity] {
-        var out = Readings(
-            entity: LinkedLibraries.entity,
-            instrumentName: LinkedLibraries.name
-        )
+        var out = Readings(.binaryImage)
         LinkedLibraries.write(images, inAppBundleUnder: Self.shipped, into: &out)
         guard !out.isEmpty else {
             return []
         }
 
-        return [out.sealed()] + out.sealedSiblings()
+        return [out.build()] + out.additionalEntities()
     }
 
     private func bundled(_ name: String, size: UInt64) -> BinaryImage {
@@ -141,13 +138,9 @@ struct LinkedLibrariesWiringTests {
 
     /// Against the real process, not fixtures — dyld answers and names the main executable.
     @Test func thereAlProcessAnswers() {
-        var out = Readings(
-            entity: LinkedLibraries.entity,
-            instrumentName: LinkedLibraries.name
-        )
-        LinkedLibraries().reading(&out)
+        let out = LinkedLibraries().reading()
 
-        let rendered = out.sealed()
+        let rendered = out.build()
             .components
             .first { $0.id == .occurrenceCount }?
             .value
@@ -236,16 +229,13 @@ struct LinkedLibrariesWiringTests {
     /// A wrong directory would count OS libraries as the app's and drop the app's own binary.
     @Test func theexecutableIsAmongTheImagesItsOwnProcessShipped() throws {
         let executable = try #require(BinaryImages.mainExecutable())
-        var out = Readings(
-            entity: LinkedLibraries.entity,
-            instrumentName: LinkedLibraries.name
-        )
+        var out = Readings(.binaryImage)
         LinkedLibraries.write(
             BinaryImages.loaded(),
             inAppBundleUnder: BinaryImages.appBundleDirectory(),
             into: &out
         )
-        let readings = [out.sealed()] + out.sealedSiblings()
+        let readings = [out.build()] + out.additionalEntities()
 
         #expect(readings.contains { reading in
             reading.components.contains {

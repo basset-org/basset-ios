@@ -1,13 +1,12 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Testing
 
 struct DeviceInfoTests {
     @Test func theReadingCarriesThisSDKsOwnVersion() {
-        var out = Readings(entity: DeviceInfo.entity, instrumentName: DeviceInfo.name)
-        DeviceInfo().reading(&out)
+        let out = DeviceInfo().reading()
 
-        let version = out.sealed().components.first { $0.id == .sdkVersion }?.value.rendered
+        let version = out.build().components.first { $0.id == .sdkVersion }?.value.rendered
         #expect(version == SDKVersion.current)
     }
 }

@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -8,7 +8,6 @@ import UIKit
 /// Named `AccessibilityFlags` — UIKit's own `AccessibilitySettings` would collide.
 final class AccessibilityFlags: Streamable, PlainInstrument {
     static let id: InstrumentID = .accessibilitySettings
-    static let entity = Entity.ID.deviceSetting
 
     #if canImport(UIKit)
     /// `prefersCrossFadeTransitions`'s notification has no Swift name, so it's absent on purpose.
@@ -67,7 +66,7 @@ final class AccessibilityFlags: Streamable, PlainInstrument {
 
     private func report(into context: Context) {
         // `emitIfChanged`, not `emit` — several notifications can fire for one user action.
-        context.emitIfChanged { out in
+        context.emitIfChanged(.deviceSetting) { out in
             Self.write(Self.current, into: &out)
         }
     }
@@ -92,9 +91,9 @@ final class AccessibilityFlags: Streamable, PlainInstrument {
         out.put(.settingName(first.name))
         out.put(.settingEnabled(true))
         for setting in enabled.dropFirst() {
-            out.also(Self.entity) { sibling in
-                sibling.put(.settingName(setting.name))
-                sibling.put(.settingEnabled(true))
+            out.also(out.entity) { additional in
+                additional.put(.settingName(setting.name))
+                additional.put(.settingEnabled(true))
             }
         }
     }
@@ -126,7 +125,6 @@ final class AccessibilityFlags: Streamable, PlainInstrument {
 /// Text size the user chose, and whether it's one of the 5 accessibility sizes above normal.
 final class DynamicType: Streamable, PlainInstrument {
     static let id: InstrumentID = .dynamicType
-    static let entity = Entity.ID.deviceSetting
 
     private var observer: NSObjectProtocol?
 
@@ -155,14 +153,14 @@ final class DynamicType: Streamable, PlainInstrument {
     #if canImport(UIKit)
     private func report(into context: Context) {
         guard let application = HostApplication.shared else {
-            context.emitIfChanged { out in
+            context.emitIfChanged(.deviceSetting) { out in
                 out.put(.mechanismStatus("unavailable: this process has no application object"))
             }
             return
         }
 
         let category = application.preferredContentSizeCategory
-        context.emitIfChanged { out in
+        context.emitIfChanged(.deviceSetting) { out in
             // The raw value's `UICTContentSizeCategory` prefix means nothing outside UIKit.
             out.put(.textSizeCategory(Self.name(of: category)))
             out.put(.accessibilityTextSize(category.isAccessibilityCategory))
@@ -195,7 +193,6 @@ final class DynamicType: Streamable, PlainInstrument {
 /// Language, region, calendar — reported as codes; display names would localise.
 final class LocaleSettings: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .localeSettings
-    static let entity = Entity.ID.deviceSetting
 
     init() {}
 
@@ -239,7 +236,9 @@ final class LocaleSettings: Snapshotable, PlainInstrument {
         return !format.contains("a")
     }
 
-    func reading(_ out: inout Readings) {
+    func reading() -> Readings {
+        var out = Readings(.deviceSetting)
         Self.write(Locale.current, into: &out)
+        return out
     }
 }

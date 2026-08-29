@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -7,7 +7,6 @@ import UIKit
 
 final class ViewControllerAppear: Streamable, PlainInstrument {
     static let id: InstrumentID = .viewControllerAppear
-    static let entity = Entity.ID.screen
 
     init() {}
 
@@ -25,7 +24,7 @@ final class ViewControllerAppear: Streamable, PlainInstrument {
     func stopObserving() {}
 
     private func appeared(_ receiver: AnyObject, _ context: Context) {
-        context.emit { out in
+        context.emit(.screen) { out in
             out.put(.viewControllerClass(String(describing: type(of: receiver))))
         }
     }
@@ -33,7 +32,6 @@ final class ViewControllerAppear: Streamable, PlainInstrument {
 
 final class ViewLayoutPass: Streamable, PlainInstrument {
     static let id: InstrumentID = .viewLayoutPass
-    static let entity = Entity.ID.viewLayout
 
     private static let passes: TallySlot = .first
     private static let totalNanoseconds: TallySlot = .second
@@ -55,7 +53,7 @@ final class ViewLayoutPass: Streamable, PlainInstrument {
                 hot.raise(Self.peakNanoseconds, to: elapsed)
             }
 
-        context.flush(every: .seconds(1)) { out, window in
+        context.flush(every: .seconds(1), into: .viewLayout) { out, window in
             let passes = context.tally.take(Self.passes)
             guard passes > 0 else {
                 return
@@ -111,7 +109,6 @@ final class WindowTouches: Streamable, Configurable {
     }
 
     static let id: InstrumentID = .windowTouches
-    static let entity = Entity.ID.touches
 
     /// Off by default — the walk this triggers is the cost `instrument-domains.md` refuses to
     /// pay on every touch; asking for it is opting into paying it on `.began` only.
@@ -134,7 +131,7 @@ final class WindowTouches: Streamable, Configurable {
             self?.received(argument, context)
         }
 
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(1), into: .touches) { [weak self] out, window in
             guard let self, let taken = self.takeMoves() else {
                 return
             }
@@ -236,7 +233,7 @@ final class WindowTouches: Streamable, Configurable {
                 touchIds.withLock { $0.end(key) }
             }
 
-        context.emit { out in
+        context.emit(.touches) { out in
             out.put(.touchPhase(Self.name(of: phase)))
             out.put(.activeTouchCount(UInt32(clamping: active)))
             out.put(.originXPoints(Double(location.x)))
@@ -318,9 +315,9 @@ final class ViewHierarchy: Snapshotable, Configurable {
         put(kept[0], in: root, into: &out)
         putTouch(parent, into: &out)
         for match in kept.dropFirst() {
-            out.also(Self.entity) { sibling in
-                put(match, in: root, into: &sibling)
-                putTouch(parent, into: &sibling)
+            out.also(out.entity) { additional in
+                put(match, in: root, into: &additional)
+                putTouch(parent, into: &additional)
             }
         }
 
@@ -328,10 +325,10 @@ final class ViewHierarchy: Snapshotable, Configurable {
             return
         }
 
-        out.also(Self.entity) { sibling in
-            sibling.put(.mechanismStatus("truncated: \(omitted) more"))
-            putViewPosition(id: EntityIdentity.next(), parent: parent, level: 0, into: &sibling)
-            putTouch(parent, into: &sibling)
+        out.also(out.entity) { additional in
+            additional.put(.mechanismStatus("truncated: \(omitted) more"))
+            putViewPosition(id: EntityIdentity.next(), parent: parent, level: 0, into: &additional)
+            putTouch(parent, into: &additional)
         }
     }
 
@@ -431,7 +428,6 @@ final class ViewHierarchy: Snapshotable, Configurable {
     #endif
 
     static let id: InstrumentID = .viewHierarchy
-    static let entity = Entity.ID.viewHierarchy
 
     static let defaultConfig: Config = .init(x: 0, y: 0)
 
@@ -448,10 +444,12 @@ final class ViewHierarchy: Snapshotable, Configurable {
         #endif
     }
 
-    func reading(_ out: inout Readings) {
+    func reading() -> Readings {
+        var out = Readings(.viewHierarchy)
         #if canImport(UIKit)
         Self.write(at: point, parent: 0, into: &out)
         #endif
+        return out
     }
 }
 
@@ -459,7 +457,6 @@ final class ViewHierarchy: Snapshotable, Configurable {
 /// funnel for every button, switch and control event, so one hook covers all of them.
 final class ControlAction: Streamable, PlainInstrument {
     static let id: InstrumentID = .controlAction
-    static let entity = Entity.ID.controlAction
 
     init() {}
 
@@ -479,7 +476,7 @@ final class ControlAction: Streamable, PlainInstrument {
 
     #if canImport(UIKit)
     private func fired(_ action: Selector, _ target: AnyObject?, _ context: Context) {
-        context.emit { out in
+        context.emit(.controlAction) { out in
             out.put(.methodName(NSStringFromSelector(action)))
             guard let target else {
                 return
@@ -495,7 +492,6 @@ final class ControlAction: Streamable, PlainInstrument {
 /// this hooks it by selector name, and the install fails soft if it's ever gone.
 final class GestureState: Streamable, PlainInstrument {
     static let id: InstrumentID = .gestureState
-    static let entity = Entity.ID.gestureRecognizer
 
     init() {}
 
@@ -519,7 +515,7 @@ final class GestureState: Streamable, PlainInstrument {
             return
         }
 
-        context.emit { out in
+        context.emit(.gestureRecognizer) { out in
             out.put(.runtimeClassName(String(describing: type(of: receiver))))
             out.put(.gestureRecognizerState(Self.name(of: recognized)))
         }

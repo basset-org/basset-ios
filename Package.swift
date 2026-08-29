@@ -10,8 +10,8 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "BassetECS",
-            path: "Sources/BassetECS"
+            name: "BassetEntityComponent",
+            path: "Sources/BassetEntityComponent"
         ),
         .target(
             name: "CBassetAtomics",
@@ -19,7 +19,7 @@ let package = Package(
         ),
         .target(
             name: "Basset",
-            dependencies: ["BassetECS", "CBassetAtomics"],
+            dependencies: ["BassetEntityComponent", "CBassetAtomics"],
             path: "Sources/Basset",
             resources: [.copy("PrivacyInfo.xcprivacy")]
         ),
@@ -31,7 +31,7 @@ let package = Package(
         .executableTarget(name: "BassetDemo", dependencies: ["Basset"], path: "Demo"),
         .testTarget(
             name: "BassetTests",
-            dependencies: ["Basset", "BassetAttached", "BassetECS"],
+            dependencies: ["Basset", "BassetAttached", "BassetEntityComponent"],
             path: "Tests",
             exclude: ["ECS"]
         ),

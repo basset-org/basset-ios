@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -247,28 +247,20 @@ struct ThreadSnapshotFaultTests {
         MainThreadPort.capture()
         let instrument = ThreadSnapshot()
 
-        var first = Readings(
-            entity: ThreadSnapshot.entity,
-            instrumentName: "runtime.threadSnapshot"
-        )
-        instrument.fault(.hang, &first)
+        let first = instrument.fault(.hang)
         let firstImages = imageUUIDs(in: first)
         guard !firstImages.isEmpty else {
             return
         }
 
-        var second = Readings(
-            entity: ThreadSnapshot.entity,
-            instrumentName: "runtime.threadSnapshot"
-        )
-        instrument.fault(.hang, &second)
+        let second = instrument.fault(.hang)
 
         #expect(firstImages.isDisjoint(with: imageUUIDs(in: second)))
     }
 
     private func imageUUIDs(in readings: Readings) -> Set<String> {
         Set(
-            readings.sealedSiblings()
+            readings.additionalEntities()
                 .filter { $0.id == .binaryImage }
                 .compactMap { entity in
                     entity.components.first { $0.id == .imageUUID }?.value.rendered
@@ -308,23 +300,23 @@ struct BinaryImageTests {
     }
 }
 
-struct ReadingsSiblingTests {
-    @Test func aSiblingIsItsOwnEntityAndDoesNotTouchTheFirst() {
+struct ReadingsAdditionalEntityTests {
+    @Test func anAdditionalEntityIsItsOwnEntityAndDoesNotTouchTheFirst() {
         var out = readings()
         out.put(.threadIndex(0))
         out.also(.binaryImage) { image in image.put(.imageName("Basset")) }
 
-        #expect(out.sealed().id == .thread)
-        #expect(out.sealed().components.count == 1)
-        #expect(out.sealedSiblings().map(\.id) == [.binaryImage])
+        #expect(out.build().id == .thread)
+        #expect(out.build().components.count == 1)
+        #expect(out.additionalEntities().map(\.id) == [.binaryImage])
     }
 
-    @Test func anEmptySiblingIsNotEmitted() {
+    @Test func anEmptyAdditionalEntityIsNotEmitted() {
         var out = readings()
         out.put(.threadIndex(0))
         out.also(.binaryImage) { _ in }
 
-        #expect(out.sealedSiblings().isEmpty)
+        #expect(out.additionalEntities().isEmpty)
     }
 
     @Test func repeatedComponentsKeepTheirOrderSoAStackNeedsNoIndices() {
@@ -334,16 +326,13 @@ struct ReadingsSiblingTests {
         out.put(.frameAddress(0x3000))
 
         #expect(
-            out.sealed().components.map(\.value) == [
+            out.build().components.map(\.value) == [
                 .uint64(0x1000), .uint64(0x2000), .uint64(0x3000),
             ]
         )
     }
 
     private func readings(_ entity: Entity.ID = .thread) -> Readings {
-        Readings(
-            entity: entity,
-            instrumentName: "runtime.threadSnapshot"
-        )
+        Readings(entity)
     }
 }

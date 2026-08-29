@@ -1,10 +1,9 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// Every thread's stack, as raw return addresses, taken only on a fault.
 final class ThreadSnapshot: Faultable, PlainInstrument {
     static let id: InstrumentID = .threadSnapshot
-    static let entity = Entity.ID.thread
 
     private let walker: ThreadWalker = .init()
 
@@ -40,8 +39,10 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
             + "\(ThreadWalker.maxThreads) this walk will suspend"
     }
 
-    func fault(_ kind: FaultKind, _ out: inout Readings) {
+    func fault(_ kind: FaultKind) -> Readings {
+        var out = Readings(.thread)
         take(into: &out)
+        return out
     }
 
     /// One entity per thread, not one holding all — a reader can take one without the rest.
@@ -54,7 +55,7 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
 
         describe(first, into: &out)
         for stack in stacks.dropFirst() {
-            out.also(Self.entity) { thread in describe(stack, into: &thread) }
+            out.also(out.entity) { thread in describe(stack, into: &thread) }
         }
     }
 
@@ -95,7 +96,6 @@ final class StackSamples: Streamable, Configurable {
     }
 
     static let id: InstrumentID = .stackSamples
-    static let entity = Entity.ID.stackSample
 
     /// Bites only when every sample differs — reports as truncation, not a top-8 cutoff.
     static let stacksPerWindow = 8
@@ -134,7 +134,8 @@ final class StackSamples: Streamable, Configurable {
         }
     }
 
-    /// Every stack carries the window's totals, so its share is readable without its siblings.
+    /// Every stack carries the window's totals, so its share is readable without the other
+    /// additional entities.
     private static func put(
         _ stack: StackWindow.SampledStack?,
         in closed: StackWindow,
@@ -180,15 +181,15 @@ final class StackSamples: Streamable, Configurable {
 
         Self.put(first, in: closed, over: elapsed, into: &out)
         for stack in hottest.dropFirst().prefix(Self.stacksPerWindow - 1) {
-            out.also(Self.entity) { sibling in
-                Self.put(stack, in: closed, over: elapsed, into: &sibling)
+            out.also(out.entity) { additional in
+                Self.put(stack, in: closed, over: elapsed, into: &additional)
             }
         }
 
         if hottest.count > Self.stacksPerWindow {
-            out.also(Self.entity) { sibling in
-                sibling.put(.windowNanoseconds(elapsed.nanoseconds))
-                sibling.put(
+            out.also(out.entity) { additional in
+                additional.put(.windowNanoseconds(elapsed.nanoseconds))
+                additional.put(
                     .mechanismStatus("truncated: \(hottest.count - Self.stacksPerWindow) more")
                 )
             }
@@ -217,7 +218,7 @@ final class StackSamples: Streamable, Configurable {
         sampling.start()
         sampler = sampling
 
-        context.flush(every: .seconds(1)) { [weak self] out, elapsed in
+        context.flush(every: .seconds(1), into: .stackSample) { [weak self] out, elapsed in
             guard let self else {
                 return
             }
@@ -286,7 +287,6 @@ struct StackWindow {
 /// What's mapped into the process and what came from the app bundle; statics are invisible.
 final class LinkedLibraries: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .linkedLibraries
-    static let entity = Entity.ID.binaryImage
 
     /// Past this, an app's finding is in the count, not the list.
     static let ceiling = 64
@@ -314,8 +314,8 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
 
         put(first, among: images, bundled: bundled.count, into: &out)
         for image in bundled.dropFirst(1).prefix(ceiling - 1) {
-            out.also(Self.entity) { sibling in
-                put(image, among: images, bundled: bundled.count, into: &sibling)
+            out.also(out.entity) { additional in
+                put(image, among: images, bundled: bundled.count, into: &additional)
             }
         }
 
@@ -323,8 +323,8 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
             return
         }
 
-        out.also(Self.entity) { sibling in
-            sibling.put(.mechanismStatus("truncated: \(bundled.count - ceiling) more"))
+        out.also(out.entity) { additional in
+            additional.put(.mechanismStatus("truncated: \(bundled.count - ceiling) more"))
         }
     }
 
@@ -343,12 +343,14 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
         out.put(.imageTextBytes(image.size))
     }
 
-    func reading(_ out: inout Readings) {
+    func reading() -> Readings {
+        var out = Readings(.binaryImage)
         Self.write(
             BinaryImages.loaded(),
             inAppBundleUnder: BinaryImages.appBundleDirectory(),
             into: &out
         )
+        return out
     }
 }
 
@@ -371,7 +373,6 @@ final class MethodOwners: Snapshotable, PlainInstrument {
     }
 
     static let id: InstrumentID = .methodOwners
-    static let entity = Entity.ID.method
 
     /// Appearance, layout and control actions are absent — basset hooks those itself and would
     /// self-report.
@@ -393,7 +394,7 @@ final class MethodOwners: Snapshotable, PlainInstrument {
 
         put(first, into: &out)
         for owner in owners.dropFirst() {
-            out.also(Self.entity) { sibling in put(owner, into: &sibling) }
+            out.also(out.entity) { additional in put(owner, into: &additional) }
         }
     }
 
@@ -455,7 +456,9 @@ final class MethodOwners: Snapshotable, PlainInstrument {
         out.put(.imageName(owner.image))
     }
 
-    func reading(_ out: inout Readings) {
+    func reading() -> Readings {
+        var out = Readings(.method)
         Self.write(Self.read(Self.watched), into: &out)
+        return out
     }
 }

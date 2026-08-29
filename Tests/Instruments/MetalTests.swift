@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -144,10 +144,7 @@ struct DrawablePresentationTests {
     }
 
     private func emit(from tally: Tally) -> [Entity] {
-        var out = Readings(
-            entity: DrawablePresentation.entity,
-            instrumentName: DrawablePresentation.name
-        )
+        var out = Readings(.metalDrawable)
         DrawablePresentation.write(
             tally,
             over: Context.FlushWindow(nanoseconds: 1000000000),
@@ -157,7 +154,7 @@ struct DrawablePresentationTests {
             return []
         }
 
-        return [out.sealed()] + out.sealedSiblings()
+        return [out.build()] + out.additionalEntities()
     }
 
     private func rendered(_ id: Component.ID, in entity: Entity?) -> String? {

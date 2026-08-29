@@ -1,43 +1,38 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 public struct Readings {
     public let entity: Entity.ID
 
-    private let instrumentName: String
-    private var record: Entity
-    private var written: Set<Component.ID> = []
-    private var siblings: [Entity] = []
+    private let capturedAt: UInt64
+    private var components: [Component] = []
+    private var additional: [Entity] = []
 
     public var isEmpty: Bool {
-        record.components.isEmpty
+        components.isEmpty
     }
 
-    public var componentsWritten: Set<Component.ID> {
-        written
-    }
-
-    init(entity: Entity.ID, instrumentName: String) {
+    public init(_ entity: Entity.ID) {
         self.entity = entity
-        self.instrumentName = instrumentName
-        self.record = Entity(entity)
+        capturedAt = Entity.microsecondsSinceEpoch()
     }
 
     public mutating func put(_ component: Component) {
-        written.insert(component.id)
-        record.add(component)
+        components.append(component)
     }
 
-    /// Stamped on the record and every sibling this reading has produced so far — for a
-    /// correlation id minted after an instrument's own `fault`/`observe` has already built its
+    /// Stamped on the record and every additional entity this reading has produced so far — for
+    /// a correlation id minted after an instrument's own `fault`/`observe` has already built its
     /// readings, e.g. `faultId`, which every fault contributor's output carries without that
     /// instrument's own code needing to know it exists.
     public mutating func tagEveryEntity(with component: Component) {
-        record.add(component)
-        siblings = siblings.map { sibling in
-            var sibling = sibling
-            sibling.add(component)
-            return sibling
+        components.append(component)
+        additional = additional.map { entity in
+            Entity(
+                entity.id,
+                capturedAt: entity.capturedAt,
+                components: entity.components + [component]
+            )
         }
     }
 
@@ -45,21 +40,21 @@ public struct Readings {
     public mutating func also(_ entity: Entity.ID,
                               _ build: (inout Readings) -> Void)
     {
-        var sibling = Readings(entity: entity, instrumentName: instrumentName)
-        build(&sibling)
-        guard !sibling.isEmpty else {
+        var next = Readings(entity)
+        build(&next)
+        guard !next.isEmpty else {
             return
         }
 
-        siblings.append(sibling.sealed())
-        siblings.append(contentsOf: sibling.sealedSiblings())
+        additional.append(next.build())
+        additional.append(contentsOf: next.additionalEntities())
     }
 
-    func sealed() -> Entity {
-        record
+    func build() -> Entity {
+        Entity(entity, capturedAt: capturedAt, components: components)
     }
 
-    func sealedSiblings() -> [Entity] {
-        siblings
+    func additionalEntities() -> [Entity] {
+        additional
     }
 }

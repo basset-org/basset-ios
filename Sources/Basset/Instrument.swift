@@ -1,10 +1,9 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// What the runner consults. Descriptive metadata lives in `InstrumentMetadata`, not here.
 public protocol Instrument: AnyObject {
     static var id: InstrumentID { get }
-    static var entity: Entity.ID { get }
     /// Declared rather than inferred: the runner builds the tally before the instrument exists.
     static var tallySlots: Int { get }
 }
@@ -26,7 +25,7 @@ public extension Instrument {
 
 /// What the runner dispatches to — plain and `Configurable` instruments both conform.
 public protocol Snapshotable: Instrument {
-    func reading(_ out: inout Readings)
+    func reading() -> Readings
 }
 
 public protocol Streamable: Instrument {
@@ -35,7 +34,7 @@ public protocol Streamable: Instrument {
 }
 
 public protocol Faultable: Instrument {
-    func fault(_ kind: FaultKind, _ out: inout Readings)
+    func fault(_ kind: FaultKind) -> Readings
 }
 
 /// `init()` lives here, not on `Instrument`, so a `Configurable` instrument need not have one.
@@ -64,7 +63,6 @@ public struct Registration: @unchecked Sendable {
     public let id: InstrumentID
     public let name: String
     public let domain: Domain
-    public let entity: Entity.ID
     public let availability: Availability
     public let delivery: Delivery
     public let tallySlots: Int
@@ -89,7 +87,6 @@ public struct Registration: @unchecked Sendable {
         self.id = I.id
         self.name = I.name
         self.domain = I.domain
-        self.entity = I.entity
         self.availability = I.id.availability
         self.delivery = delivery
         self.tallySlots = I.tallySlots

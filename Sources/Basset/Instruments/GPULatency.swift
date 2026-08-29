@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(Metal)
@@ -56,7 +56,6 @@ final class GPULatency: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .metalGPULatency
-    static let entity = Entity.ID.gpu
     static let tallySlots = 7
 
     /// Once a second — the work is trivial, so this bounds how often the GPU gets interrupted.
@@ -155,7 +154,7 @@ final class GPULatency: Streamable, PlainInstrument {
     func observe(_ context: Context) {
         #if canImport(Metal)
         guard let layer = objc_getClass(Self.layerClassName) as? AnyClass else {
-            context.emit { out in
+            context.emit(.gpu) { out in
                 out.put(.mechanismStatus("unavailable: this app does not use Metal"))
             }
             return
@@ -182,7 +181,7 @@ final class GPULatency: Streamable, PlainInstrument {
         }
 
         // Reported before the next probe is sent, so a window carries the prior probe's answer.
-        context.flush(every: Self.interval) {
+        context.flush(every: Self.interval, into: .gpu) {
             [tally = context.tally, hot = context.hotPath] out, elapsed in
             let frame = budget.current
             Self.write(tally, budget: frame, over: elapsed, into: &out)

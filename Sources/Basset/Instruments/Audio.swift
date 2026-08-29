@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if os(iOS)
@@ -146,7 +146,6 @@ struct AudioCategoryOptionNames {
 
 final class AudioRoute: Streamable, PlainInstrument {
     static let id: InstrumentID = .audioRoute
-    static let entity = Entity.ID.audioRoute
 
     private var observer: NSObjectProtocol?
 
@@ -197,7 +196,7 @@ final class AudioRoute: Streamable, PlainInstrument {
             defaultToSpeaker: optionsRaw & 0x8 == 0x8
         )
 
-        context.emit { out in
+        context.emit(.audioRoute) { out in
             out.put(.changeReason(reason))
             out.put(.audioRouteVerdict(AudioRouting.verdict(facts).rawValue))
             out.put(.audioInputVerdict(AudioRouting.inputVerdict(inputFacts).rawValue))

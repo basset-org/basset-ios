@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import ObjectiveC
 
@@ -11,7 +11,6 @@ final class TileLoading: Streamable, PlainInstrument, LoadTimeInstall {
     }
 
     static let id: InstrumentID = .mapTileLoading
-    static let entity = Entity.ID.mapView
 
     static let mapViewClassName = "MKMapView"
     static let setDelegate: Selector = .init("setDelegate:")
@@ -32,7 +31,7 @@ final class TileLoading: Streamable, PlainInstrument, LoadTimeInstall {
 
     func observe(_ context: Context) {
         guard let mapView = objc_getClass(Self.mapViewClassName) as? AnyClass else {
-            context.emit { out in
+            context.emit(.mapView) { out in
                 out.put(.mapLoadsCompleted(0))
                 out.put(.tileLoadFailures(0))
                 out.put(.mechanismStatus("unavailable: this app does not use a map"))
@@ -65,7 +64,7 @@ final class TileLoading: Streamable, PlainInstrument, LoadTimeInstall {
             self?.failed(error, of: delegateClass, into: context)
         }
 
-        context.emit { out in
+        context.emit(.mapView) { out in
             out.put(.mapLoadsCompleted(0))
             out.put(.tileLoadFailures(0))
             out.put(.delegateClass(NSStringFromClass(delegateClass)))
@@ -78,7 +77,7 @@ final class TileLoading: Streamable, PlainInstrument, LoadTimeInstall {
             state.completed += 1
             return (state.completed, state.failures)
         }
-        context.emit { out in
+        context.emit(.mapView) { out in
             out.put(.mapLoadsCompleted(counts.0))
             out.put(.tileLoadFailures(counts.1))
             out.put(.delegateClass(NSStringFromClass(delegateClass)))
@@ -95,7 +94,7 @@ final class TileLoading: Streamable, PlainInstrument, LoadTimeInstall {
             state.failures += 1
             return (state.completed, state.failures)
         }
-        context.emit { out in
+        context.emit(.mapView) { out in
             out.put(.mapLoadsCompleted(counts.0))
             out.put(.tileLoadFailures(counts.1))
             out.put(.delegateClass(NSStringFromClass(delegateClass)))

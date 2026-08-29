@@ -58,7 +58,7 @@ public struct Entity: Equatable, Sendable {
 
     public let id: ID
     public let capturedAt: UInt64
-    public private(set) var components: [Component] = []
+    public let components: [Component]
 
     /// What this reading says, without when — dedupes KVO, which fires on every set.
     public var fingerprint: Int {
@@ -71,9 +71,14 @@ public struct Entity: Equatable, Sendable {
         return hasher.finalize()
     }
 
-    public init(_ id: ID, capturedAt: UInt64 = Entity.microsecondsSinceEpoch()) {
+    public init(
+        _ id: ID,
+        capturedAt: UInt64 = Entity.microsecondsSinceEpoch(),
+        components: [Component] = []
+    ) {
         self.id = id
         self.capturedAt = capturedAt
+        self.components = components
     }
 
     public static func microsecondsSinceEpoch() -> UInt64 {
@@ -81,10 +86,6 @@ public struct Entity: Equatable, Sendable {
         clock_gettime(CLOCK_REALTIME, &wallClock)
         // A dead clock can sit before 1970; a negative second must not trap the conversion.
         return UInt64(max(0, wallClock.tv_sec)) * 1000000 + UInt64(max(0, wallClock.tv_nsec)) / 1000
-    }
-
-    public mutating func add(_ component: Component) {
-        components.append(component)
     }
 }
 

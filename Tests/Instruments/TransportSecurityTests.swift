@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -9,8 +9,8 @@ struct TransportSecurityTests {
         var out = readings()
         TransportSecurity.write(nil, into: &out)
 
-        #expect(rendered(out.sealed(), .arbitraryLoadsAllowed) == "false")
-        #expect(out.componentsWritten.contains(.mechanismStatus))
+        #expect(rendered(out.build(), .arbitraryLoadsAllowed) == "false")
+        #expect(out.build().componentIDs.contains(.mechanismStatus))
     }
 
     @Test func arbitraryLoadsAreReportedAsTheBuildSetThem() {
@@ -20,8 +20,8 @@ struct TransportSecurityTests {
         var strict = readings()
         TransportSecurity.write(["NSAllowsArbitraryLoads": false], into: &strict)
 
-        #expect(rendered(permissive.sealed(), .arbitraryLoadsAllowed) == "true")
-        #expect(rendered(strict.sealed(), .arbitraryLoadsAllowed) == "false")
+        #expect(rendered(permissive.build(), .arbitraryLoadsAllowed) == "true")
+        #expect(rendered(strict.build(), .arbitraryLoadsAllowed) == "false")
     }
 
     /// Separate keys from the main switch — refuse everywhere except web content is common.
@@ -32,7 +32,7 @@ struct TransportSecurityTests {
             into: &out
         )
 
-        let detail = out.sealed().components.first { $0.id == .detail }?.value.rendered
+        let detail = out.build().components.first { $0.id == .detail }?.value.rendered
         #expect(detail == "arbitrary loads allowed in web content")
     }
 
@@ -43,7 +43,7 @@ struct TransportSecurityTests {
             into: &out
         )
 
-        #expect(out.componentsWritten.contains(.detail) == false)
+        #expect(out.build().componentIDs.contains(.detail) == false)
     }
 
     /// One row per exception domain — a per-domain TLS floor is how a single host fails alone.
@@ -62,11 +62,11 @@ struct TransportSecurityTests {
             into: &out
         )
 
-        #expect(out.sealedSiblings().count == 2)
-        #expect(rendered(out.sealed(), .occurrenceCount) == "2")
+        #expect(out.additionalEntities().count == 2)
+        #expect(rendered(out.build(), .occurrenceCount) == "2")
         // Sorted, so two captures of the same build list the exceptions alike.
-        #expect(rendered(out.sealedSiblings()[0], .exceptionDomain) == "api.example.com")
-        #expect(rendered(out.sealedSiblings()[1], .minimumTLSVersion) == "TLSv1.0")
+        #expect(rendered(out.additionalEntities()[0], .exceptionDomain) == "api.example.com")
+        #expect(rendered(out.additionalEntities()[1], .minimumTLSVersion) == "TLSv1.0")
     }
 
     /// A malformed plist must produce a reading rather than a crash — it is the app's own build.
@@ -77,15 +77,12 @@ struct TransportSecurityTests {
             into: &out
         )
 
-        #expect(out.sealedSiblings().count == 1)
-        #expect(rendered(out.sealedSiblings()[0], .insecureLoadsAllowed) == "false")
+        #expect(out.additionalEntities().count == 1)
+        #expect(rendered(out.additionalEntities()[0], .insecureLoadsAllowed) == "false")
     }
 
     private func readings() -> Readings {
-        Readings(
-            entity: .transportSecurity,
-            instrumentName: "network.transportSecurity"
-        )
+        Readings(.transportSecurity)
     }
 
     private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {

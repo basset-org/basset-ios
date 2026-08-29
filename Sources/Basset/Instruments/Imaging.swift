@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// Core Image renders into a Metal texture, and the images built back out of one.
@@ -9,7 +9,6 @@ final class ImagingRenderPasses: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .imagingRenderPasses
-    static let entity = Entity.ID.imageRender
     static let tallySlots = 2
 
     private static let contextClassName = "CIContext"
@@ -40,7 +39,7 @@ final class ImagingRenderPasses: Streamable, PlainInstrument {
         guard let contextClass = objc_getClass(Self.contextClassName) as? AnyClass,
               let imageClass = objc_getClass(Self.imageClassName) as? AnyClass
         else {
-            context.emit { out in
+            context.emit(.imageRender) { out in
                 out.put(.mechanismStatus("unavailable: this app does not use Core Image"))
             }
             return
@@ -78,14 +77,15 @@ final class ImagingRenderPasses: Streamable, PlainInstrument {
         for (side, outcome) in [("render", rendering), ("image", building)]
             where outcome != .installed && outcome != .joinedExisting
         {
-            context.emit { out in
+            context.emit(.imageRender) { out in
                 out.put(.mechanismStatus("unavailable: \(side) hook \(outcome)"))
             }
         }
 
-        context.flush(every: .seconds(1)) { [tally = context.tally] out, elapsed in
-            Self.write(tally, over: elapsed, into: &out)
-        }
+        context
+            .flush(every: .seconds(1), into: .imageRender) { [tally = context.tally] out, elapsed in
+                Self.write(tally, over: elapsed, into: &out)
+            }
     }
 
     func stopObserving() {}

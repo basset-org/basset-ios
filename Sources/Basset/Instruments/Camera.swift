@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if os(iOS)
@@ -9,7 +9,6 @@ import ObjectiveC
 
 final class CameraDeviceFormat: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraDeviceFormat
-    static let entity = Entity.ID.captureDevice
 
     private let observations: Observations = .init()
 
@@ -239,7 +238,6 @@ final class CameraDeviceFormat: Streamable, PlainInstrument, LoadTimeInstall {
 
 final class CameraDeviceInventory: Streamable, PlainInstrument {
     static let id: InstrumentID = .cameraDeviceInventory
-    static let entity = Entity.ID.captureDevice
 
     #if os(iOS)
     /// Named, not from `allCases` (AVFoundation has none) — a later type is absent from any list.
@@ -377,7 +375,6 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
     }
 
     static let id: InstrumentID = .cameraFrameDelivery
-    static let entity = Entity.ID.videoFrames
     static let tallySlots = 5
 
     private static let delivered: TallySlot = .first
@@ -449,7 +446,7 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
         }
 
         // Emitted every interval, even empty — silence and a starved camera read the same.
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(1), into: .videoFrames) { [weak self] out, window in
             guard let self, self.isWatchingSomething, self.isCarrying else {
                 // Drained anyway: what a stopped camera counted must not surface in the
                 // window after it starts again, dated to the wrong second.
@@ -530,7 +527,7 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
             return
         }
 
-        context.emit { out in
+        context.emit(.videoFrames) { out in
             out.put(.delegateClass(NSStringFromClass(subject)))
         }
 
@@ -628,7 +625,6 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
     }
 
     static let id: InstrumentID = .cameraSessionConfiguration
-    static let entity = Entity.ID.captureSession
     static let defaultConfig: Config = .init(callers: true)
 
     private let observations: Observations = .init()
@@ -695,7 +691,7 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
         let inputs = session.value(forKey: "inputs") as? [AnyObject] ?? []
         let outputs = session.value(forKey: "outputs") as? [AnyObject] ?? []
 
-        context.emit { out in
+        context.emit(.captureSession) { out in
             out.put(.instanceId(instance))
             out.put(.sessionClass(String(describing: type(of: session))))
             out.put(.sessionPreset(session.value(forKey: "sessionPreset") as? String ?? ""))
@@ -738,7 +734,6 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
 
 final class CameraSessionState: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraSessionState
-    static let entity = Entity.ID.captureSession
 
     private static let observed = ["running", "interrupted"]
 
@@ -803,7 +798,7 @@ final class CameraSessionState: Streamable, PlainInstrument, LoadTimeInstall {
         instance: UInt32,
         into context: Context
     ) {
-        context.emit { out in
+        context.emit(.captureSession) { out in
             out.put(.instanceId(instance))
             out.put(.sessionRunning((session.value(forKey: "isRunning") as? Bool) ?? false))
             out.put(.sessionInterrupted((session.value(forKey: "isInterrupted") as? Bool) ?? false))

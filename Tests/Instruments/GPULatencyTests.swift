@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -171,7 +171,7 @@ struct GPULatencyReadingTests {
     }
 
     private func emit(from tally: Tally) -> [Entity] {
-        var out = Readings(entity: GPULatency.entity, instrumentName: GPULatency.name)
+        var out = Readings(.gpu)
         GPULatency.write(
             tally,
             budget: GPULatency.frameBudgetNanoseconds(framesPerSecond: 60),
@@ -182,7 +182,7 @@ struct GPULatencyReadingTests {
             return []
         }
 
-        return [out.sealed()] + out.sealedSiblings()
+        return [out.build()] + out.additionalEntities()
     }
 
     private func rendered(_ id: Component.ID, in entity: Entity?) -> String? {

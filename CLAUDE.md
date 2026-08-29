@@ -12,13 +12,13 @@ everything in this repository, and neither is obvious from the code alone:
 ## Layout
 
 ```
-Sources/Basset/        the library an app links: instruments, transports, control
-Sources/BassetECS/     the entity-component layer instruments record through
-Tests/                 host tests
-Demo/                  an executable that exercises the library by hand
+Sources/Basset/                  the library an app links: instruments, transports, control
+Sources/BassetEntityComponent/    the entity-component layer instruments record through
+Tests/                            host tests
+Demo/                             an executable that exercises the library by hand
 ```
 
-`Basset` is the only product. `BassetECS` is a separate module because the wire
+`Basset` is the only product. `BassetEntityComponent` is a separate module because the wire
 format and the instruments both depend on it and neither should depend on the
 other.
 

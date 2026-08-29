@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// Interval between presented drawables; never compared to another clock of unknown base.
@@ -14,7 +14,6 @@ final class DrawablePresentation: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .metalDrawablePresentation
-    static let entity = Entity.ID.metalDrawable
     static let tallySlots = 7
 
     private static let layerClassName = "CAMetalLayer"
@@ -99,7 +98,7 @@ final class DrawablePresentation: Streamable, PlainInstrument {
 
     func observe(_ context: Context) {
         guard let layer = objc_getClass(Self.layerClassName) as? AnyClass else {
-            context.emit { out in
+            context.emit(.metalDrawable) { out in
                 out.put(.mechanismStatus("unavailable: this app does not use Metal"))
             }
             return
@@ -135,9 +134,12 @@ final class DrawablePresentation: Streamable, PlainInstrument {
             _ = drawable.perform(handlerSelector, with: presented)
         }
 
-        context.flush(every: .seconds(1)) { [tally = context.tally] out, elapsed in
-            Self.write(tally, over: elapsed, into: &out)
-        }
+        context
+            .flush(every: .seconds(1),
+                   into: .metalDrawable)
+            { [tally = context.tally] out, elapsed in
+                Self.write(tally, over: elapsed, into: &out)
+            }
     }
 
     func stopObserving() {}

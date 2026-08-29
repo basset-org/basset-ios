@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import ObjectiveC
 
@@ -10,7 +10,6 @@ final class ContentProcessTermination: Streamable, PlainInstrument, LoadTimeInst
     }
 
     static let id: InstrumentID = .webContentTermination
-    static let entity = Entity.ID.webView
 
     static let webViewClassName = "WKWebView"
     static let setNavigationDelegate: Selector = .init("setNavigationDelegate:")
@@ -43,7 +42,7 @@ final class ContentProcessTermination: Streamable, PlainInstrument, LoadTimeInst
 
     func observe(_ context: Context) {
         guard let webView = objc_getClass(Self.webViewClassName) as? AnyClass else {
-            context.emit { out in
+            context.emit(.webView) { out in
                 out.put(.contentProcessTerminations(0))
                 out.put(.mechanismStatus("unavailable: this app does not use a web view"))
             }
@@ -72,7 +71,7 @@ final class ContentProcessTermination: Streamable, PlainInstrument, LoadTimeInst
         guard outcome == .installed || outcome == .joinedExisting || outcome ==
             .implemented
         else {
-            context.emit { out in
+            context.emit(.webView) { out in
                 out.put(.contentProcessTerminations(0))
                 out.put(.delegateClass(NSStringFromClass(delegateClass)))
                 out.put(.mechanismStatus("unavailable: \(outcome)"))
@@ -80,7 +79,7 @@ final class ContentProcessTermination: Streamable, PlainInstrument, LoadTimeInst
             return
         }
 
-        context.emit { out in
+        context.emit(.webView) { out in
             out.put(.contentProcessTerminations(0))
             out.put(.delegateClass(NSStringFromClass(delegateClass)))
             out.put(.callbackImplemented(appWasListening))
@@ -104,7 +103,7 @@ final class ContentProcessTermination: Streamable, PlainInstrument, LoadTimeInst
             return state.terminations
         }
 
-        context.emit { out in
+        context.emit(.webView) { out in
             out.put(.contentProcessTerminations(count))
             out.put(.delegateClass(NSStringFromClass(delegateClass)))
             if let url = Self.url(of: webView) {

@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// Core Data churn aggregated per flush window — catches mutations that never reach a save.
@@ -17,7 +17,6 @@ final class CoreDataChanges: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .coreDataChanges
-    static let entity = Entity.ID.managedObjectContext
 
     private let tally: Mutex<Tallied> = .init(Tallied())
     private var observer: NSObjectProtocol?
@@ -58,7 +57,7 @@ final class CoreDataChanges: Streamable, PlainInstrument {
             self?.count(note)
         }
 
-        context.flush(every: .seconds(1)) { [weak self] out, window in
+        context.flush(every: .seconds(1), into: .managedObjectContext) { [weak self] out, window in
             guard let self, let taken = self.take() else {
                 return
             }
@@ -176,7 +175,6 @@ struct ManagedObjectContextFacts {
 /// Save duration paired from will-save/did-save — both post on the thread doing the work.
 final class CoreDataSave: Streamable, PlainInstrument {
     static let id: InstrumentID = .coreDataSave
-    static let entity = Entity.ID.managedObjectContext
 
     private let clock: Clock = .init()
     /// Keyed by identity, never retaining the context; an unfinished save leaves one stale entry.
@@ -232,7 +230,7 @@ final class CoreDataSave: Streamable, PlainInstrument {
             (change, change.count(in: note.userInfo))
         }
 
-        context.emit { out in
+        context.emit(.managedObjectContext) { out in
             for (change, count) in counts {
                 switch change {
                 case .inserted: out.put(.insertedCount(UInt32(count)))

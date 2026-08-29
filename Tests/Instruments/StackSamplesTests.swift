@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -189,7 +189,7 @@ struct StackWindowTests {
 }
 
 struct StackSampleReadingTests {
-    @Test func theHottestStackLeadsAndEachSiblingCarriesItsOwnCount() {
+    @Test func theHottestStackLeadsAndEachAdditionalEntityCarriesItsOwnCount() {
         var window = StackWindow()
         for _ in 0 ..< 7 {
             window.record([0x1000])
@@ -204,7 +204,8 @@ struct StackSampleReadingTests {
         #expect(counts == [7, 1], "hottest first, each with its own count")
     }
 
-    /// The window total rides each stack's own reading — the sibling holding it may be trimmed.
+    /// The window total rides each stack's own reading — the additional entity holding it may be
+    /// trimmed.
     @Test func everyStackCarriesTheWindowTotalOfItsOwn() {
         var window = StackWindow()
         for _ in 0 ..< 5 {
@@ -321,15 +322,12 @@ struct StackSampleReadingTests {
 
         let readings = emit(window)
 
-        #expect(readings.contains { $0.id == StackSamples.entity })
+        #expect(readings.contains { $0.id == .stackSample })
         #expect(!readings.contains { $0.id == .binaryImage })
     }
 
     private func emit(_ window: StackWindow) -> [Entity] {
-        var out = Readings(
-            entity: StackSamples.entity,
-            instrumentName: StackSamples.name
-        )
+        var out = Readings(.stackSample)
         StackSamples(config: StackSamples.defaultConfig).write(
             window,
             over: Context.FlushWindow(nanoseconds: 1000000000),
@@ -339,7 +337,7 @@ struct StackSampleReadingTests {
             return []
         }
 
-        return [out.sealed()] + out.sealedSiblings()
+        return [out.build()] + out.additionalEntities()
     }
 
     private func rendered(_ id: Component.ID, in entity: Entity?) -> String? {
