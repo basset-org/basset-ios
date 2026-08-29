@@ -309,14 +309,19 @@ final class ViewHierarchy: Snapshotable, Configurable {
         guard !hits.isEmpty else {
             out.put(.mechanismStatus("unavailable: nothing at that point"))
             putViewPosition(id: EntityIdentity.next(), parent: parent, level: 0, into: &out)
+            putTouch(parent, into: &out)
             return
         }
 
         let (kept, omitted) = selectWithinCeiling(hits)
 
         put(kept[0], in: root, into: &out)
+        putTouch(parent, into: &out)
         for match in kept.dropFirst() {
-            out.also(Self.entity) { sibling in put(match, in: root, into: &sibling) }
+            out.also(Self.entity) { sibling in
+                put(match, in: root, into: &sibling)
+                putTouch(parent, into: &sibling)
+            }
         }
 
         guard omitted > 0 else {
@@ -326,7 +331,20 @@ final class ViewHierarchy: Snapshotable, Configurable {
         out.also(Self.entity) { sibling in
             sibling.put(.mechanismStatus("truncated: \(omitted) more"))
             putViewPosition(id: EntityIdentity.next(), parent: parent, level: 0, into: &sibling)
+            putTouch(parent, into: &sibling)
         }
+    }
+
+    /// The correlation key, on every row rather than only the one whose `viewParent` holds it:
+    /// a row names its own parent view, so without this only the root could be tied to the
+    /// touch, and only by knowing that a level of zero means the parent is not a view at all.
+    /// Zero is the standalone instrument, which no touch asked for.
+    private static func putTouch(_ touchId: UInt32, into out: inout Readings) {
+        guard touchId != 0 else {
+            return
+        }
+
+        out.put(.touchId(touchId))
     }
 
     /// `viewId`/`viewParent`/`nestedLevel` together, so a call site writes one line rather than
