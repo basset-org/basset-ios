@@ -5,6 +5,9 @@ import Testing
 
 /// Derived from declaration alone, so these run host-side under `bazel test //...`.
 struct InstrumentShapeTests {
+    /// Raise when the catalog first declares an instrument for a newer major.
+    private static let newestTargetableIOSMajor = 26
+
     private var instrumentIdSnapshot: [UInt16] {
         InstrumentID.allCases.map(\.rawValue).sorted()
     }
@@ -128,16 +131,13 @@ struct InstrumentShapeTests {
         }
     }
 
-    /// iOS only — a Mac's major version means nothing to any instrument's floor.
-    @Test func noShippedInstrumentNeedsANewerOSThanThisOne() {
-        #if os(iOS)
+    @Test func noShippedInstrumentDeclaresAFloorAboveTheNewestIOS() {
         for registration in Instruments.all {
             #expect(
-                registration.availability.minIOS <= Availability.runningMajorVersion,
+                registration.availability.minIOS <= Self.newestTargetableIOSMajor,
                 "\(registration.name) declares minIOS \(registration.availability.minIOS)"
             )
         }
-        #endif
     }
 
     /// The factory proves delivery at compile time; the id space repeats it for the menu.
