@@ -131,7 +131,8 @@ public extension Component.ID {
             .state
 
         // A wall-clock instant; charted, it would draw a line whose slope is the passage of time.
-        case .intervalEndMicroseconds:
+        case .bootTimeMicroseconds,
+             .intervalEndMicroseconds:
             .state
 
         case .accuracyClass,

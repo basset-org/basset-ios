@@ -42,8 +42,11 @@ extension DeliveryTests {
         channel.send(Data([7, 7, 7]))
 
         #expect(await eventually { StubbedResponses.seen >= 1 }, "the first attempt was sent")
+        // Polled, not read once: the attempt being seen and the batch reaching disk are
+        // two writes, and a loaded runner can land them far enough apart to read between.
+        // Nothing answers this attempt, so once on disk it stays there for the assertion.
         #expect(
-            !PersistedBacklog.load(for: requestId, in: directory).isEmpty,
+            await eventually { !PersistedBacklog.load(for: requestId, in: directory).isEmpty },
             "on disk before it's answered, not only after it first fails"
         )
         channel.close()
@@ -104,11 +107,13 @@ extension DeliveryTests {
         let requestId: UInt64 = 13
         StubbedResponses.reset([(nil, true)])
         // A backoff far longer than the deadline below, so a slow runner cannot be what
-        // satisfies the retry: only the reconnect can fire it that early.
+        // satisfies the retry: only the reconnect can fire it that early. Both scale
+        // together — a loaded runner has taken 12s to get here, and the gap between them
+        // is what the assertion rests on.
         let channel = stubbedChannel(
             requestId: requestId,
             backlogDirectory: directory,
-            initialBackoff: 30
+            initialBackoff: 120
         )
         channel.send(Data([1, 2, 3]))
         #expect(await eventually {
@@ -118,7 +123,7 @@ extension DeliveryTests {
         StubbedResponses.reset([(200, false)])
         channel.reconnected()
 
-        #expect(await eventually(within: .seconds(5)) { StubbedResponses.seen >= 1 })
+        #expect(await eventually(within: .seconds(20)) { StubbedResponses.seen >= 1 })
         #expect(await eventually {
             PersistedBacklog.load(for: requestId, in: directory).isEmpty
         })

@@ -130,18 +130,6 @@ final class LastRunEnded: Streamable, PlainInstrument {
         #endif
     }
 
-    /// `kern.boottime` — differs from the last run's own copy only if the device rebooted since.
-    fileprivate static var bootTimeMicroseconds: UInt64 {
-        var boottime = timeval()
-        var size = MemoryLayout<timeval>.stride
-        var name: [Int32] = [CTL_KERN, KERN_BOOTTIME]
-        guard sysctl(&name, 2, &boottime, &size, nil, 0) == 0 else {
-            return 0
-        }
-
-        return UInt64(boottime.tv_sec) * 1000000 + UInt64(boottime.tv_usec)
-    }
-
     private let heartbeat: MainRunLoopHeartbeat = .init()
     private let clock: Clock = .init()
     /// Locked: the stamper thread, pressure handler and notification blocks all reach it.
@@ -203,7 +191,7 @@ final class LastRunEnded: Streamable, PlainInstrument {
         record.appVersion = Self.appVersion
         record.osVersion = Self.osVersion
         record.isSimulator = Self.isSimulator
-        record.bootTimeMicroseconds = Self.bootTimeMicroseconds
+        record.bootTimeMicroseconds = SystemBoot.microseconds
         return record
     }
 
@@ -220,6 +208,9 @@ final class LastRunEnded: Streamable, PlainInstrument {
             out.put(.exitReason(ending.reason))
             out.put(.appState(ending.state))
             out.put(.intervalEndMicroseconds(previous.recordedAtMicroseconds))
+            if previous.bootTimeMicroseconds > 0 {
+                out.put(.bootTimeMicroseconds(previous.bootTimeMicroseconds))
+            }
 
             if !previous.appVersion.isEmpty {
                 out.put(.appVersion(previous.appVersion))
@@ -368,7 +359,7 @@ struct RunEnding: Equatable {
 
     init(
         _ record: RunRecord,
-        currentBootTimeMicroseconds: UInt64 = LastRunEnded.bootTimeMicroseconds,
+        currentBootTimeMicroseconds: UInt64 = SystemBoot.microseconds,
         currentAppVersion: String = LastRunEnded.appVersion,
         currentOSVersion: String = LastRunEnded.osVersion
     ) {

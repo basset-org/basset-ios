@@ -134,7 +134,8 @@ struct ThreadSnapshotRefusalTests {
     @Test func aProcessOverTheCeilingSaysHowFarOver() {
         let said = ThreadSnapshot.refusal(
             liveThreads: ThreadWalker.maxThreads + 130,
-            sanitizerLoaded: false
+            sanitizerLoaded: false,
+            exclusiveHeld: false
         )
 
         #expect(said.contains("\(ThreadWalker.maxThreads + 130) threads"))
@@ -142,13 +143,21 @@ struct ThreadSnapshotRefusalTests {
     }
 
     @Test func aProcessUnderTheCeilingBlamesTheWalkRatherThanTheCount() {
-        let said = ThreadSnapshot.refusal(liveThreads: 4, sanitizerLoaded: false)
+        let said = ThreadSnapshot.refusal(
+            liveThreads: 4,
+            sanitizerLoaded: false,
+            exclusiveHeld: false
+        )
 
         #expect(said == "unavailable: the walk reported no threads")
     }
 
     @Test func anUnreadableThreadListIsItsOwnAnswer() {
-        let said = ThreadSnapshot.refusal(liveThreads: nil, sanitizerLoaded: false)
+        let said = ThreadSnapshot.refusal(
+            liveThreads: nil,
+            sanitizerLoaded: false,
+            exclusiveHeld: false
+        )
 
         #expect(said == "unavailable: the thread list could not be read")
     }
@@ -157,7 +166,8 @@ struct ThreadSnapshotRefusalTests {
         #expect(
             ThreadSnapshot.refusal(
                 liveThreads: ThreadWalker.maxThreads,
-                sanitizerLoaded: false
+                sanitizerLoaded: false,
+                exclusiveHeld: false
             ) == "unavailable: the walk reported no threads",
             "the walk admits a process at the ceiling, so the count is not the reason"
         )
@@ -167,8 +177,11 @@ struct ThreadSnapshotRefusalTests {
     @Test func aLoadedSanitizerIsTheReasonWhateverTheCountSays() {
         for liveThreads in [nil, 4, ThreadWalker.maxThreads + 130] {
             #expect(
-                ThreadSnapshot.refusal(liveThreads: liveThreads, sanitizerLoaded: true)
-                    == "unavailable: a thread sanitizer is loaded"
+                ThreadSnapshot.refusal(
+                    liveThreads: liveThreads,
+                    sanitizerLoaded: true,
+                    exclusiveHeld: false
+                ) == "unavailable: a thread sanitizer is loaded"
             )
         }
     }
