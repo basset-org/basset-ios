@@ -24,7 +24,7 @@ jobs:
   release:
     # macOS because the gate that matters builds a package for iOS, which needs
     # xcodebuild and an iOS SDK.
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64, tartelet]
     steps:
       # The whole history and every tag: the version check compares against the
       # tags that exist, and release notes are generated from a range.
