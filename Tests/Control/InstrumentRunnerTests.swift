@@ -1348,7 +1348,7 @@ struct TallyHandoffTests {
         let (subject, _) = runtime([.stream(SlotHungry.self)])
 
         subject.converge(
-            to: [request(1, instruments: ["metal.drawable.presentation"])],
+            to: [request(1, instruments: ["swiftui.displayList.churn"])],
             ingestEndpoint: "in"
         )
 
@@ -1604,7 +1604,7 @@ private enum SlotProbe {
 
 /// Declares more counters than default and writes the highest.
 private final class SlotHungry: Streamable, PlainInstrument {
-    static let id: InstrumentID = .metalDrawablePresentation
+    static let id: InstrumentID = .swiftUIDisplayListChurn
     static let entity = Entity.ID.displayUpdate
     static let tallySlots = 6
 
