@@ -80,7 +80,6 @@ jobs:
             exit 1
           fi
 
-      # Two virtual machines share one host; the races job runs these unconstrained.
       - name: Test on iOS ${{ steps.simulator.outputs.version }}
         env:
           TEST_RUNNER_BASSET_SHARED_SIMULATOR: "true"
@@ -90,9 +89,6 @@ jobs:
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -resultBundlePath "${{ runner.temp }}/test.xcresult"
 
-      # Once, not per leg: a generic/platform=iOS build resolves the same
-      # iPhoneOS SDK and the same deployment floor whichever simulator runtime
-      # the leg chose, so the second run compiles identical inputs.
       - name: Build for a device
         if: matrix.runtime == 'newest'
         run: |
