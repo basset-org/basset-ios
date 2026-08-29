@@ -81,6 +81,8 @@ jobs:
           fi
 
       - name: Test on iOS ${{ steps.simulator.outputs.version }}
+        env:
+          TEST_RUNNER_BASSET_SHARED_SIMULATOR: "true"
         run: |
           xcodebuild test \
             -scheme Basset-Package \
@@ -88,6 +90,7 @@ jobs:
             -resultBundlePath "${{ runner.temp }}/test.xcresult"
 
       - name: Build for a device
+        if: matrix.runtime == 'newest'
         run: |
           xcodebuild build \
             -scheme Basset \
