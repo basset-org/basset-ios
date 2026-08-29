@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 public struct Readings {

@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(Network)
@@ -21,7 +21,6 @@ final class PathTransitions: Streamable, PlainInstrument, @unchecked Sendable {
     #endif
 
     static let id: InstrumentID = .networkPathTransitions
-    static let entity = Entity.ID.networkPath
 
     init() {}
 
@@ -111,7 +110,6 @@ final class PathTransitions: Streamable, PlainInstrument, @unchecked Sendable {
 /// What a `URLSession` was configured to allow, described off `taskMetrics`'s own hook.
 final class SessionConfiguration: Streamable, PlainInstrument {
     static let id: InstrumentID = .sessionConfiguration
-    static let entity = Entity.ID.networkSession
 
     #if os(iOS)
     static let untouchedTLSFloor = URLSessionConfiguration.ephemeral
@@ -188,7 +186,6 @@ final class SessionConfiguration: Streamable, PlainInstrument {
 
 final class TaskMetrics: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .urlSessionTaskMetrics
-    static let entity = Entity.ID.networkTask
 
     #if os(iOS)
     /// Stream tasks omitted — unhookable factory shape, no HTTP transaction to report.
@@ -697,7 +694,6 @@ final class TransportSecurity: Snapshotable, PlainInstrument {
     }
 
     static let id: InstrumentID = .transportSecurity
-    static let entity = Entity.ID.transportSecurity
 
     private static let key = "NSAppTransportSecurity"
 
@@ -726,7 +722,7 @@ final class TransportSecurity: Snapshotable, PlainInstrument {
         // Sorted so two captures of one build list exceptions in the same order.
         for name in domains.keys.sorted() {
             let exception = domains[name] as? [String: Any] ?? [:]
-            out.also(Self.entity) { sibling in
+            out.also(out.entity) { sibling in
                 sibling.put(.exceptionDomain(name))
                 sibling.put(
                     .insecureLoadsAllowed(

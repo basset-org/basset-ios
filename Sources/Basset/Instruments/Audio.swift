@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if os(iOS)
@@ -146,7 +146,6 @@ struct AudioCategoryOptionNames {
 
 final class AudioRoute: Streamable, PlainInstrument {
     static let id: InstrumentID = .audioRoute
-    static let entity = Entity.ID.audioRoute
 
     private var observer: NSObjectProtocol?
 

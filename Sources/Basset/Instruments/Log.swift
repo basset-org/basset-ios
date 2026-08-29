@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// Log records grouped by what they say, counted and ranked — testable without a log store.
@@ -152,7 +152,6 @@ struct LogSubsystemFilter: Codable, Sendable {
 /// A message can carry what an app logged as public; token-shaped runs are scrubbed out.
 final class LogFaults: Streamable, Configurable {
     static let id: InstrumentID = .logFaults
-    static let entity = Entity.ID.logRecord
     static let defaultConfig: LogSubsystemFilter = .init(subsystem: nil)
 
     private static let subjectsPerFlush = 24
@@ -181,14 +180,14 @@ final class LogFaults: Streamable, Configurable {
                 put(subject, over: window, into: &out)
                 continue
             }
-            out.also(entity) { sibling in put(subject, over: window, into: &sibling) }
+            out.also(out.entity) { sibling in put(subject, over: window, into: &sibling) }
         }
 
         guard digest.omitted > 0 else {
             return
         }
 
-        out.also(entity) { sibling in
+        out.also(out.entity) { sibling in
             sibling.put(.windowNanoseconds(window.nanoseconds))
             sibling.put(.mechanismStatus("truncated: \(digest.omitted) more"))
         }
@@ -226,7 +225,7 @@ final class LogFaults: Streamable, Configurable {
                     return
                 }
 
-                out.also(Self.entity) { sibling in
+                out.also(out.entity) { sibling in
                     sibling.put(.windowNanoseconds(window.nanoseconds))
                     sibling.put(
                         .mechanismStatus("read stopped on its ceiling; more unread")
@@ -242,7 +241,6 @@ final class LogFaults: Streamable, Configurable {
 /// Who is logging and how much — no subsystem list exists, so this reads the process itself.
 final class LogSubsystems: Streamable, Configurable {
     static let id: InstrumentID = .logSubsystems
-    static let entity = Entity.ID.logRecord
     static let defaultConfig: LogSubsystemFilter = .init(subsystem: nil)
 
     private static let sourcesPerFlush = 32
@@ -263,14 +261,14 @@ final class LogSubsystems: Streamable, Configurable {
                 put(source, over: window, into: &out)
                 continue
             }
-            out.also(entity) { sibling in put(source, over: window, into: &sibling) }
+            out.also(out.entity) { sibling in put(source, over: window, into: &sibling) }
         }
 
         guard traffic.omitted > 0 else {
             return
         }
 
-        out.also(entity) { sibling in
+        out.also(out.entity) { sibling in
             sibling.put(.windowNanoseconds(window.nanoseconds))
             sibling.put(.occurrenceCount(traffic.total))
             sibling.put(.mechanismStatus("truncated: \(traffic.omitted) more"))
@@ -310,7 +308,7 @@ final class LogSubsystems: Streamable, Configurable {
                 }
 
                 // A cut read describes the start of the window, not the whole thing.
-                out.also(Self.entity) { sibling in
+                out.also(out.entity) { sibling in
                     sibling.put(.windowNanoseconds(window.nanoseconds))
                     sibling.put(
                         .mechanismStatus("read stopped on its ceiling; more unread")

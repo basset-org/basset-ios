@@ -1,5 +1,5 @@
 import Basset
-import BassetECS
+import BassetEntityComponent
 
 var call: Entity = .init(.methodCall)
 call.add(.methodName("AVFoundation.AVCaptureSession.addInput"))

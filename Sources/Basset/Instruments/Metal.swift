@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// Interval between presented drawables; never compared to another clock of unknown base.
@@ -14,7 +14,6 @@ final class DrawablePresentation: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .metalDrawablePresentation
-    static let entity = Entity.ID.metalDrawable
     static let tallySlots = 7
 
     private static let layerClassName = "CAMetalLayer"

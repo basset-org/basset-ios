@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// Activates an instrument for real so a test asserts the wiring, not what a `write` test checks.
@@ -26,7 +26,7 @@ final class InstrumentHarness<Instrument: Streamable & PlainInstrument>: @unchec
         status.activate()
         let context = Context(
             instrumentName: Instrument.name,
-            defaultEntity: Instrument.entity,
+            defaultEntity: .unknown,
             status: status,
             swizzle: Swizzle(),
             registries: registries,

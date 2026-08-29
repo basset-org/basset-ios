@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -17,7 +17,6 @@ final class FramePacing: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .framePacing
-    static let entity = Entity.ID.displayUpdate
     /// Six slots; the shared default is four.
     static let tallySlots = 6
 

@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Testing
 
 struct CameraTests {

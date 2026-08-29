@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -108,7 +108,6 @@ final class MainThreadHang: Streamable, Configurable {
     }
 
     static let id: InstrumentID = .mainThreadHang
-    static let entity = Entity.ID.mainThread
     /// 2s, Apple's own hang threshold.
     static let defaultConfig: Config = .init(thresholdMs: 2000)
 
@@ -245,7 +244,6 @@ final class QueueLatency: Streamable, PlainInstrument, @unchecked Sendable {
     }
 
     static let id: InstrumentID = .queueLatency
-    static let entity = Entity.ID.dispatchQueue
 
     private let clock: Clock = .init()
     private let guarded: Mutex<State> = .init(State())
@@ -326,7 +324,6 @@ final class QueueLatency: Streamable, PlainInstrument, @unchecked Sendable {
 /// Cheap half of the pair: what a thread is, from the kernel — not what it runs, no suspension.
 final class ThreadInventoryReading: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .threadInventory
-    static let entity = Entity.ID.thread
 
     /// Past this the finding is the count itself — hundreds of rows would spend the whole budget.
     private static let ceiling = 96
@@ -342,7 +339,7 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
         // Count rides the first row, not its own row, so reading one entity still learns the total.
         put(first, of: samples.count, into: &out)
         for sample in samples.dropFirst(1).prefix(ceiling - 1) {
-            out.also(Self.entity) { sibling in put(
+            out.also(out.entity) { sibling in put(
                 sample,
                 of: samples.count,
                 into: &sibling
@@ -353,7 +350,7 @@ final class ThreadInventoryReading: Snapshotable, PlainInstrument {
             return
         }
 
-        out.also(Self.entity) { sibling in
+        out.also(out.entity) { sibling in
             sibling.put(.occurrenceCount(UInt64(samples.count)))
             sibling.put(.mechanismStatus("truncated: \(samples.count - ceiling) more"))
         }

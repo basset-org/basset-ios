@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -321,13 +321,13 @@ struct StackSampleReadingTests {
 
         let readings = emit(window)
 
-        #expect(readings.contains { $0.id == StackSamples.entity })
+        #expect(readings.contains { $0.id == .stackSample })
         #expect(!readings.contains { $0.id == .binaryImage })
     }
 
     private func emit(_ window: StackWindow) -> [Entity] {
         var out = Readings(
-            entity: StackSamples.entity,
+            entity: .stackSample,
             instrumentName: StackSamples.name
         )
         StackSamples(config: StackSamples.defaultConfig).write(

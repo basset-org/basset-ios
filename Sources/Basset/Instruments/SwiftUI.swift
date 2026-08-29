@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -23,7 +23,6 @@ final class DisplayListChurn: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .swiftUIDisplayListChurn
-    static let entity = Entity.ID.swiftUIDisplayList
 
     /// Change count saturates at 4/sec — the seed's rate of advance is the real measure.
     private static let sampleInterval = 0.25
@@ -189,7 +188,6 @@ final class HostAppear: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .swiftUIHostAppear
-    static let entity = Entity.ID.swiftUIHost
 
     /// Caps entries for screens that never appeared, so a leak can't grow with uptime.
     private static let pendingCeiling = 64
@@ -297,7 +295,6 @@ final class HostUpdates: Streamable, PlainInstrument, @unchecked Sendable {
     }
 
     static let id: InstrumentID = .swiftUIHostUpdates
-    static let entity = Entity.ID.swiftUIHost
 
     private static let passes: TallySlot = .first
     private static let totalNanoseconds: TallySlot = .second
@@ -423,7 +420,6 @@ final class HostUpdates: Streamable, PlainInstrument, @unchecked Sendable {
 /// Sheets and modal screens presenting and dismissing, seen through the UIKit underneath.
 final class Presentation: Streamable, PlainInstrument {
     static let id: InstrumentID = .swiftUIPresentation
-    static let entity = Entity.ID.swiftUIPresentation
 
     init() {}
 
@@ -565,7 +561,6 @@ struct RuntimeIssueDigest {
 /// SwiftUI's undefined-behaviour faults, logged with or without a debugger attached.
 final class RuntimeIssues: Streamable, PlainInstrument {
     static let id: InstrumentID = .swiftUIRuntimeIssues
-    static let entity = Entity.ID.swiftUIRuntimeIssue
 
     /// `attributegraph` is the survivable half of the family that otherwise aborts.
     private static let subsystems = [

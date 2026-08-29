@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import ObjectiveC
 
@@ -11,7 +11,6 @@ final class TileLoading: Streamable, PlainInstrument, LoadTimeInstall {
     }
 
     static let id: InstrumentID = .mapTileLoading
-    static let entity = Entity.ID.mapView
 
     static let mapViewClassName = "MKMapView"
     static let setDelegate: Selector = .init("setDelegate:")

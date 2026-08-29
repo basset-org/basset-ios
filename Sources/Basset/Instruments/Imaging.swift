@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// Core Image renders into a Metal texture, and the images built back out of one.
@@ -9,7 +9,6 @@ final class ImagingRenderPasses: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .imagingRenderPasses
-    static let entity = Entity.ID.imageRender
     static let tallySlots = 2
 
     private static let contextClassName = "CIContext"

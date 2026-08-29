@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import ObjectiveC
 
@@ -10,7 +10,6 @@ final class ContentProcessTermination: Streamable, PlainInstrument, LoadTimeInst
     }
 
     static let id: InstrumentID = .webContentTermination
-    static let entity = Entity.ID.webView
 
     static let webViewClassName = "WKWebView"
     static let setNavigationDelegate: Selector = .init("setNavigationDelegate:")

@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import ObjectiveC
 
@@ -10,7 +10,6 @@ final class ProviderActions: Streamable, PlainInstrument, LoadTimeInstall {
     }
 
     static let id: InstrumentID = .callProviderActions
-    static let entity = Entity.ID.callProvider
 
     static let providerClassName = "CXProvider"
     static let setDelegate: Selector = .init("setDelegate:queue:")

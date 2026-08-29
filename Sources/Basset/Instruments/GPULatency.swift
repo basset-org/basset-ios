@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(Metal)
@@ -56,7 +56,6 @@ final class GPULatency: Streamable, PlainInstrument {
     }
 
     static let id: InstrumentID = .metalGPULatency
-    static let entity = Entity.ID.gpu
     static let tallySlots = 7
 
     /// Once a second — the work is trivial, so this bounds how often the GPU gets interrupted.

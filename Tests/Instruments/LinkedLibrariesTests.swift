@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -86,7 +86,7 @@ struct LinkedLibrariesTests {
 
     private func emit(from images: [BinaryImage]) -> [Entity] {
         var out = Readings(
-            entity: LinkedLibraries.entity,
+            entity: .binaryImage,
             instrumentName: LinkedLibraries.name
         )
         LinkedLibraries.write(images, inAppBundleUnder: Self.shipped, into: &out)
@@ -142,7 +142,7 @@ struct LinkedLibrariesWiringTests {
     /// Against the real process, not fixtures — dyld answers and names the main executable.
     @Test func thereAlProcessAnswers() {
         var out = Readings(
-            entity: LinkedLibraries.entity,
+            entity: .binaryImage,
             instrumentName: LinkedLibraries.name
         )
         LinkedLibraries().reading(&out)
@@ -237,7 +237,7 @@ struct LinkedLibrariesWiringTests {
     @Test func theexecutableIsAmongTheImagesItsOwnProcessShipped() throws {
         let executable = try #require(BinaryImages.mainExecutable())
         var out = Readings(
-            entity: LinkedLibraries.entity,
+            entity: .binaryImage,
             instrumentName: LinkedLibraries.name
         )
         LinkedLibraries.write(

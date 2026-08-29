@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -248,7 +248,7 @@ struct ThreadSnapshotFaultTests {
         let instrument = ThreadSnapshot()
 
         var first = Readings(
-            entity: ThreadSnapshot.entity,
+            entity: .thread,
             instrumentName: "runtime.threadSnapshot"
         )
         instrument.fault(.hang, &first)
@@ -258,7 +258,7 @@ struct ThreadSnapshotFaultTests {
         }
 
         var second = Readings(
-            entity: ThreadSnapshot.entity,
+            entity: .thread,
             instrumentName: "runtime.threadSnapshot"
         )
         instrument.fault(.hang, &second)

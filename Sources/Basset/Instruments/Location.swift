@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import ObjectiveC
 
@@ -11,7 +11,6 @@ final class DelegateSilence: Streamable, PlainInstrument, LoadTimeInstall {
     }
 
     static let id: InstrumentID = .locationSilence
-    static let entity = Entity.ID.locationDelegate
 
     static let managerClassName = "CLLocationManager"
     static let setDelegate: Selector = .init("setDelegate:")

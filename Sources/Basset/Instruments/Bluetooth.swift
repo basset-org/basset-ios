@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import ObjectiveC
 
@@ -6,7 +6,6 @@ import ObjectiveC
 /// Never reads a peripheral — its identifier, name, and service UUID are personal/health data.
 final class CentralState: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .bluetoothCentralState
-    static let entity = Entity.ID.bluetoothCentral
 
     static let managerClassName = "CBCentralManager"
     static let setDelegate: Selector = .init("setDelegate:")

@@ -1,11 +1,10 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import ObjectiveC
 
 /// Reached by name so UserNotifications is never linked, matching the rule `permissions` runs on.
 final class NotificationSettings: Streamable, PlainInstrument {
     static let id: InstrumentID = .notificationSettings
-    static let entity = Entity.ID.notificationSetting
 
     static let switches = [
         "alertSetting", "badgeSetting", "soundSetting",
@@ -40,7 +39,7 @@ final class NotificationSettings: Streamable, PlainInstrument {
         let withheld = settings.switches.filter { $0.state != "enabled" }
         out.put(.occurrenceCount(UInt64(withheld.count)))
         for setting in withheld {
-            out.also(Self.entity) { sibling in
+            out.also(out.entity) { sibling in
                 sibling.put(.notificationSetting(setting.name))
                 sibling.put(.settingState(setting.state))
             }

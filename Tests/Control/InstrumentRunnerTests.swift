@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -270,7 +270,7 @@ private extension InstrumentRunner {
 }
 
 private let faultPair: [Registration] = [
-    .stream(FakeDetector.self), .fault(FakeContributor.self),
+    .stream(FakeDetector.self, entity: .unknown), .fault(FakeContributor.self, entity: .unknown),
 ]
 
 private func request(
@@ -339,7 +339,7 @@ private func scratchBacklogDirectory() -> URL {
 }
 
 private func runtime(
-    _ instruments: [Registration] = [.stream(FakeMemory.self)],
+    _ instruments: [Registration] = [.stream(FakeMemory.self, entity: .unknown)],
     opener: RecordingOpener = RecordingOpener(),
     backlogDirectory: URL = scratchBacklogDirectory(),
     clock: MovableClock? = nil
@@ -357,8 +357,8 @@ private func runtime(
 }
 
 private let bothFakes: [Registration] = [
-    .stream(FakeMemory.self),
-    .stream(FakeThermal.self),
+    .stream(FakeMemory.self, entity: .unknown),
+    .stream(FakeThermal.self, entity: .unknown),
 ]
 
 struct RuntimeConvergenceTests {
@@ -452,7 +452,7 @@ struct RuntimeConvergenceTests {
     }
 
     @Test func anInstrumentStoppedAndStartedAgainReportsEachCallOnce() {
-        let (subject, opener) = runtime([.stream(FakeHooked.self)])
+        let (subject, opener) = runtime([.stream(FakeHooked.self, entity: .unknown)])
 
         subject.converge(
             to: [request(1, instruments: ["uikit.view.layoutPass"])], ingestEndpoint: "in"
@@ -886,7 +886,7 @@ struct RuntimeConvergenceTests {
         atLaunchRequests.save([duplicated, duplicated])
 
         let subject = InstrumentRunner(
-            instruments: [.stream(FakeMemory.self)],
+            instruments: [.stream(FakeMemory.self, entity: .unknown)],
             opener: RecordingOpener(),
             atLaunchRequests: atLaunchRequests,
             backlogDirectory: scratchBacklogDirectory()
@@ -1213,7 +1213,7 @@ struct LaunchBufferTests {
         )])
 
         let subject = InstrumentRunner(
-            instruments: [.stream(FakeMemory.self)],
+            instruments: [.stream(FakeMemory.self, entity: .unknown)],
             opener: RecordingOpener(),
             atLaunchRequests: atLaunchRequests,
             backlogDirectory: scratchBacklogDirectory()
@@ -1233,7 +1233,7 @@ struct LaunchBufferTests {
         let atLaunchRequests = AtLaunchRequests(storage: scratchDefaults())
         let opener = RecordingOpener()
         let subject = InstrumentRunner(
-            instruments: [.stream(FakeMemory.self)],
+            instruments: [.stream(FakeMemory.self, entity: .unknown)],
             opener: opener,
             atLaunchRequests: atLaunchRequests,
             backlogDirectory: scratchBacklogDirectory()
@@ -1345,7 +1345,7 @@ struct LaunchBufferTests {
 struct TallyHandoffTests {
     @Test func theRunnerGivesAnInstrumentTheSlotsItDeclared() {
         SlotProbe.reset()
-        let (subject, _) = runtime([.stream(SlotHungry.self)])
+        let (subject, _) = runtime([.stream(SlotHungry.self, entity: .unknown)])
 
         subject.converge(
             to: [request(1, instruments: ["swiftui.displayList.churn"])],
@@ -1361,7 +1361,7 @@ struct TallyHandoffTests {
     /// Writes on both sides of the edge — reading tallySlots back would just restate it.
     @Test func anInstrumentTakingTheDefaultIsGivenFourAndNoMore() {
         SlotProbe.reset()
-        let (subject, _) = runtime([.stream(SlotDefaulting.self)])
+        let (subject, _) = runtime([.stream(SlotDefaulting.self, entity: .unknown)])
 
         subject.converge(
             to: [request(1, instruments: ["memory.footprint"])],
@@ -1414,7 +1414,7 @@ private func sentRefusal(_ transport: RecordingTransport?) -> Bool {
 
 struct ConfigurableInstrumentTests {
     @Test func validConfigIsDecodedRatherThanTheDefault() {
-        let (subject, opener) = runtime([.stream(FakeConfigurable.self)])
+        let (subject, opener) = runtime([.stream(FakeConfigurable.self, entity: .unknown)])
 
         subject.converge(
             to: [request(
@@ -1434,7 +1434,7 @@ struct ConfigurableInstrumentTests {
     }
 
     @Test func noConfigTakesTheDefaultWithoutBeingARefusal() {
-        let (subject, opener) = runtime([.stream(FakeConfigurable.self)])
+        let (subject, opener) = runtime([.stream(FakeConfigurable.self, entity: .unknown)])
 
         subject.converge(
             to: [request(1, instruments: ["concurrency.queue.latency"])],
@@ -1450,7 +1450,7 @@ struct ConfigurableInstrumentTests {
     }
 
     @Test func malformedConfigFallsBackToTheDefaultAndReportsItself() {
-        let (subject, opener) = runtime([.stream(FakeConfigurable.self)])
+        let (subject, opener) = runtime([.stream(FakeConfigurable.self, entity: .unknown)])
 
         subject.converge(
             to: [request(
@@ -1487,7 +1487,7 @@ struct ConfigurableInstrumentTests {
 
     /// `live` is a dictionary; only sorting by request id makes this a rule, not luck.
     @Test func theHighestRequestIdsConfigWinsWhenTwoNameTheSameInstrument() {
-        let (subject, _) = runtime([.stream(FakeConfigurable.self)])
+        let (subject, _) = runtime([.stream(FakeConfigurable.self, entity: .unknown)])
 
         subject.converge(
             to: [
@@ -1510,7 +1510,7 @@ struct ConfigurableInstrumentTests {
 
     /// An already-running instrument does not keep a config a later convergence dropped.
     @Test func aRequestThatStopsSendingConfigDoesNotOverrideTheOneThatStillDoes() {
-        let (subject, _) = runtime([.stream(FakeConfigurable.self)])
+        let (subject, _) = runtime([.stream(FakeConfigurable.self, entity: .unknown)])
 
         subject.converge(
             to: [
@@ -1528,7 +1528,7 @@ struct ConfigurableInstrumentTests {
     }
 
     @Test func aChangedConfigRestartsTheInstrumentRatherThanBeingIgnored() {
-        let (subject, _) = runtime([.stream(FakeConfigurable.self)])
+        let (subject, _) = runtime([.stream(FakeConfigurable.self, entity: .unknown)])
 
         subject.converge(
             to: [request(
@@ -1557,7 +1557,10 @@ struct ConfigurableInstrumentTests {
     }
 
     @Test func theRefusalReachesOnlyRequestsThatNamedTheRefusedInstrument() {
-        let (subject, opener) = runtime([.stream(FakeConfigurable.self), .stream(FakeMemory.self)])
+        let (subject, opener) = runtime([
+            .stream(FakeConfigurable.self, entity: .unknown),
+            .stream(FakeMemory.self, entity: .unknown),
+        ])
 
         subject.converge(
             to: [

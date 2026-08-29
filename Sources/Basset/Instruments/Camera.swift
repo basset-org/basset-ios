@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if os(iOS)
@@ -9,7 +9,6 @@ import ObjectiveC
 
 final class CameraDeviceFormat: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraDeviceFormat
-    static let entity = Entity.ID.captureDevice
 
     private let observations: Observations = .init()
 
@@ -239,7 +238,6 @@ final class CameraDeviceFormat: Streamable, PlainInstrument, LoadTimeInstall {
 
 final class CameraDeviceInventory: Streamable, PlainInstrument {
     static let id: InstrumentID = .cameraDeviceInventory
-    static let entity = Entity.ID.captureDevice
 
     #if os(iOS)
     /// Named, not from `allCases` (AVFoundation has none) — a later type is absent from any list.
@@ -377,7 +375,6 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
     }
 
     static let id: InstrumentID = .cameraFrameDelivery
-    static let entity = Entity.ID.videoFrames
     static let tallySlots = 5
 
     private static let delivered: TallySlot = .first
@@ -628,7 +625,6 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
     }
 
     static let id: InstrumentID = .cameraSessionConfiguration
-    static let entity = Entity.ID.captureSession
     static let defaultConfig: Config = .init(callers: true)
 
     private let observations: Observations = .init()
@@ -738,7 +734,6 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
 
 final class CameraSessionState: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraSessionState
-    static let entity = Entity.ID.captureSession
 
     private static let observed = ["running", "interrupted"]
 

@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -7,7 +7,6 @@ import UIKit
 
 final class ViewControllerAppear: Streamable, PlainInstrument {
     static let id: InstrumentID = .viewControllerAppear
-    static let entity = Entity.ID.screen
 
     init() {}
 
@@ -33,7 +32,6 @@ final class ViewControllerAppear: Streamable, PlainInstrument {
 
 final class ViewLayoutPass: Streamable, PlainInstrument {
     static let id: InstrumentID = .viewLayoutPass
-    static let entity = Entity.ID.viewLayout
 
     private static let passes: TallySlot = .first
     private static let totalNanoseconds: TallySlot = .second
@@ -111,7 +109,6 @@ final class WindowTouches: Streamable, Configurable {
     }
 
     static let id: InstrumentID = .windowTouches
-    static let entity = Entity.ID.touches
 
     /// Off by default — the walk this triggers is the cost `instrument-domains.md` refuses to
     /// pay on every touch; asking for it is opting into paying it on `.began` only.
@@ -318,7 +315,7 @@ final class ViewHierarchy: Snapshotable, Configurable {
         put(kept[0], in: root, into: &out)
         putTouch(parent, into: &out)
         for match in kept.dropFirst() {
-            out.also(Self.entity) { sibling in
+            out.also(out.entity) { sibling in
                 put(match, in: root, into: &sibling)
                 putTouch(parent, into: &sibling)
             }
@@ -328,7 +325,7 @@ final class ViewHierarchy: Snapshotable, Configurable {
             return
         }
 
-        out.also(Self.entity) { sibling in
+        out.also(out.entity) { sibling in
             sibling.put(.mechanismStatus("truncated: \(omitted) more"))
             putViewPosition(id: EntityIdentity.next(), parent: parent, level: 0, into: &sibling)
             putTouch(parent, into: &sibling)
@@ -431,7 +428,6 @@ final class ViewHierarchy: Snapshotable, Configurable {
     #endif
 
     static let id: InstrumentID = .viewHierarchy
-    static let entity = Entity.ID.viewHierarchy
 
     static let defaultConfig: Config = .init(x: 0, y: 0)
 
@@ -459,7 +455,6 @@ final class ViewHierarchy: Snapshotable, Configurable {
 /// funnel for every button, switch and control event, so one hook covers all of them.
 final class ControlAction: Streamable, PlainInstrument {
     static let id: InstrumentID = .controlAction
-    static let entity = Entity.ID.controlAction
 
     init() {}
 
@@ -495,7 +490,6 @@ final class ControlAction: Streamable, PlainInstrument {
 /// this hooks it by selector name, and the install fails soft if it's ever gone.
 final class GestureState: Streamable, PlainInstrument {
     static let id: InstrumentID = .gestureState
-    static let entity = Entity.ID.gestureRecognizer
 
     init() {}
 

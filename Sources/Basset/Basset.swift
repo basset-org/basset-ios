@@ -1,4 +1,4 @@
-@_exported import BassetECS
+@_exported import BassetEntityComponent
 import Foundation
 import Network
 

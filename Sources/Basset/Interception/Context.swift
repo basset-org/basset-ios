@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// One value under a lock — a repeating timer's @Sendable closure can't capture a var.

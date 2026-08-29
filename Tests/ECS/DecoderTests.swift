@@ -1,4 +1,4 @@
-@testable import BassetECS
+@testable import BassetEntityComponent
 import Foundation
 import Testing
 

@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -8,7 +8,6 @@ import UIKit
 /// Polls on foreground; no framework posts a change — Settings changes usually relaunch the app.
 final class PermissionChanges: Streamable, PlainInstrument {
     static let id: InstrumentID = .permissionChanges
-    static let entity = Entity.ID.permission
 
     private let lastSeen: Mutex<[String: String]> = .init([:])
     private var observer: NSObjectProtocol?
@@ -377,7 +376,6 @@ extension PermissionFinding {
 /// Pairs status with the usage-description key: `notDetermined` with none declared crashes on ask.
 final class PermissionStatus: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .permissionStatus
-    static let entity = Entity.ID.permission
 
     init() {}
 
@@ -394,7 +392,7 @@ final class PermissionStatus: Snapshotable, PlainInstrument {
 
         first.write(into: &out)
         for finding in findings.dropFirst() {
-            out.also(Self.entity) { sibling in finding.write(into: &sibling) }
+            out.also(out.entity) { sibling in finding.write(into: &sibling) }
         }
     }
 

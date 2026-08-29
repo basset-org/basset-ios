@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -11,7 +11,6 @@ import Darwin
 /// Without this, backgrounded silence looks like nothing happened; emitted only on change.
 final class AppState: Streamable, PlainInstrument {
     static let id: InstrumentID = .appStateChanges
-    static let entity = Entity.ID.appLifecycle
 
     private var observers: [NSObjectProtocol] = []
     private let leftForegroundAt: Mutex<MonotonicTime?> = .init(nil)
@@ -95,7 +94,6 @@ final class AppState: Streamable, PlainInstrument {
 /// Jetsam/watchdog kill via `SIGKILL`, no handler — written before death, read back next launch.
 final class LastRunEnded: Streamable, PlainInstrument {
     static let id: InstrumentID = .lastRunEnded
-    static let entity = Entity.ID.appExit
 
     private static let stampInterval: TimeInterval = 1
 

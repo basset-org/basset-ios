@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -7,7 +7,6 @@ import UIKit
 
 final class MemoryFootprint: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .memoryFootprint
-    static let entity = Entity.ID.process
 
     init() {}
 
@@ -19,7 +18,6 @@ final class MemoryFootprint: Snapshotable, PlainInstrument {
 /// Watches both the system-wide Mach pressure source and app-scoped didReceiveMemoryWarning.
 final class MemoryPressure: Streamable, PlainInstrument {
     static let id: InstrumentID = .memoryPressure
-    static let entity = Entity.ID.memoryPressure
 
     private var source: DispatchSourceMemoryPressure?
     private var observer: NSObjectProtocol?

@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 #if canImport(UIKit)
@@ -8,7 +8,6 @@ import UIKit
 /// Named `AccessibilityFlags` — UIKit's own `AccessibilitySettings` would collide.
 final class AccessibilityFlags: Streamable, PlainInstrument {
     static let id: InstrumentID = .accessibilitySettings
-    static let entity = Entity.ID.deviceSetting
 
     #if canImport(UIKit)
     /// `prefersCrossFadeTransitions`'s notification has no Swift name, so it's absent on purpose.
@@ -92,7 +91,7 @@ final class AccessibilityFlags: Streamable, PlainInstrument {
         out.put(.settingName(first.name))
         out.put(.settingEnabled(true))
         for setting in enabled.dropFirst() {
-            out.also(Self.entity) { sibling in
+            out.also(out.entity) { sibling in
                 sibling.put(.settingName(setting.name))
                 sibling.put(.settingEnabled(true))
             }
@@ -126,7 +125,6 @@ final class AccessibilityFlags: Streamable, PlainInstrument {
 /// Text size the user chose, and whether it's one of the 5 accessibility sizes above normal.
 final class DynamicType: Streamable, PlainInstrument {
     static let id: InstrumentID = .dynamicType
-    static let entity = Entity.ID.deviceSetting
 
     private var observer: NSObjectProtocol?
 
@@ -195,7 +193,6 @@ final class DynamicType: Streamable, PlainInstrument {
 /// Language, region, calendar — reported as codes; display names would localise.
 final class LocaleSettings: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .localeSettings
-    static let entity = Entity.ID.deviceSetting
 
     init() {}
 

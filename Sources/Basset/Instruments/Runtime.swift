@@ -1,10 +1,9 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 /// Every thread's stack, as raw return addresses, taken only on a fault.
 final class ThreadSnapshot: Faultable, PlainInstrument {
     static let id: InstrumentID = .threadSnapshot
-    static let entity = Entity.ID.thread
 
     private let walker: ThreadWalker = .init()
 
@@ -54,7 +53,7 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
 
         describe(first, into: &out)
         for stack in stacks.dropFirst() {
-            out.also(Self.entity) { thread in describe(stack, into: &thread) }
+            out.also(out.entity) { thread in describe(stack, into: &thread) }
         }
     }
 
@@ -95,7 +94,6 @@ final class StackSamples: Streamable, Configurable {
     }
 
     static let id: InstrumentID = .stackSamples
-    static let entity = Entity.ID.stackSample
 
     /// Bites only when every sample differs — reports as truncation, not a top-8 cutoff.
     static let stacksPerWindow = 8
@@ -180,13 +178,13 @@ final class StackSamples: Streamable, Configurable {
 
         Self.put(first, in: closed, over: elapsed, into: &out)
         for stack in hottest.dropFirst().prefix(Self.stacksPerWindow - 1) {
-            out.also(Self.entity) { sibling in
+            out.also(out.entity) { sibling in
                 Self.put(stack, in: closed, over: elapsed, into: &sibling)
             }
         }
 
         if hottest.count > Self.stacksPerWindow {
-            out.also(Self.entity) { sibling in
+            out.also(out.entity) { sibling in
                 sibling.put(.windowNanoseconds(elapsed.nanoseconds))
                 sibling.put(
                     .mechanismStatus("truncated: \(hottest.count - Self.stacksPerWindow) more")
@@ -286,7 +284,6 @@ struct StackWindow {
 /// What's mapped into the process and what came from the app bundle; statics are invisible.
 final class LinkedLibraries: Snapshotable, PlainInstrument {
     static let id: InstrumentID = .linkedLibraries
-    static let entity = Entity.ID.binaryImage
 
     /// Past this, an app's finding is in the count, not the list.
     static let ceiling = 64
@@ -314,7 +311,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
 
         put(first, among: images, bundled: bundled.count, into: &out)
         for image in bundled.dropFirst(1).prefix(ceiling - 1) {
-            out.also(Self.entity) { sibling in
+            out.also(out.entity) { sibling in
                 put(image, among: images, bundled: bundled.count, into: &sibling)
             }
         }
@@ -323,7 +320,7 @@ final class LinkedLibraries: Snapshotable, PlainInstrument {
             return
         }
 
-        out.also(Self.entity) { sibling in
+        out.also(out.entity) { sibling in
             sibling.put(.mechanismStatus("truncated: \(bundled.count - ceiling) more"))
         }
     }
@@ -371,7 +368,6 @@ final class MethodOwners: Snapshotable, PlainInstrument {
     }
 
     static let id: InstrumentID = .methodOwners
-    static let entity = Entity.ID.method
 
     /// Appearance, layout and control actions are absent — basset hooks those itself and would
     /// self-report.
@@ -393,7 +389,7 @@ final class MethodOwners: Snapshotable, PlainInstrument {
 
         put(first, into: &out)
         for owner in owners.dropFirst() {
-            out.also(Self.entity) { sibling in put(owner, into: &sibling) }
+            out.also(out.entity) { sibling in put(owner, into: &sibling) }
         }
     }
 

@@ -1,4 +1,4 @@
-import BassetECS
+import BassetEntityComponent
 import Foundation
 
 final class ThreadCPUUsage: Streamable, Configurable {
@@ -17,7 +17,6 @@ final class ThreadCPUUsage: Streamable, Configurable {
     }
 
     static let id: InstrumentID = .cpuThreadUsage
-    static let entity = Entity.ID.thread
     static let defaultConfig: Config = .init(windowSeconds: 5)
 
     private static let ceiling = 32
@@ -101,14 +100,14 @@ final class ThreadCPUUsage: Streamable, Configurable {
 
         put(first, over: window, into: &out)
         for entry in busy.dropFirst(1).prefix(Self.ceiling - 1) {
-            out.also(Self.entity) { sibling in put(entry, over: window, into: &sibling) }
+            out.also(out.entity) { sibling in put(entry, over: window, into: &sibling) }
         }
 
         guard busy.count > Self.ceiling else {
             return
         }
 
-        out.also(Self.entity) { sibling in
+        out.also(out.entity) { sibling in
             sibling.put(.windowNanoseconds(window.nanoseconds))
             sibling.put(.mechanismStatus("truncated: \(busy.count - Self.ceiling) more"))
         }
@@ -133,7 +132,6 @@ final class ThreadCPUUsage: Streamable, Configurable {
 
 final class Wakeups: Streamable, PlainInstrument {
     static let id: InstrumentID = .cpuWakeups
-    static let entity = Entity.ID.process
 
     private let previous: Mutex<ProcessWakeups?> = .init(nil)
 

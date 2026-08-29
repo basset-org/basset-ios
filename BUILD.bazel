@@ -6,7 +6,7 @@ load("@rules_swift//swift:swift_interop_hint.bzl", "swift_interop_hint")
 
 # The device library imports Network, UIKit and AVFoundation, so it cannot
 # compile off Apple platforms. Declaring that lets `bazel build //...` on a
-# Linux runner skip it instead of failing, while BassetECS below — pure Swift —
+# Linux runner skip it instead of failing, while BassetEntityComponent below — pure Swift —
 # still builds everywhere.
 APPLE_ONLY = select({
     "@platforms//os:ios": [],
@@ -37,7 +37,7 @@ swift_library(
     target_compatible_with = APPLE_ONLY,
     visibility = ["//visibility:public"],
     deps = [
-        ":BassetECS",
+        ":BassetEntityComponent",
         ":CBassetAtomics",
     ],
 )
@@ -56,9 +56,9 @@ swift_library(
 # encodes against the same types rather than a second copy of them. An
 # `import UIKit` here fails the build, which is the point of the directory.
 swift_library(
-    name = "BassetECS",
-    srcs = glob(["Sources/BassetECS/**/*.swift"]),
-    module_name = "BassetECS",
+    name = "BassetEntityComponent",
+    srcs = glob(["Sources/BassetEntityComponent/**/*.swift"]),
+    module_name = "BassetEntityComponent",
     visibility = ["//visibility:public"],
 )
 
@@ -68,7 +68,7 @@ swift_binary(
     target_compatible_with = APPLE_ONLY,
     deps = [
         ":Basset",
-        ":BassetECS",
+        ":BassetEntityComponent",
     ],
 )
 
@@ -84,7 +84,7 @@ swift_library(
     deps = [
         ":Basset",
         ":BassetAttached",
-        ":BassetECS",
+        ":BassetEntityComponent",
     ],
 )
 
@@ -101,7 +101,7 @@ swift_test(
     deps = [
         ":Basset",
         ":BassetAttached",
-        ":BassetECS",
+        ":BassetEntityComponent",
     ],
 )
 
@@ -110,7 +110,7 @@ swift_test(
 swift_test(
     name = "ecs_test",
     srcs = glob(["Tests/ECS/**/*.swift"]),
-    deps = [":BassetECS"],
+    deps = [":BassetEntityComponent"],
 )
 
 ios_test_runner(

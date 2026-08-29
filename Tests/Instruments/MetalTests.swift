@@ -1,5 +1,5 @@
 @testable import Basset
-import BassetECS
+import BassetEntityComponent
 import Foundation
 import Testing
 
@@ -145,7 +145,7 @@ struct DrawablePresentationTests {
 
     private func emit(from tally: Tally) -> [Entity] {
         var out = Readings(
-            entity: DrawablePresentation.entity,
+            entity: .metalDrawable,
             instrumentName: DrawablePresentation.name
         )
         DrawablePresentation.write(

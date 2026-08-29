@@ -126,7 +126,7 @@ between wifi and cellular keeps the connection.
 
 ## Requirements
 
-iOS 17 or later, Swift 6 toolchain. `BassetECS` — the wire vocabulary the SDK
+iOS 17 or later, Swift 6 toolchain. `BassetEntityComponent` — the wire vocabulary the SDK
 encodes and any reader decodes — is pure Swift and builds anywhere.
 
 ## License
