@@ -116,12 +116,25 @@ swift_test(
 ios_test_runner(
     name = "sim_runner",
     device_type = "iPhone 16",
-    os_version = "26.4",
+    os_version = "26.5",
+)
+
+ios_test_runner(
+    name = "sim_runner_oldest",
+    device_type = "iPhone 15",
+    os_version = "17.5",
 )
 
 ios_unit_test(
     name = "BassetTests",
     minimum_os_version = "17.0",
     runner = ":sim_runner",
+    deps = [":BassetTestsLib"],
+)
+
+ios_unit_test(
+    name = "BassetTests_oldest",
+    minimum_os_version = "17.0",
+    runner = ":sim_runner_oldest",
     deps = [":BassetTestsLib"],
 )
