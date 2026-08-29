@@ -87,7 +87,11 @@ jobs:
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -resultBundlePath "${{ runner.temp }}/test.xcresult"
 
+      # Once, not per leg: a generic/platform=iOS build resolves the same
+      # iPhoneOS SDK and the same deployment floor whichever simulator runtime
+      # the leg chose, so the second run compiles identical inputs.
       - name: Build for a device
+        if: matrix.runtime == 'newest'
         run: |
           xcodebuild build \
             -scheme Basset \
