@@ -35,6 +35,7 @@ struct ComponentTests {
             (.instrument(0), .instrument), (.bundleId(""), .bundleId),
             (.buildConfiguration(""), .buildConfiguration),
             (.deviceKind(""), .deviceKind), (.sdkVersion(""), .sdkVersion),
+            (.appName(""), .appName),
             (.passCount(0), .passCount),
             (.totalNanoseconds(0), .totalNanoseconds),
             (.peakNanoseconds(0), .peakNanoseconds),

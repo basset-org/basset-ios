@@ -405,6 +405,7 @@ public struct Component: Equatable, Sendable {
         case interfaceOrientation = 244
         case retiredActiveInstrument = 245
         case bootTimeMicroseconds = 246
+        case appName = 247
     }
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.
@@ -441,6 +442,7 @@ public extension Component {
         -> Component { .init(.buildConfiguration, value) }
     static func deviceKind(_ value: String) -> Component { .init(.deviceKind, value) }
     static func sdkVersion(_ value: String) -> Component { .init(.sdkVersion, value) }
+    static func appName(_ value: String) -> Component { .init(.appName, value) }
     static func passCount(_ value: UInt64) -> Component { .init(.passCount, value) }
     static func totalNanoseconds(_ value: UInt64) -> Component { .init(.totalNanoseconds, value) }
     static func peakNanoseconds(_ value: UInt64) -> Component { .init(.peakNanoseconds, value) }

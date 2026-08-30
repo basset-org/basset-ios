@@ -329,7 +329,7 @@ struct IngestTransports: TransportOpener {
 
     func open(request: BassetRequest, ingestEndpoint: String) -> Transport? {
         #if DEBUG
-        // An attached machine dialled us; readings go back down that socket rather
+        // An attached machine connected to us; readings go back down that socket rather
         // than out to an ingest host this build may not even be able to reach.
         if let channel = AttachedBridge.channel {
             return AttachedTransport(channel)

@@ -1,8 +1,9 @@
+import BassetEntityComponent
 import Foundation
 
 #if DEBUG
 /// Where readings go while a developer's machine is attached: a socket that machine
-/// dialled, rather than an ingest endpoint reached over a network.
+/// opened, rather than an ingest endpoint reached over a network.
 public protocol AttachedChannel: AnyObject, Sendable {
     func send(_ frame: Data)
 }
@@ -23,6 +24,15 @@ public enum AttachedBridge {
 
     static var channel: AttachedChannel? {
         lock.withLock { attached }
+    }
+
+    /// Sent unprompted, first, on every fresh connection — a `device.info` reading built
+    /// and framed the same way any other, so the connecting machine learns which app on a
+    /// device it reached through the ordinary reading pipeline rather than a side protocol.
+    public static func identity() -> Data {
+        let entity = DeviceInfo().reading().tagged(.deviceInfo)
+        let encoder = FrameEncoder()
+        return encoder.frame(encoder.encode(entity))
     }
 
     public static func open(_ channel: AttachedChannel) {

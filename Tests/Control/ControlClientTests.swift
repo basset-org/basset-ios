@@ -7,6 +7,7 @@ private let identity: DeviceIdentity = .init(
     model: "iPhone",
     os: "18.0",
     appVersion: "1.0",
+    appName: "Example",
     bundleId: "com.example.app",
     buildConfiguration: "release",
     deviceKind: "device"

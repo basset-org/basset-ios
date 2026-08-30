@@ -9,6 +9,7 @@ struct DeviceIdentity: Sendable, Equatable {
     let model: String
     let os: String
     let appVersion: String
+    let appName: String
     let bundleId: String?
     let buildConfiguration: String
     let deviceKind: String
@@ -19,6 +20,7 @@ struct DeviceIdentity: Sendable, Equatable {
             model: hardwareModel(),
             os: operatingSystem(),
             appVersion: applicationVersion(),
+            appName: applicationName(),
             bundleId: Bundle.main.bundleIdentifier,
             buildConfiguration: compiledConfiguration(),
             deviceKind: targetEnvironment()
@@ -77,6 +79,13 @@ private func operatingSystem() -> String {
     let version = ProcessInfo.processInfo.operatingSystemVersion
     return "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
     #endif
+}
+
+private func applicationName() -> String {
+    let info = Bundle.main.infoDictionary
+    return info?["CFBundleDisplayName"] as? String
+        ?? info?["CFBundleName"] as? String
+        ?? "unknown"
 }
 
 private func applicationVersion() -> String {
