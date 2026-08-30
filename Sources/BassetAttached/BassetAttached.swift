@@ -138,7 +138,21 @@ public enum BassetAttached {
         ) { _ in rebindIfBackgrounded() })
         #endif
 
-        lock.withLock { observers = installed }
+        let stillListening = lock.withLock { () -> Bool in
+            guard isListening else {
+                watchingForeground = false
+                return false
+            }
+
+            observers = installed
+            return true
+        }
+        guard stillListening else {
+            for observer in installed {
+                center.removeObserver(observer)
+            }
+            return
+        }
     }
 
     /// Off the notification's own thread — usually the main thread, and `bind()` can
