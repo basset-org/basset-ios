@@ -35,7 +35,10 @@ struct SystemWiringTests {
         #expect(harness.value(.thermalState, in: harness.readings.first) != nil)
     }
 
-    /// Aggregated behind a one-second flush — the only test proving `flush(every:)` fires.
+    /// The only test proving `flush(every:)` fires — its async immediate emission at
+    /// activation can race a burst posted right away, splitting it across that emission
+    /// and the next periodic one, so this sums across every reading rather than trusting
+    /// the first: no data lost is the guarantee, not that it always lands in one window.
     @Test func coreDataChangesAreCountedAndFlushed() {
         let harness = InstrumentHarness<CoreDataChanges>()
         harness.start()
@@ -49,9 +52,17 @@ struct SystemWiringTests {
             )
         }
 
-        let reading = harness.waitForReading(timeout: 4)
-        #expect(harness.value(.occurrenceCount, in: reading) == "3")
-        #expect(harness.value(.updatedCount, in: reading) == "6")
+        func total(_ id: Component.ID) -> Int {
+            harness.readings.reduce(0) { $0 + (harness.value(id, in: $1).flatMap(Int.init) ?? 0) }
+        }
+
+        let deadline = Date().addingTimeInterval(4)
+        while Date() < deadline, total(.occurrenceCount) < 3 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+
+        #expect(total(.occurrenceCount) == 3)
+        #expect(total(.updatedCount) == 6)
     }
 
     #if canImport(UIKit)

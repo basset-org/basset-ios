@@ -196,8 +196,10 @@ public final class Context: @unchecked Sendable {
         // A reading right away, since a caller waiting on activation should not sit through a
         // whole period for the first one; the periodic schedule above still anchors the first
         // full window, so a burst posted at activation keeps landing in one flush rather than
-        // splitting across an empty immediate tick and the next.
-        fire()
+        // splitting across an empty immediate tick and the next. Off timerQueue rather than
+        // inline: the body can be as heavy as a ThreadInventory snapshot or an OSLogStore
+        // drain, and activation runs on whatever thread called observe(), often the caller's own.
+        timerQueue.async(execute: fire)
 
         lock.lock()
         timers.append(timer)
