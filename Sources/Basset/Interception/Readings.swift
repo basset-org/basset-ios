@@ -50,6 +50,21 @@ public struct Readings {
         additional.append(contentsOf: next.additionalEntities())
     }
 
+    /// What `InstrumentRunner` stamps onto every reading it routes through a live request —
+    /// exposed so a caller emitting outside that path, like the attached identity ack, tags
+    /// its reading the same way rather than leaving it unattributable.
+    public func tagged(_ instrument: InstrumentID) -> Entity {
+        let record = build()
+        return Entity(
+            record.id,
+            capturedAt: record.capturedAt,
+            components: record.components + [
+                .instrument(instrument.rawValue),
+                .launchId(LaunchIdentity.current),
+            ]
+        )
+    }
+
     func build() -> Entity {
         Entity(entity, capturedAt: capturedAt, components: components)
     }

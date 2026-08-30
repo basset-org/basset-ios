@@ -176,7 +176,7 @@ public final class Context: @unchecked Sendable {
         let timer = DispatchSource.makeTimerSource(queue: timerQueue)
         let seconds = Double(interval.components.seconds)
             + Double(interval.components.attoseconds) / 1e18
-        timer.schedule(deadline: .now() + seconds, repeating: seconds)
+        timer.schedule(deadline: .now(), repeating: seconds)
 
         let clock = self.clock
         let opened = Mutable(clock.now())

@@ -24,6 +24,7 @@ public extension Component.ID {
         case .buildConfiguration: "Build"
         case .deviceKind: "Running on"
         case .sdkVersion: "SDK version"
+        case .appName: "App name"
         case .passCount: "Passes"
         case .totalNanoseconds: "Total (ns)"
         case .peakNanoseconds: "Slowest (ns)"

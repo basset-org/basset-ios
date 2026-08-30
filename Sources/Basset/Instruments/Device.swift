@@ -1,18 +1,19 @@
 import BassetEntityComponent
 import Foundation
 
-final class DeviceInfo: Snapshotable, PlainInstrument {
-    static let id: InstrumentID = .deviceInfo
+public final class DeviceInfo: Snapshotable, PlainInstrument {
+    public static let id: InstrumentID = .deviceInfo
 
-    init() {}
+    public init() {}
 
-    func reading() -> Readings {
+    public func reading() -> Readings {
         var out = Readings(.device)
         let identity = DeviceIdentity.current()
         // The same string a request targets on, not the hw.model board id (e.g. D93AP).
         out.put(.deviceModel(identity.model))
         out.put(.osVersion(ProcessInfo.processInfo.operatingSystemVersionString))
         out.put(.appVersion(identity.appVersion))
+        out.put(.appName(identity.appName))
         out.put(.buildConfiguration(identity.buildConfiguration))
         out.put(.deviceKind(identity.deviceKind))
         out.put(.sdkVersion(SDKVersion.current))

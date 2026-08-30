@@ -138,6 +138,7 @@ public extension Component.ID {
         case .accuracyClass,
              .activeColorSpace,
              .alertStyle,
+             .appName,
              .appState,
              .appVersion,
              .audioCategory,
