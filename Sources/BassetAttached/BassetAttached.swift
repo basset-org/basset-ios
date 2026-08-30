@@ -32,10 +32,12 @@ public enum BassetAttached {
     public static let portsToTry = 10
 
     private static let lock: NSLock = .init()
+    private static let rebindQueue: DispatchQueue = .init(label: "dev.basset.attached.rebind")
     private nonisolated(unsafe) static var link: AttachedLink?
     private nonisolated(unsafe) static var isListening = false
     private nonisolated(unsafe) static var watchingForeground = false
     private nonisolated(unsafe) static var backgrounded = false
+    private nonisolated(unsafe) static var observers: [NSObjectProtocol] = []
 
     /// Listens on loopback for a machine to connect. Listening is the direction that
     /// works over a cable — usbmux can open a connection to a port on the device and
@@ -54,10 +56,20 @@ public enum BassetAttached {
     }
 
     public static func stop() {
-        lock.withLock {
+        let removed = lock.withLock { () -> [NSObjectProtocol] in
             isListening = false
+            watchingForeground = false
+            backgrounded = false
             link?.stop()
             link = nil
+            let existing = observers
+            observers = []
+            return existing
+        }
+
+        let center = NotificationCenter.default
+        for observer in removed {
+            center.removeObserver(observer)
         }
     }
 
@@ -69,11 +81,21 @@ public enum BassetAttached {
 
         do {
             let opened = try AttachedLink()
-            lock.withLock {
+            let published = lock.withLock { () -> AttachedLink? in
+                guard isListening else {
+                    return nil
+                }
+
                 link?.stop()
                 link = opened
+                return opened
             }
-            return opened.port
+            guard let published else {
+                opened.stop()
+                return nil
+            }
+
+            return published.port
         } catch {
             NSLog("[basset] not listening for an attached machine: \(error)")
             return nil
@@ -91,31 +113,36 @@ public enum BassetAttached {
         }
 
         let center = NotificationCenter.default
+        var installed = [NSObjectProtocol]()
         #if canImport(UIKit)
-        center.addObserver(
+        installed.append(center.addObserver(
             forName: UIApplication.didEnterBackgroundNotification,
             object: nil,
             queue: nil
-        ) { _ in lock.withLock { backgrounded = true } }
-        center.addObserver(
+        ) { _ in lock.withLock { backgrounded = true } })
+        installed.append(center.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
             object: nil,
             queue: nil
-        ) { _ in rebindIfBackgrounded() }
+        ) { _ in rebindIfBackgrounded() })
         #elseif canImport(AppKit)
-        center.addObserver(
+        installed.append(center.addObserver(
             forName: NSApplication.didResignActiveNotification,
             object: nil,
             queue: nil
-        ) { _ in lock.withLock { backgrounded = true } }
-        center.addObserver(
+        ) { _ in lock.withLock { backgrounded = true } })
+        installed.append(center.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
             queue: nil
-        ) { _ in rebindIfBackgrounded() }
+        ) { _ in rebindIfBackgrounded() })
         #endif
+
+        lock.withLock { observers = installed }
     }
 
+    /// Off the notification's own thread — usually the main thread, and `bind()` can
+    /// block for seconds walking candidate ports.
     private static func rebindIfBackgrounded() {
         let was = lock.withLock { () -> Bool in
             let seen = backgrounded
@@ -126,7 +153,9 @@ public enum BassetAttached {
             return
         }
 
-        bind()
+        rebindQueue.async {
+            _ = bind()
+        }
     }
 }
 #endif

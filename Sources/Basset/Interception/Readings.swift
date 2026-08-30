@@ -58,7 +58,10 @@ public struct Readings {
         return Entity(
             record.id,
             capturedAt: record.capturedAt,
-            components: record.components + [.instrument(instrument.rawValue)]
+            components: record.components + [
+                .instrument(instrument.rawValue),
+                .launchId(LaunchIdentity.current),
+            ]
         )
     }
 
