@@ -19,6 +19,10 @@ final class ContentProcessTermination: Streamable, PlainInstrument, LoadTimeInst
 
     init() {}
 
+    static func relevance(_ registries: Registries) -> Relevance {
+        registries.hasDelegate(on: webViewClassName) ? .relevant : .notRelevant
+    }
+
     static func installAtLoad(_ hooks: HookTable) {
         guard let webView = objc_getClass(webViewClassName) as? AnyClass else {
             return

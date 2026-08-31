@@ -115,6 +115,36 @@ struct AttachedBridgeOrderTests {
         }
     }
 
+    /// Nothing is live without a running loop, so the second frame names only itself.
+    @Test func identitySendsDeviceInfoThenTheDefaultRelevantSet() throws {
+        Basset.stopForTesting()
+
+        let frames = AttachedBridge.identity()
+        #expect(frames.count == 2)
+
+        let decoded = try FrameReader.frames(in: frames.reduce(Data(), +))
+        guard decoded.count == 2,
+              case .entity(let device) = decoded[0],
+              case .entity(let relevant) = decoded[1]
+        else {
+            Issue.record("expected two entity frames, got \(decoded)")
+            return
+        }
+
+        #expect(device.known == .device)
+        #expect(relevant.known == .relevantInstruments)
+
+        let instrumentIds: [UInt16] = relevant.components.compactMap { component in
+            guard component.known == .instrument, case .uint16(let value) = component.value
+            else {
+                return nil
+            }
+
+            return value
+        }
+        #expect(instrumentIds == [InstrumentID.instrumentsRelevant.rawValue])
+    }
+
     private func desiredState(_ instrument: String) -> Data {
         Data("""
         {"ingest_endpoint":"attached","state_version":"v1","requests":[

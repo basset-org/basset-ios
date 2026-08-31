@@ -7,12 +7,30 @@ import CoreVideo
 import ObjectiveC
 #endif
 
+/// Shared by every camera instrument: none of them have anything to say until the app
+/// has created a capture session, whichever chokepoint each one watches beyond that.
+private func cameraSessionRelevance(_ registries: Registries) -> Relevance {
+    #if os(iOS)
+    guard let session = objc_getClass("AVCaptureSession") as? AnyClass else {
+        return .notRelevant
+    }
+
+    return registries.registry(runtimeClass: session).count > 0 ? .relevant : .notRelevant
+    #else
+    return .notRelevant
+    #endif
+}
+
 final class CameraDeviceFormat: Streamable, PlainInstrument, LoadTimeInstall {
     static let id: InstrumentID = .cameraDeviceFormat
 
     private let observations: Observations = .init()
 
     init() {}
+
+    static func relevance(_ registries: Registries) -> Relevance {
+        cameraSessionRelevance(registries)
+    }
 
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)
@@ -413,6 +431,10 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
 
     init() {}
 
+    static func relevance(_ registries: Registries) -> Relevance {
+        cameraSessionRelevance(registries)
+    }
+
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)
         guard let session = objc_getClass("AVCaptureSession") as? AnyClass,
@@ -634,6 +656,10 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
         self.config = config
     }
 
+    static func relevance(_ registries: Registries) -> Relevance {
+        cameraSessionRelevance(registries)
+    }
+
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)
         guard let session = objc_getClass("AVCaptureSession") as? AnyClass else {
@@ -740,6 +766,10 @@ final class CameraSessionState: Streamable, PlainInstrument, LoadTimeInstall {
     private let observations: Observations = .init()
 
     init() {}
+
+    static func relevance(_ registries: Registries) -> Relevance {
+        cameraSessionRelevance(registries)
+    }
 
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)

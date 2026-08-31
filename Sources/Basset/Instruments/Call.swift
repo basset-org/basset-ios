@@ -27,6 +27,10 @@ final class ProviderActions: Streamable, PlainInstrument, LoadTimeInstall {
 
     init() {}
 
+    static func relevance(_ registries: Registries) -> Relevance {
+        registries.hasDelegate(on: providerClassName) ? .relevant : .notRelevant
+    }
+
     static func installAtLoad(_ hooks: HookTable) {
         guard let provider = objc_getClass(providerClassName) as? AnyClass else {
             return

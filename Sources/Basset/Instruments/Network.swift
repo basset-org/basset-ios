@@ -107,6 +107,12 @@ final class PathTransitions: Streamable, PlainInstrument, @unchecked Sendable {
     }
 }
 
+/// Shared by every instrument keyed off `URLSession` itself — `TaskMetrics.installAtLoad`
+/// fills this before any of them activate, session or task factory, `.shared` included.
+private func urlSessionRelevance(_ registries: Registries) -> Relevance {
+    registries.registry(URLSession.self).count > 0 ? .relevant : .notRelevant
+}
+
 /// What a `URLSession` was configured to allow, described off `taskMetrics`'s own hook.
 final class SessionConfiguration: Streamable, PlainInstrument {
     static let id: InstrumentID = .sessionConfiguration
@@ -117,6 +123,10 @@ final class SessionConfiguration: Streamable, PlainInstrument {
     #endif
 
     init() {}
+
+    static func relevance(_ registries: Registries) -> Relevance {
+        urlSessionRelevance(registries)
+    }
 
     #if os(iOS)
     private static func describe(
@@ -314,6 +324,10 @@ final class TaskMetrics: Streamable, PlainInstrument, LoadTimeInstall {
     private let followed: Mutex<[(DelegateClasses, Int)]> = .init([])
 
     init() {}
+
+    static func relevance(_ registries: Registries) -> Relevance {
+        urlSessionRelevance(registries)
+    }
 
     static func installAtLoad(_ hooks: HookTable) {
         #if os(iOS)

@@ -38,3 +38,19 @@ struct SessionConfigurationTests {
     }
 }
 #endif
+
+/// Unlike the rest of the file, `relevance` isn't `#if os(iOS)` — it costs nothing to answer
+/// on any platform, so it runs here too.
+struct URLSessionRelevanceTests {
+    /// Both instruments key off the same registry `TaskMetrics.installAtLoad` fills.
+    @Test func bothInstrumentsAgreeOnceASessionIsRegistered() {
+        let registries = Registries()
+        #expect(SessionConfiguration.relevance(registries) == .notRelevant)
+        #expect(TaskMetrics.relevance(registries) == .notRelevant)
+
+        registries.registry(URLSession.self).add(URLSession.shared)
+
+        #expect(SessionConfiguration.relevance(registries) == .relevant)
+        #expect(TaskMetrics.relevance(registries) == .relevant)
+    }
+}

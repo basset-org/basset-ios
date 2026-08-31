@@ -6,6 +6,11 @@ public protocol Instrument: AnyObject {
     static var id: InstrumentID { get }
     /// Declared rather than inferred: the runner builds the tally before the instrument exists.
     static var tallySlots: Int { get }
+    /// Whether this device's own runtime has anything for this instrument to observe —
+    /// distinct from `Availability`, which asks only whether the mechanism compiles here.
+    /// Answered from `registries`, already filled by every load-time hook regardless of
+    /// activation, so the probe costs nothing an inactive instrument wasn't already paying.
+    static func relevance(_ registries: Registries) -> Relevance
 }
 
 public extension Instrument {
@@ -21,6 +26,18 @@ public extension Instrument {
     static var tallySlots: Int {
         4
     }
+
+    /// Most instruments have something to say on any device — a hang or a memory
+    /// footprint exists whether or not the app happens to touch a given subsystem.
+    static func relevance(_ registries: Registries) -> Relevance {
+        .relevant
+    }
+}
+
+/// Whether an instrument's own runtime probe found this device worth activating it on.
+public enum Relevance: Sendable, Equatable {
+    case relevant
+    case notRelevant
 }
 
 /// What the runner dispatches to — plain and `Configurable` instruments both conform.
@@ -67,6 +84,10 @@ public struct Registration: @unchecked Sendable {
     public let delivery: Delivery
     public let tallySlots: Int
 
+    /// Not `Sendable`-checked as a stored closure since `Registries` already is; captures
+    /// only the metatype `I.relevance` dispatches through.
+    let relevance: @Sendable (Registries) -> Relevance
+
     /// Never throws. `configRefused` means config was sent and did not decode, not that none was.
     let build: @Sendable (Data?) -> (instrument: any Instrument, configRefused: Bool)
     /// Not @Sendable: captures a metatype, immutable but not modeled as such by the compiler.
@@ -90,6 +111,7 @@ public struct Registration: @unchecked Sendable {
         self.availability = I.id.availability
         self.delivery = delivery
         self.tallySlots = I.tallySlots
+        self.relevance = { I.relevance($0) }
         self.build = build
         if let loading = I.self as? any LoadTimeInstall.Type {
             self.installAtLoad = { hooks in loading.installAtLoad(hooks) }

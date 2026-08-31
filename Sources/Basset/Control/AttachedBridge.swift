@@ -26,13 +26,27 @@ public enum AttachedBridge {
         lock.withLock { attached }
     }
 
-    /// Sent unprompted, first, on every fresh connection — a `device.info` reading built
-    /// and framed the same way any other, so the connecting machine learns which app on a
-    /// device it reached through the ordinary reading pipeline rather than a side protocol.
-    public static func identity() -> Data {
-        let entity = DeviceInfo().reading().tagged(.deviceInfo)
+    /// Sent unprompted, first, on every fresh connection — readings built and framed the
+    /// same way any other, so the connecting machine learns which app on a device it
+    /// reached, and what it would run by default, through the ordinary reading pipeline
+    /// rather than a side protocol. The second frame is this device's own proposal; the
+    /// desired state the connecting machine converges to afterward is free to override it.
+    public static func identity() -> [Data] {
         let encoder = FrameEncoder()
-        return encoder.frame(encoder.encode(entity))
+        let device = DeviceInfo().reading().tagged(.deviceInfo)
+
+        // Shaped like `InstrumentRunner.emitActiveSet`, its sibling entity: its own
+        // instrument id first, the count, then one `.instrument` per id it is naming.
+        let ids = Basset.defaultRelevantInstruments().sorted { $0.rawValue < $1.rawValue }
+        var components: [Component] = [
+            .instrument(InstrumentID.instrumentsRelevant.rawValue),
+            .launchId(LaunchIdentity.current),
+            .occurrenceCount(UInt64(ids.count)),
+        ]
+        ids.forEach { components.append(.instrument($0.rawValue)) }
+        let relevant = Entity(.relevantInstruments, components: components)
+
+        return [device, relevant].map { encoder.frame(encoder.encode($0)) }
     }
 
     public static func open(_ channel: AttachedChannel) {

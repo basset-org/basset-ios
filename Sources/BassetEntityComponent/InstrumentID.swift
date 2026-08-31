@@ -56,6 +56,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
     case imagingRenderPasses = 58
     case configRefused = 0xff00
     case instrumentsActive = 0xff01
+    case instrumentsRelevant = 0xff02
 
     public var name: String {
         switch self {
@@ -116,6 +117,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .viewHierarchy: "uikit.view.hierarchy"
         case .configRefused: "basset.configRefused"
         case .instrumentsActive: "basset.instrumentsActive"
+        case .instrumentsRelevant: "basset.instrumentsRelevant"
         }
     }
 
@@ -178,6 +180,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .viewHierarchy: .uikit
         case .configRefused: .basset
         case .instrumentsActive: .basset
+        case .instrumentsRelevant: .basset
         }
     }
 
@@ -242,6 +245,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         // Never activated: basset emits this itself, outside the registration table.
         case .configRefused: .reading
         case .instrumentsActive: .reading
+        case .instrumentsRelevant: .reading
         }
     }
 

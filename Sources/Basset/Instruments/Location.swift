@@ -22,6 +22,10 @@ final class DelegateSilence: Streamable, PlainInstrument, LoadTimeInstall {
 
     init() {}
 
+    static func relevance(_ registries: Registries) -> Relevance {
+        registries.hasDelegate(on: managerClassName) ? .relevant : .notRelevant
+    }
+
     /// At load: no public API enumerates live `CLLocationManager` instances afterwards.
     static func installAtLoad(_ hooks: HookTable) {
         guard let manager = objc_getClass(managerClassName) as? AnyClass else {

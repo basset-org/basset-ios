@@ -1177,6 +1177,19 @@ public extension InstrumentID {
                 cadence: .onChange,
                 minimumSDKVersion: "0.2.0"
             )
+        case .instrumentsRelevant:
+            InstrumentMetadata(
+                summary: "basset reporting on itself: which instruments this device believes are worth activating right now",
+                whenToUse: "before building a request, to narrow which instruments to name instead of guessing across the whole catalog",
+                reveals: [
+                    "every instrument whose own runtime probe found something to observe on this device, named by its own id",
+                    "nothing about an instrument that always answers relevant, like a hang or memory reading — it is in the list on every device",
+                ],
+                related: ["basset.instrumentsActive", "device.info"],
+                mechanism: .none,
+                cadence: .once,
+                minimumSDKVersion: "0.8.0"
+            )
         }
     }
 }
