@@ -80,7 +80,7 @@ struct SystemWiringTests {
         #expect(harness.value(.memoryPressureLevel, in: reading) == "warning")
         // The app-directed warning and the system pressure source are different facts.
         #expect(harness.value(.memoryPressureScope, in: reading) == "app")
-        #expect(reading?.components.contains { $0.id == .memoryUsedBytes } == true)
+        #expect(reading?.components.contains { $0.known == .memoryUsedBytes } == true)
     }
 
     /// On the main actor — off it, `capture()`'s read can land after the notification below.
@@ -129,10 +129,10 @@ struct SystemWiringTests {
 
         let resumed = harness.readings.first { entity in
             entity.components
-                .contains { $0.id == .appState && $0.value.rendered == "resumed" }
+                .contains { $0.known == .appState && $0.value.rendered == "resumed" }
         }
         #expect(resumed != nil)
-        #expect(resumed?.components.contains { $0.id == .totalNanoseconds } == true)
+        #expect(resumed?.components.contains { $0.known == .totalNanoseconds } == true)
     }
 
     @Test func permissionsAreReReadWhenTheAppComesBack() {
@@ -154,7 +154,7 @@ struct SystemWiringTests {
         #expect(reading != nil)
         // A verdict about the previous run, or a statement there was none — never silence.
         let said = reading?.components.contains {
-            $0.id == .exitReason || $0.id == .mechanismStatus
+            $0.known == .exitReason || $0.known == .mechanismStatus
         }
         #expect(said == true)
     }

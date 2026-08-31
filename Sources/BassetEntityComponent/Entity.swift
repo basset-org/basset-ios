@@ -56,9 +56,14 @@ public struct Entity: Equatable, Sendable {
         case instrumentConfig = 0xff00
     }
 
-    public let id: ID
+    public let id: UInt16
     public let capturedAt: UInt64
     public let components: [Component]
+
+    /// The known case for `id`, or nil when this entity is newer than this build.
+    public var known: ID? {
+        ID(rawValue: id)
+    }
 
     /// What this reading says, without when — dedupes KVO, which fires on every set.
     public var fingerprint: Int {
@@ -75,6 +80,16 @@ public struct Entity: Equatable, Sendable {
         _ id: ID,
         capturedAt: UInt64 = Entity.microsecondsSinceEpoch(),
         components: [Component] = []
+    ) {
+        self.id = id.rawValue
+        self.capturedAt = capturedAt
+        self.components = components
+    }
+
+    public init(
+        id: UInt16,
+        capturedAt: UInt64,
+        components: [Component]
     ) {
         self.id = id
         self.capturedAt = capturedAt
@@ -93,9 +108,10 @@ public struct Entity: Equatable, Sendable {
 
 extension Entity: CustomStringConvertible {
     public var description: String {
-        var lines = ["\(id):"]
+        var lines = [known.map { "\($0):" } ?? "entity\(id):"]
         for component in components {
-            lines.append("  \(component.id): \(component.value.rendered)")
+            let name = component.known.map { "\($0)" } ?? "component\(component.id)"
+            lines.append("  \(name): \(component.value.rendered)")
         }
         return lines.joined(separator: "\n")
     }

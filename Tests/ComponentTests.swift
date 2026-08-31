@@ -16,7 +16,7 @@ struct ComponentTests {
 
     @Test func idAndValueComeFromTheSameCase() {
         let component = Component.cpuUsageRatio(0.29)
-        #expect(component.id == .cpuUsageRatio)
+        #expect(component.known == .cpuUsageRatio)
         #expect(component.value == .float32(0.29))
     }
 
@@ -235,7 +235,7 @@ struct ComponentTests {
         ]
 
         for (component, expected) in all {
-            #expect(component.id == expected)
+            #expect(component.known == expected)
         }
         #expect(Set(all.map(\.1)).count == all.count)
 

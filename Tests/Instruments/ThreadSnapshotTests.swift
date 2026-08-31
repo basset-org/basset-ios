@@ -261,9 +261,9 @@ struct ThreadSnapshotFaultTests {
     private func imageUUIDs(in readings: Readings) -> Set<String> {
         Set(
             readings.additionalEntities()
-                .filter { $0.id == .binaryImage }
+                .filter { $0.known == .binaryImage }
                 .compactMap { entity in
-                    entity.components.first { $0.id == .imageUUID }?.value.rendered
+                    entity.components.first { $0.known == .imageUUID }?.value.rendered
                 }
         )
     }
@@ -306,9 +306,9 @@ struct ReadingsAdditionalEntityTests {
         out.put(.threadIndex(0))
         out.also(.binaryImage) { image in image.put(.imageName("Basset")) }
 
-        #expect(out.build().id == .thread)
+        #expect(out.build().known == .thread)
         #expect(out.build().components.count == 1)
-        #expect(out.additionalEntities().map(\.id) == [.binaryImage])
+        #expect(out.additionalEntities().map(\.known) == [.binaryImage])
     }
 
     @Test func anEmptyAdditionalEntityIsNotEmitted() {

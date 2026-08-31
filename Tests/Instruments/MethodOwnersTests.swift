@@ -75,7 +75,7 @@ struct MethodOwnersTests {
     }
 
     private func rendered(_ id: Component.ID, in entity: Entity?) -> String? {
-        entity?.components.first { $0.id == id }?.value.rendered
+        entity?.components.first { $0.known == id }?.value.rendered
     }
 }
 

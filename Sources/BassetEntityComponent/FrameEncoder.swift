@@ -48,11 +48,11 @@ public struct FrameEncoder {
 
     public func encode(_ entity: Entity) -> Data {
         var out = Data([PayloadKind.entity.rawValue])
-        appendLittleEndian(entity.id.rawValue, to: &out)
+        appendLittleEndian(entity.id, to: &out)
         appendLittleEndian(entity.capturedAt, to: &out)
         appendUvarint(UInt64(entity.components.count), to: &out)
         for component in entity.components {
-            appendLittleEndian(component.id.rawValue, to: &out)
+            appendLittleEndian(component.id, to: &out)
             out.append(component.value.scalar.rawValue)
             append(component.value, to: &out)
         }

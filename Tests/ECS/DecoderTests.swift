@@ -29,7 +29,7 @@ struct DecoderTests {
             .float32(0.29), .uint64(4294967296), .string("iPhone17,2"),
             .uint16(3), .bool(true),
         ])
-        #expect(decoded.components.map(\.scalar) == [
+        #expect(decoded.components.map(\.value.scalar) == [
             .float32, .uint64, .string, .uint16, .bool,
         ])
         #expect(decoded.components.map(\.known) == [

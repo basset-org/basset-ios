@@ -152,7 +152,7 @@ public final class Context: @unchecked Sendable {
         }
 
         let record = readings.build()
-        let key = "\(record.id.rawValue)/\(subject)"
+        let key = "\(record.id)/\(subject)"
         let fingerprint = record.fingerprint
 
         lock.lock()
