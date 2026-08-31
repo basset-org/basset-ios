@@ -353,6 +353,21 @@ private func runtime(
     )
 }
 
+/// Overrides the protocol default to prove `defaultRelevantInstruments` consults it.
+private final class FakeIrrelevant: FakeInstrument {
+    static let id: InstrumentID = .cameraSessionState
+    static let name = "camera.session.state"
+    static let domain: Domain = .camera
+
+    let recorder: Recorder = .init()
+
+    init() {}
+
+    static func relevance(_ registries: Registries) -> Relevance {
+        .notRelevant
+    }
+}
+
 private let bothFakes: [Registration] = [
     .stream(FakeMemory.self),
     .stream(FakeThermal.self),
@@ -378,6 +393,14 @@ struct RuntimeConvergenceTests {
         subject.memory?.take()
         subject.settle()
         #expect(opener.stream(1)?.count == 1, "the first reading is what opens it")
+    }
+
+    /// Independent of anything live: no request has to run for the default set to answer.
+    @Test func defaultRelevantInstrumentsReflectsEachOnesOwnProbe() {
+        let (subject, _) = runtime([.stream(FakeMemory.self), .stream(FakeIrrelevant.self)])
+
+        #expect(subject.defaultRelevantInstruments == [.memoryFootprint])
+        #expect(subject.liveRequestIds.isEmpty, "nothing here required a request")
     }
 
     @Test func aRequestMissingFromTheResponseStops() {

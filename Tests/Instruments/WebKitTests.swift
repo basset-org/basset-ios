@@ -85,4 +85,19 @@ struct WebKitDefineTests {
         #expect(forbidden
             .allSatisfy { $0 != ContentProcessTermination.didTerminate.description })
     }
+
+    /// Resolving the class is inert; only constructing a real web view loads a web content process.
+    @Test func relevantOnceTheAppHasSetANavigationDelegate() {
+        let registries = Registries()
+        #expect(ContentProcessTermination.relevance(registries) == .notRelevant)
+
+        guard let webView =
+            objc_getClass(ContentProcessTermination.webViewClassName) as? AnyClass
+        else {
+            return
+        }
+
+        registries.delegates(ObjectIdentifier(webView)).add(AwareDelegate.self)
+        #expect(ContentProcessTermination.relevance(registries) == .relevant)
+    }
 }

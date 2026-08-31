@@ -83,6 +83,14 @@ public enum Basset {
         return running?.currentState()
     }
 
+    /// Empty before `start` — nothing has installed its load-time hooks yet to probe.
+    static func defaultRelevantInstruments() -> Set<InstrumentID> {
+        lock.lock()
+        let running = loop
+        lock.unlock()
+        return running?.defaultRelevantInstruments ?? []
+    }
+
     #if DEBUG
     /// Undoes `start`, which is otherwise permanent for the life of the process. A
     /// test that starts the SDK and cannot stop it leaves every later test in that
@@ -132,6 +140,10 @@ final class DeviceLoop: @unchecked Sendable {
     private let runner: InstrumentRunner
     private let guarded: Mutex<State> = .init(State())
     private var following: Task<Void, Never>?
+
+    var defaultRelevantInstruments: Set<InstrumentID> {
+        runner.defaultRelevantInstruments
+    }
 
     init(config: Config) {
         self.config = config

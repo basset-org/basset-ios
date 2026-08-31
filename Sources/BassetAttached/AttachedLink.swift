@@ -120,7 +120,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
                     return
                 }
 
-                self.send(AttachedBridge.identity())
+                AttachedBridge.identity().forEach(self.send)
                 AttachedBridge.open(self)
             case .cancelled,
                  .failed:

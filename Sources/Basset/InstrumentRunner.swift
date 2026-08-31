@@ -112,6 +112,16 @@ final class InstrumentRunner: @unchecked Sendable {
         queue.sync { active }
     }
 
+    /// What this device would run if a request named every instrument in the catalog —
+    /// each one's own probe against `registries`, not what is actually live right now.
+    var defaultRelevantInstruments: Set<InstrumentID> {
+        queue.sync {
+            Set(registrations
+                .filter { $0.isAvailableHere && $0.relevance(registries) == .relevant }
+                .map(\.id))
+        }
+    }
+
     var bufferedFrameCount: Int {
         queue.sync { buffered.count }
     }

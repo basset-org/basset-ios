@@ -21,6 +21,10 @@ final class TileLoading: Streamable, PlainInstrument, LoadTimeInstall {
 
     init() {}
 
+    static func relevance(_ registries: Registries) -> Relevance {
+        registries.hasDelegate(on: mapViewClassName) ? .relevant : .notRelevant
+    }
+
     static func installAtLoad(_ hooks: HookTable) {
         guard let mapView = objc_getClass(mapViewClassName) as? AnyClass else {
             return

@@ -63,4 +63,17 @@ struct CentralStateTests {
         ) ==
             nil)
     }
+
+    /// Resolving the class is inert; only constructing a real manager raises the prompt.
+    @Test func relevantOnceTheAppHasSetADelegateOnACentralManager() {
+        let registries = Registries()
+        #expect(CentralState.relevance(registries) == .notRelevant)
+
+        guard let manager = objc_getClass(CentralState.managerClassName) as? AnyClass else {
+            return
+        }
+
+        registries.delegates(ObjectIdentifier(manager)).add(EmptyDelegate.self)
+        #expect(CentralState.relevance(registries) == .relevant)
+    }
 }

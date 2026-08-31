@@ -156,9 +156,10 @@ struct InstrumentShapeTests {
         let instrumentIds: [UInt16] = Array(1...21) + Array(23...39) + Array(42...58) + [
             0xff00,
             0xff01,
+            0xff02,
         ]
         let componentIds: [UInt16] = Array(1...247)
-        let entityIds: [UInt16] = Array(0...32) + Array(35...51) + [0xff00]
+        let entityIds: [UInt16] = Array(0...32) + Array(35...52) + [0xff00]
 
         #expect(instrumentIdSnapshot == instrumentIds)
         #expect(componentIdSnapshot == componentIds)

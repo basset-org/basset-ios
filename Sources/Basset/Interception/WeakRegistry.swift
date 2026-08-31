@@ -1,4 +1,5 @@
 import Foundation
+import ObjectiveC
 
 public final class WeakRegistry<Tracked: AnyObject>: @unchecked Sendable {
     private final class Box {
@@ -185,5 +186,16 @@ public final class Registries: @unchecked Sendable {
             state.byDelegateOwner[key] = created
             return created
         }
+    }
+
+    /// Whether the app has ever set a delegate on any instance of the class this names —
+    /// what every delegate-proxy instrument's `installAtLoad` tracks, regardless of
+    /// whether that instrument is active. `false` when the class isn't loaded at all.
+    func hasDelegate(on className: String) -> Bool {
+        guard let owner = objc_getClass(className) as? AnyClass else {
+            return false
+        }
+
+        return !delegates(ObjectIdentifier(owner)).all.isEmpty
     }
 }

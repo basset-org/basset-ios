@@ -53,6 +53,7 @@ public struct Entity: Equatable, Sendable {
         case viewHierarchy = 49
         case imageRender = 50
         case activeInstruments = 51
+        case relevantInstruments = 52
         case instrumentConfig = 0xff00
     }
 

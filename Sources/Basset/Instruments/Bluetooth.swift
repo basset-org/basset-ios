@@ -15,6 +15,10 @@ final class CentralState: Streamable, PlainInstrument, LoadTimeInstall {
 
     init() {}
 
+    static func relevance(_ registries: Registries) -> Relevance {
+        registries.hasDelegate(on: managerClassName) ? .relevant : .notRelevant
+    }
+
     static func installAtLoad(_ hooks: HookTable) {
         guard let manager = objc_getClass(managerClassName) as? AnyClass else {
             return
