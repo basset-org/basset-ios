@@ -492,7 +492,7 @@ final class InstrumentRunner: @unchecked Sendable {
         activation: AtomicStatus
     ) {
         let record = Entity(
-            entity.id,
+            id: entity.id,
             capturedAt: entity.capturedAt,
             components: entity.components + [
                 .instrument(instrumentId.rawValue),
@@ -514,7 +514,7 @@ final class InstrumentRunner: @unchecked Sendable {
         // Only walked when a reading actually names addresses: `covering` reads every mapped
         // image, which no reading without frames should pay for.
         let addresses: [UInt64] = record.components.compactMap { component in
-            guard component.id == .frameAddress,
+            guard component.known == .frameAddress,
                   case .uint64(let address) = component.value
             else {
                 return nil

@@ -1,28 +1,8 @@
 import Foundation
 
-public struct DecodedComponent: Equatable, Sendable {
-    public let id: UInt16
-    public let scalar: Scalar
-    public let value: ComponentValue
-
-    public var known: Component.ID? {
-        Component.ID(rawValue: id)
-    }
-}
-
-public struct DecodedEntity: Equatable, Sendable {
-    public let id: UInt16
-    public let capturedAt: UInt64
-    public let components: [DecodedComponent]
-
-    public var known: Entity.ID? {
-        Entity.ID(rawValue: id)
-    }
-}
-
 public enum Frame: Equatable, Sendable {
     case manifest([AdvertisedInstrument])
-    case entity(DecodedEntity)
+    case entity(Entity)
 }
 
 public enum DecoderError: Error, Equatable {
@@ -146,11 +126,11 @@ private struct PayloadReader {
         return instruments
     }
 
-    private mutating func entity() throws -> DecodedEntity {
+    private mutating func entity() throws -> Entity {
         let id = try fixedWidth(UInt16.self)
         let capturedAt = try fixedWidth(UInt64.self)
         let count = try records(eachTakingAtLeast: 4)
-        var components = [DecodedComponent]()
+        var components = [Component]()
         components.reserveCapacity(count)
         for _ in 0 ..< count {
             let componentId = try fixedWidth(UInt16.self)
@@ -161,14 +141,10 @@ private struct PayloadReader {
             }
 
             try components.append(
-                DecodedComponent(
-                    id: componentId,
-                    scalar: scalar,
-                    value: value(scalar)
-                )
+                Component(id: componentId, value: value(scalar))
             )
         }
-        return DecodedEntity(id: id, capturedAt: capturedAt, components: components)
+        return Entity(id: id, capturedAt: capturedAt, components: components)
     }
 
     private mutating func value(_ scalar: Scalar) throws -> ComponentValue {

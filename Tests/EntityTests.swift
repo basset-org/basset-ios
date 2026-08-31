@@ -6,7 +6,7 @@ struct EntityTests {
     @Test func buildsDeviceEntity() {
         let device = Entity(.device, components: [.deviceModel("iPhone17,2"), .fps(59.9)])
 
-        #expect(device.id == .device)
+        #expect(device.known == .device)
         #expect(device.components == [.deviceModel("iPhone17,2"), .fps(59.9)])
     }
 

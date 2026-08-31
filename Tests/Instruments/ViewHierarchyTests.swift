@@ -27,7 +27,7 @@ struct ViewHierarchyWalkTests {
         let hits = rows(at: CGPoint(x: 500, y: 500), in: root)
 
         #expect(hits.count == 1)
-        #expect(hits[0].components.contains { $0.id == .mechanismStatus })
+        #expect(hits[0].components.contains { $0.known == .mechanismStatus })
     }
 
     @Test func aHiddenSubviewIsExcluded() {
@@ -145,7 +145,7 @@ struct ViewHierarchyWalkTests {
     }
 
     private func value(_ id: Component.ID, in entity: Entity) -> String? {
-        entity.components.first { $0.id == id }?.value.rendered
+        entity.components.first { $0.known == id }?.value.rendered
     }
 }
 #endif

@@ -29,7 +29,7 @@ public struct Readings {
         components.append(component)
         additional = additional.map { entity in
             Entity(
-                entity.id,
+                id: entity.id,
                 capturedAt: entity.capturedAt,
                 components: entity.components + [component]
             )
@@ -56,7 +56,7 @@ public struct Readings {
     public func tagged(_ instrument: InstrumentID) -> Entity {
         let record = build()
         return Entity(
-            record.id,
+            id: record.id,
             capturedAt: record.capturedAt,
             components: record.components + [
                 .instrument(instrument.rawValue),

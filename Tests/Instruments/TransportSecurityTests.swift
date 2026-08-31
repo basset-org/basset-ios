@@ -32,7 +32,7 @@ struct TransportSecurityTests {
             into: &out
         )
 
-        let detail = out.build().components.first { $0.id == .detail }?.value.rendered
+        let detail = out.build().components.first { $0.known == .detail }?.value.rendered
         #expect(detail == "arbitrary loads allowed in web content")
     }
 
@@ -86,6 +86,6 @@ struct TransportSecurityTests {
     }
 
     private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {
-        entity.components.first { $0.id == id }?.value.rendered
+        entity.components.first { $0.known == id }?.value.rendered
     }
 }

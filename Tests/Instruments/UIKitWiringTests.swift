@@ -33,8 +33,8 @@ struct UIKitSwizzleWiringTests {
         #expect(passes != nil)
         #expect((passes.flatMap { UInt64($0) } ?? 0) > 0)
         // The window is carried too, so a rate can be computed against it.
-        #expect(reading?.components.contains { $0.id == .windowNanoseconds } == true)
-        #expect(reading?.components.contains { $0.id == .peakNanoseconds } == true)
+        #expect(reading?.components.contains { $0.known == .windowNanoseconds } == true)
+        #expect(reading?.components.contains { $0.known == .peakNanoseconds } == true)
     }
 
     /// The swizzle is never uninstalled; after teardown its IMP must have nobody left to tell.
@@ -133,7 +133,7 @@ struct UIKitSwizzleWiringTests {
 
         let reading = harness.waitForReading()
         #expect(harness.value(.methodName, in: reading) == "description")
-        #expect(reading?.components.contains { $0.id == .methodClass } != true)
+        #expect(reading?.components.contains { $0.known == .methodClass } != true)
     }
 
     /// A custom `UIGestureRecognizer` setting its own `state` is standard Swift practice — this

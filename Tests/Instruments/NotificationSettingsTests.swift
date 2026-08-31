@@ -95,7 +95,7 @@ struct NotificationSettingsTests {
     }
 
     private func rendered(_ entity: Entity, _ id: Component.ID) -> String? {
-        entity.components.first { $0.id == id }?.value.rendered
+        entity.components.first { $0.known == id }?.value.rendered
     }
 }
 
@@ -153,7 +153,7 @@ struct NotificationSettingsWiringTests {
         let reading = harness.waitForReading(timeout: 4)
         #expect(reading != nil)
         let said = reading?.components.contains {
-            $0.id == .authorizationStatus || $0.id == .mechanismStatus
+            $0.known == .authorizationStatus || $0.known == .mechanismStatus
         }
         #expect(said == true)
     }

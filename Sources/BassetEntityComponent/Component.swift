@@ -156,7 +156,9 @@ public enum ComponentValue: Equatable, Sendable {
     }
 }
 
-/// A reading's smallest unit. Built only through the factories below, pairing id and type.
+/// A reading's smallest unit. Built through the factories below when the id is known at
+/// compile time; the raw init exists for the decoder, since grow-only ids mean a byte
+/// stream can carry one newer than this build knows.
 public struct Component: Equatable, Sendable {
     public enum ID: UInt16, Sendable, CaseIterable {
         case cpuUsageRatio = 1
@@ -410,10 +412,20 @@ public struct Component: Equatable, Sendable {
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.
     public let value: ComponentValue
-    public let id: ID
+    public let id: UInt16
+
+    /// The known case for `id`, or nil when this component is newer than this build.
+    public var known: ID? {
+        ID(rawValue: id)
+    }
+
+    public init(id: UInt16, value: ComponentValue) {
+        self.id = id
+        self.value = value
+    }
 
     private init(_ id: ID, _ value: some ScalarValue) {
-        self.id = id
+        self.id = id.rawValue
         self.value = value.componentValue
     }
 }

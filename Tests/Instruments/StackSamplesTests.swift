@@ -199,7 +199,7 @@ struct StackSampleReadingTests {
         let readings = emit(window)
 
         let counts = readings
-            .filter { $0.id == .stackSample }
+            .filter { $0.known == .stackSample }
             .compactMap { count(of: .occurrenceCount, in: $0) }
         #expect(counts == [7, 1], "hottest first, each with its own count")
     }
@@ -215,7 +215,7 @@ struct StackSampleReadingTests {
 
         let readings = emit(window)
 
-        for reading in readings where reading.id == .stackSample {
+        for reading in readings where reading.known == .stackSample {
             #expect(count(of: .sampleCount, in: reading) == 6)
         }
     }
@@ -307,7 +307,7 @@ struct StackSampleReadingTests {
 
         let frames = emit(window)
             .flatMap(\.components)
-            .filter { $0.id == .frameAddress }
+            .filter { $0.known == .frameAddress }
             .map(\.value.rendered)
 
         #expect(frames == ["48", "32", "16"])
@@ -322,8 +322,8 @@ struct StackSampleReadingTests {
 
         let readings = emit(window)
 
-        #expect(readings.contains { $0.id == .stackSample })
-        #expect(!readings.contains { $0.id == .binaryImage })
+        #expect(readings.contains { $0.known == .stackSample })
+        #expect(!readings.contains { $0.known == .binaryImage })
     }
 
     private func emit(_ window: StackWindow) -> [Entity] {
@@ -341,7 +341,7 @@ struct StackSampleReadingTests {
     }
 
     private func rendered(_ id: Component.ID, in entity: Entity?) -> String? {
-        entity?.components.first { $0.id == id }?.value.rendered
+        entity?.components.first { $0.known == id }?.value.rendered
     }
 
     private func count(of id: Component.ID, in entity: Entity?) -> UInt64? {

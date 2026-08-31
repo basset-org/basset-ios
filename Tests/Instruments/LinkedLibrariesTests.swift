@@ -117,7 +117,7 @@ struct LinkedLibrariesTests {
     }
 
     private func rendered(_ id: Component.ID, in entity: Entity?) -> String? {
-        entity?.components.first { $0.id == id }?.value.rendered
+        entity?.components.first { $0.known == id }?.value.rendered
     }
 
     private func count(_ id: Component.ID, in entity: Entity?) -> UInt64? {
@@ -142,7 +142,7 @@ struct LinkedLibrariesWiringTests {
 
         let rendered = out.build()
             .components
-            .first { $0.id == .occurrenceCount }?
+            .first { $0.known == .occurrenceCount }?
             .value
             .rendered
         let total = rendered.flatMap { UInt64($0) } ?? 0
@@ -239,7 +239,7 @@ struct LinkedLibrariesWiringTests {
 
         #expect(readings.contains { reading in
             reading.components.contains {
-                $0.id == .imageName && $0.value.rendered == executable.name
+                $0.known == .imageName && $0.value.rendered == executable.name
             }
         })
     }

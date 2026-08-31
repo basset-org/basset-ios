@@ -25,7 +25,7 @@ struct NotificationWiringTests {
         #expect(harness.value(.insertedCount, in: reading) == "3")
         #expect(harness.value(.deletedCount, in: reading) == "1")
         // A duration exists only if the will-save/did-save pairing on this context worked.
-        #expect(reading?.components.contains { $0.id == .totalNanoseconds } == true)
+        #expect(reading?.components.contains { $0.known == .totalNanoseconds } == true)
     }
 
     /// A second context saving in between must not be paired with the first one's start.
@@ -49,7 +49,7 @@ struct NotificationWiringTests {
         let reading = harness.waitForReading()
         // The second context never announced a start, so it must not borrow the first one's clock.
         #expect(harness.value(.insertedCount, in: reading) == "1")
-        #expect(reading?.components.contains { $0.id == .totalNanoseconds } == false)
+        #expect(reading?.components.contains { $0.known == .totalNanoseconds } == false)
     }
 }
 
