@@ -40,6 +40,7 @@ final class FramePacing: Streamable, PlainInstrument {
 
         out.put(.occurrenceCount(frames))
         out.put(.windowNanoseconds(window.nanoseconds))
+        out.put(.fps(Float(frames) / (Float(window.nanoseconds) / 1000000000)))
 
         let misses = tally.take(Slot.misses)
         let overrun = tally.take(Slot.worstOverrun)

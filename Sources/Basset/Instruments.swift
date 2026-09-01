@@ -1,6 +1,6 @@
 public enum Instruments {
     public static let all: [Registration] = [
-        .reading(MemoryFootprint.self),
+        .stream(MemoryFootprint.self),
         .reading(DeviceInfo.self),
         .stream(ThermalState.self),
         .stream(CameraSessionState.self),

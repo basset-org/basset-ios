@@ -204,7 +204,7 @@ public extension InstrumentID {
                 ],
                 related: ["memory.pressure", "lifecycle.lastRunEnded", "device.info"],
                 mechanism: .machCall,
-                cadence: .once
+                cadence: .interval
             )
         case .deviceInfo:
             InstrumentMetadata(
@@ -775,6 +775,7 @@ public extension InstrumentID {
                 whenToUse: "scrolling stutters, an animation is not smooth, or the app feels heavy while the main thread is never actually blocked",
                 reveals: [
                     "how many frames the app produced in the window, and how many missed the system's own completion deadline",
+                    "frames produced per second over the window, derived from that same count",
                     "the worst overrun, measured against the deadline the system gave rather than an assumed refresh interval",
                     "time spent in the Core Animation commit, total and worst, which is the part the app's own layout and drawing pays for",
                     "how far ahead the system expected to present, which is the latency between deciding a frame and showing it",

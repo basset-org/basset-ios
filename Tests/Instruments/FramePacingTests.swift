@@ -49,6 +49,16 @@ struct FramePacingTests {
         #expect(rendered(out.build(), .windowNanoseconds) == "2000000000")
     }
 
+    @Test func fpsIsFramesDividedByTheWindowInSeconds() {
+        let tally = Tally(slots: 6)
+        tally.add(TallySlot(0), 60)
+
+        var out = readings()
+        FramePacing.write(tally, over: window(nanoseconds: 2000000000), into: &out)
+
+        #expect(rendered(out.build(), .fps) == "30.0")
+    }
+
     @Test func commitTimeIsReportedAsBothTheTotalAndTheWorstOne() {
         let tally = Tally(slots: 6)
         tally.add(TallySlot(0), 10)

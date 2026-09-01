@@ -5,16 +5,18 @@ import Foundation
 import UIKit
 #endif
 
-final class MemoryFootprint: Snapshotable, PlainInstrument {
+final class MemoryFootprint: Streamable, PlainInstrument {
     static let id: InstrumentID = .memoryFootprint
 
     init() {}
 
-    func reading() -> Readings {
-        var out = Readings(.process)
-        MemoryLedger.read()?.write(into: &out)
-        return out
+    func observe(_ context: Context) {
+        context.flush(every: .seconds(1), into: .process) { out, _ in
+            MemoryLedger.read()?.write(into: &out)
+        }
     }
+
+    func stopObserving() {}
 }
 
 /// Watches both the system-wide Mach pressure source and app-scoped didReceiveMemoryWarning.

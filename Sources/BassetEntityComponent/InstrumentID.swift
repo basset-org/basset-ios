@@ -187,7 +187,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
     /// What `Registration` proves at compile time, readable here without compiling an instrument.
     public var delivery: Delivery {
         switch self {
-        case .memoryFootprint: .reading
+        case .memoryFootprint: .stream
         case .deviceInfo: .reading
         case .thermalState: .stream
         case .cameraSessionState: .stream
