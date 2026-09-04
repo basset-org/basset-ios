@@ -56,6 +56,8 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         case metricKit
         /// Reading a framework's internals by name (`Mirror`, `object_getIvar`); fails to silence.
         case reflection
+        /// Drawing the window hierarchy into an image on the main thread, on request.
+        case screenSnapshot
     }
 
     public enum Cadence: String, Codable, Sendable {
@@ -135,6 +137,61 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         }
     }
 
+    /// Read-side only: read-side display context, never gates or judges on-device.
+    public enum Health: String, Codable, Sendable, Equatable, CaseIterable {
+        case ok
+        case warning
+        case fault
+    }
+
+    /// One band of a component's value line. `upTo` is the exclusive upper bound in the
+    /// component's own wire units; the last band in a range omits it — "and above."
+    public struct HealthBand: Codable, Sendable, Equatable {
+        public let upTo: Double?
+        public let health: Health
+
+        public init(upTo: Double?, health: Health) {
+            self.upTo = upTo
+            self.health = health
+        }
+    }
+
+    /// A reference range for one component, in wire units; `displayScale` divides a wire value
+    /// before it is shown with `displayUnit`.
+    public struct ComponentHealthRange: Codable, Sendable, Equatable {
+        public let component: Component.ID
+        public let displayUnit: String
+        public let displayScale: Double
+        public let bands: [HealthBand]
+
+        public init(
+            component: Component.ID,
+            displayUnit: String,
+            displayScale: Double,
+            bands: [HealthBand]
+        ) {
+            self.component = component
+            self.displayUnit = displayUnit
+            self.displayScale = displayScale
+            self.bands = bands
+        }
+
+        public func health(for value: Double) -> Health {
+            bands.first { $0.upTo.map { value < $0 } ?? true }?.health ?? .ok
+        }
+    }
+
+    /// Component ids only ever grow, so a range naming one this build does not know is skipped
+    /// rather than failing the whole metadata decode. Never throws, so the element is always
+    /// consumed and the array's remaining entries are still read.
+    private struct SkippableHealthRange: Decodable {
+        let range: ComponentHealthRange?
+
+        init(from decoder: Decoder) throws {
+            range = try? ComponentHealthRange(from: decoder)
+        }
+    }
+
     public let summary: String
     public let whenToUse: String
     public let reveals: [String]
@@ -144,6 +201,7 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
     public let observed: Observed
     public let overhead: Overhead
     public let config: [ConfigField]
+    public let ranges: [ComponentHealthRange]
     public let minimumSDKVersion: String
 
     public init(
@@ -156,6 +214,7 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         observed: Observed = .thisRun,
         overhead: Overhead = .negligible,
         config: [ConfigField] = [],
+        ranges: [ComponentHealthRange] = [],
         minimumSDKVersion: String = "0.1.1"
     ) {
         self.summary = summary
@@ -167,6 +226,7 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         self.observed = observed
         self.overhead = overhead
         self.config = config
+        self.ranges = ranges
         self.minimumSDKVersion = minimumSDKVersion
     }
 
@@ -182,6 +242,9 @@ public struct InstrumentMetadata: Codable, Sendable, Equatable {
         observed = try container.decode(Observed.self, forKey: .observed)
         overhead = try container.decode(Overhead.self, forKey: .overhead)
         config = try container.decodeIfPresent([ConfigField].self, forKey: .config) ?? []
+        ranges = try container
+            .decodeIfPresent([SkippableHealthRange].self, forKey: .ranges)?
+            .compactMap(\.range) ?? []
         minimumSDKVersion = try container.decodeIfPresent(
             String.self,
             forKey: .minimumSDKVersion
@@ -198,20 +261,43 @@ public extension InstrumentID {
                 summary: "The memory ledger jetsam kills on, and how much of it is left",
                 whenToUse: "the app is being killed with no crash report, or memory growth is suspected",
                 reveals: [
-                    "phys_footprint, the number iOS measures the app against",
+                    "phys_footprint, the number iOS measures the app against, and the same as a share of the app's current limit",
+                    "free plus inactive memory device-wide and its share of physical memory, which is what a system-scope pressure warning is about",
                     "how many bytes remain before this app's limit, and what that limit currently is",
                     "whether footprint is growing across a capture, and whether headroom is shrinking with it",
                 ],
                 related: ["memory.pressure", "lifecycle.lastRunEnded", "device.info"],
                 mechanism: .machCall,
-                cadence: .interval
+                cadence: .interval,
+                ranges: [
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .memoryUsageRatio,
+                        displayUnit: "of limit",
+                        displayScale: 1,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 0.5, health: .ok),
+                            InstrumentMetadata.HealthBand(upTo: 0.75, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .fault),
+                        ]
+                    ),
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .systemFreeRatio,
+                        displayUnit: "of physical",
+                        displayScale: 1,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 0.1, health: .fault),
+                            InstrumentMetadata.HealthBand(upTo: 0.2, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .ok),
+                        ]
+                    ),
+                ]
             )
         case .deviceInfo:
             InstrumentMetadata(
                 summary: "Hardware, OS and build identity for the device under capture",
                 whenToUse: "read alongside any other instrument whose numbers change meaning between hardware and a simulator, or between build configurations",
                 reveals: [
-                    "whether a debugger is attached, which suppresses hang detection and makes every timing number in the capture suspect",
+                    "whether a debugger is attached, which makes every timing number in the capture suspect and lets a paused debugger read as a main-thread hang",
                     "which device model and OS produced the rest of the capture",
                     "whether the readings came from a debug build or a simulator",
                     "which version of this SDK produced the capture",
@@ -380,15 +466,36 @@ public extension InstrumentID {
                     "how many frames the system dropped, which an app that never wrote a drop callback cannot see",
                     "whether drops are the buffer pool running out, a frame arriving late, or a break in the stream",
                     "counted across every camera in the session together, not per camera",
+                    "how many callbacks ran past the frame budget, and for each one its own reading: how long it took, the queue it ran on, and the delegate thread's stack walked while it was still inside the callback",
                 ],
                 related: [
                     "camera.device.format", "camera.session.configuration",
                     "camera.session.state",
                     "memory.footprint",
+                    "concurrency.mainThreadHang",
                 ],
                 mechanism: .swizzle,
                 cadence: .interval,
-                overhead: .low
+                overhead: .low,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "thresholdMs",
+                        type: .int(range: 1...5000),
+                        description: "A delegate callback longer than this gets its own reading with the delegate thread's stack. Default 33, one frame at 30 fps."
+                    ),
+                ],
+                ranges: [
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .delegateDurationPeakNanoseconds,
+                        displayUnit: "ms",
+                        displayScale: 1000000,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 16700000, health: .ok),
+                            InstrumentMetadata.HealthBand(upTo: 33400000, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .fault),
+                        ]
+                    ),
+                ]
             )
         case .mainThreadHang:
             InstrumentMetadata(
@@ -398,6 +505,7 @@ public extension InstrumentID {
                     "how long the main thread stayed busy, and whether it recovered",
                     "whether one long callback or a run of back-to-back ones caused it",
                     "a faultId shared with the thread snapshot this hang triggers, so the two join without guessing from timing",
+                    "whether a debugger was attached while it was measured — a breakpoint pause is reported as the hang it looks like, carrying debuggerAttached",
                 ],
                 related: [
                     "uikit.view.layoutPass",
@@ -412,6 +520,17 @@ public extension InstrumentID {
                         key: "thresholdMs",
                         type: .int(range: 100...60000),
                         description: "How long the main thread must stay busy before this reports. Default 2000."
+                    ),
+                ],
+                ranges: [
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .hangNanoseconds,
+                        displayUnit: "ms",
+                        displayScale: 1000000,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 2500000000, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .fault),
+                        ]
                     ),
                 ]
             )
@@ -523,10 +642,12 @@ public extension InstrumentID {
                     "each crossing into warning and critical pressure, and each return to normal",
                     "whether the system was under pressure or this app alone was asked to free memory",
                     "the footprint and remaining headroom at the edge, rather than a sample taken near it",
-                    "on a critical crossing, a faultId shared with the thread snapshot it triggers",
+                    "on a critical crossing, a faultId shared with the thread snapshot it triggers, so the thread holding the memory is named",
+                    "on a critical crossing, the app's memory by owner — malloc, IOSurface, Metal, Core Image, decoded images — with the change per owner since the previous critical crossing",
                 ],
                 related: [
                     "memory.footprint",
+                    "memory.regions",
                     "lifecycle.lastRunEnded",
                     "runtime.threadSnapshot",
                 ],
@@ -613,13 +734,26 @@ public extension InstrumentID {
                     "uikit.view.layoutPass",
                 ],
                 mechanism: .none,
-                cadence: .interval
+                cadence: .interval,
+                ranges: [
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .queueLatencyNanoseconds,
+                        displayUnit: "ms",
+                        displayScale: 1000000,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 16000000, health: .ok),
+                            InstrumentMetadata.HealthBand(upTo: 100000000, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .fault),
+                        ]
+                    ),
+                ]
             )
         case .cpuThreadUsage:
             InstrumentMetadata(
                 summary: "Which threads are burning CPU right now, and how much of the last window each took",
                 whenToUse: "the device is hot, the battery is draining, or the app is slow without being frozen — the question is what is spinning rather than what is stuck",
                 reveals: [
+                    "the process total first: CPU nanoseconds every thread consumed over the window just closed, and that as a share of the window, so 1.4 means 140% of a core the way a process monitor would show it",
                     "CPU nanoseconds consumed per thread over the window just closed, highest first",
                     "the window each count covers, so a rate can be computed rather than assumed",
                     "which thread is main, what it is named, and whether it was running or waiting when sampled",
@@ -637,6 +771,18 @@ public extension InstrumentID {
                         key: "windowSeconds",
                         type: .int(range: 1...30),
                         description: "How often thread CPU usage is sampled and reported. Default 5."
+                    ),
+                ],
+                ranges: [
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .cpuUsageRatio,
+                        displayUnit: "%",
+                        displayScale: 0.01,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 0.5, health: .ok),
+                            InstrumentMetadata.HealthBand(upTo: 0.8, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .fault),
+                        ]
                     ),
                 ]
             )
@@ -769,13 +915,12 @@ public extension InstrumentID {
                 mechanism: .statusRead,
                 cadence: .once
             )
-        case .framePacing:
+        case .commitPacing:
             InstrumentMetadata(
                 summary: "Whether each frame finished inside the budget the system set for it",
                 whenToUse: "scrolling stutters, an animation is not smooth, or the app feels heavy while the main thread is never actually blocked",
                 reveals: [
                     "how many frames the app produced in the window, and how many missed the system's own completion deadline",
-                    "frames produced per second over the window, derived from that same count",
                     "the worst overrun, measured against the deadline the system gave rather than an assumed refresh interval",
                     "time spent in the Core Animation commit, total and worst, which is the part the app's own layout and drawing pays for",
                     "how far ahead the system expected to present, which is the latency between deciding a frame and showing it",
@@ -784,10 +929,168 @@ public extension InstrumentID {
                     "uikit.view.layoutPass",
                     "swiftui.host.updates",
                     "cpu.thread.usage",
+                    "render.fps",
                 ],
                 mechanism: .osWatcher,
                 cadence: .interval,
+                overhead: .low,
+                ranges: [
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .deadlineOverrunNanoseconds,
+                        displayUnit: "ms",
+                        displayScale: 1000000,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 1000000, health: .ok),
+                            InstrumentMetadata.HealthBand(upTo: 5000000, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .fault),
+                        ]
+                    ),
+                ]
+            )
+        case .imagingSurfaces:
+            InstrumentMetadata(
+                summary: "IOSurfaces appearing and vanishing, and the app code that built each large image",
+                whenToUse: "memory.regions puts growth under IOSurface and the question is which image, from where, at what size",
+                reveals: [
+                    "how many IOSurfaces the process holds and how many bytes, and per window the ones that appeared and vanished with their sizes",
+                    "every large Core Image image built in the window — from a pixel buffer, encoded data, a CGImage or a file — with its pixel size, how many times, and the app's own frames on the stack the first time",
+                    "an image built from encoded data is a decode into a fresh IOSurface; one wrapped from a pixel buffer is not",
+                    "large surfaces appearing in the same window as a large image built from data name the decode; appearing with no image built name a render cache",
+                ],
+                related: [
+                    "memory.regions",
+                    "memory.pressure",
+                    "imaging.render.passes",
+                    "camera.frames.delivery",
+                ],
+                mechanism: .swizzle,
+                cadence: .interval,
+                overhead: .low,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "thresholdMegapixels",
+                        type: .int(range: 1...200),
+                        description: "An image at least this many megapixels gets a row with its caller. Default 2: a camera frame or larger; thumbnails and UI images stay out."
+                    ),
+                ]
+            )
+        case .screenshot:
+            InstrumentMetadata(
+                summary: "The screen as the person sees it, taken once when asked",
+                whenToUse: "a reading says the UI is in a state and the question is what that state looks like — an overlay that never came down, a control in the wrong place, a preview that went black",
+                reveals: [
+                    "one image of the key window, drawn from the view hierarchy at the screen's scale and encoded as HEIC, with its pixel size",
+                    "Metal layers left at their framebufferOnly default and capture preview layers draw black; UIKit content, overlays and labels come through",
+                    "refused outside attach mode unless the app's configuration allows screenshots, because an image leaves the device unlike any other reading",
+                ],
+                related: ["uikit.view.hierarchy", "lifecycle.app.state", "swiftui.presentation"],
+                mechanism: .screenSnapshot,
+                cadence: .once,
+                overhead: .medium
+            )
+        case .memoryRegions:
+            InstrumentMetadata(
+                summary: "Which subsystem owns the app's memory — malloc, IOSurface, Metal, Core Image, decoded images — and which one grew",
+                whenToUse: "the footprint climbs or holds after a feature runs and nothing in the app's own objects accounts for it, or a pressure warning arrives with the app well under its limit",
+                reveals: [
+                    "resident, dirty and compressed bytes per kernel memory tag: every malloc size class, IOSurface, IOAccelerator (Metal textures and buffers), CoreImage, ImageIO, CoreGraphics image data, CoreMedia pools, Swift metadata, stacks, dyld",
+                    "the change in dirty bytes per owner since the previous window, so the owner that just grew is named rather than inferred",
+                    "the same table rides on a critical memory.pressure crossing, with deltas since the previous critical crossing, so the warning and the owner arrive together",
+                    "totals across all regions, which should track memory.footprint; a gap is memory the walk cannot see, such as wired kernel allocations",
+                ],
+                related: [
+                    "memory.footprint",
+                    "memory.pressure",
+                    "imaging.render.passes",
+                    "runtime.threadSnapshot",
+                ],
+                mechanism: .machCall,
+                cadence: .interval,
                 overhead: .low
+            )
+        case .cellConfiguration:
+            InstrumentMetadata(
+                summary: "How long each list cell takes to configure, and the main thread's stack inside the slow ones",
+                whenToUse: "a UICollectionView, UITableView or SwiftUI List stutters, hitches or hangs while scrolling, and the question is which cell and which line of its configuration",
+                reveals: [
+                    "cells configured per second per data source class, with total and worst-case time inside cellForItemAt / cellForRowAt",
+                    "for every configuration over the threshold: the data source class, the cell class and reuse identifier, its section and item, how long it took, and the main thread's stack captured while it was still running",
+                    "a SwiftUI List shows up under its UIKit data source class, since List is a UICollectionView underneath",
+                ],
+                related: [
+                    "concurrency.mainThreadHang",
+                    "render.commit.pacing",
+                    "uikit.view.layoutPass",
+                    "runtime.stackSamples",
+                ],
+                mechanism: .swizzle,
+                cadence: .interval,
+                overhead: .low,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "thresholdMs",
+                        type: .int(range: 1...5000),
+                        description: "A cell configuration longer than this gets its own reading with the main thread's stack. Default 8, half a frame at 60 Hz."
+                    ),
+                ],
+                ranges: [
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .peakNanoseconds,
+                        displayUnit: "ms",
+                        displayScale: 1000000,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 8000000, health: .ok),
+                            InstrumentMetadata.HealthBand(upTo: 16700000, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .fault),
+                        ]
+                    ),
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .delegateDurationNanoseconds,
+                        displayUnit: "ms",
+                        displayScale: 1000000,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 8000000, health: .ok),
+                            InstrumentMetadata.HealthBand(upTo: 16700000, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .fault),
+                        ]
+                    ),
+                ]
+            )
+        case .displayFrameRate:
+            InstrumentMetadata(
+                summary: "The display's actual refresh rate, sampled every window whether or not the app is drawing anything new",
+                whenToUse: "you need the literal fps number a user would report, not just whether the app produced work-driven frames",
+                reveals: [
+                    "frames per second over the window, from an unpaused display link that ticks every vsync",
+                    "a stalled main thread shows up as a gap in this stream, since the link cannot tick while it is blocked",
+                ],
+                related: [
+                    "render.commit.pacing",
+                    "concurrency.mainThreadHang",
+                    "cpu.thread.usage",
+                ],
+                mechanism: .osWatcher,
+                cadence: .interval,
+                overhead: .low,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "windowSeconds",
+                        type: .int(range: 1...10),
+                        description: "How often the tick count is reported as fps. Default 1."
+                    ),
+                ],
+                ranges: [
+                    InstrumentMetadata.ComponentHealthRange(
+                        component: .fps,
+                        displayUnit: "fps",
+                        displayScale: 1,
+                        bands: [
+                            InstrumentMetadata.HealthBand(upTo: 30, health: .fault),
+                            InstrumentMetadata.HealthBand(upTo: 50, health: .warning),
+                            InstrumentMetadata.HealthBand(upTo: nil, health: .ok),
+                        ]
+                    ),
+                ]
             )
         case .accessibilitySettings:
             InstrumentMetadata(
@@ -958,6 +1261,11 @@ public extension InstrumentID {
                         type: .int(range: 10...1000),
                         description: "How often the main thread's stack is sampled. Default 50."
                     ),
+                    InstrumentMetadata.ConfigField(
+                        key: "stacksPerWindow",
+                        type: .int(range: 1...64),
+                        description: "How many distinct stacks a window reports, hottest first; the rest are counted in a truncation status. Default 8. Raise it when the truncation status keeps saying more were dropped, as a main thread churning through many turns of distinct work does."
+                    ),
                 ]
             )
         case .imagingRenderPasses:
@@ -973,7 +1281,7 @@ public extension InstrumentID {
                 related: [
                     "metal.drawable.presentation",
                     "metal.gpu.latency",
-                    "render.frame.pacing",
+                    "render.commit.pacing",
                     "camera.frames.delivery",
                 ],
                 mechanism: .swizzle,
@@ -992,7 +1300,7 @@ public extension InstrumentID {
                     "drawables acquired and never presented, from the difference between what was asked for and what came back",
                 ],
                 related: [
-                    "render.frame.pacing",
+                    "render.commit.pacing",
                     "runtime.stackSamples",
                     "cpu.thread.usage",
                 ],
@@ -1012,7 +1320,7 @@ public extension InstrumentID {
                 ],
                 related: [
                     "metal.drawable.presentation",
-                    "render.frame.pacing",
+                    "render.commit.pacing",
                     "power.thermalState",
                 ],
                 mechanism: .swizzle,
@@ -1061,7 +1369,7 @@ public extension InstrumentID {
                 related: [
                     "uikit.viewController.appear",
                     "concurrency.mainThreadHang",
-                    "render.frame.pacing",
+                    "render.commit.pacing",
                     "uikit.view.hierarchy",
                     "uikit.control.action",
                     "uikit.gesture.state",

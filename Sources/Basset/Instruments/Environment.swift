@@ -35,8 +35,13 @@ final class AccessibilityFlags: Streamable, PlainInstrument {
         ]
     }
 
-    /// Named for what the user turned on, not the API — reads without a UIKit lookup.
+    /// Named for what the user turned on, not the API. Main thread only: two of these are
+    /// checked by UIKit, and `report` is what puts the read there.
     static var current: [(name: String, isOn: Bool)] {
+        readOnMain()
+    }
+
+    private static func readOnMain() -> [(name: String, isOn: Bool)] {
         [
             ("voiceOver", UIAccessibility.isVoiceOverRunning),
             ("switchControl", UIAccessibility.isSwitchControlRunning),
@@ -65,6 +70,15 @@ final class AccessibilityFlags: Streamable, PlainInstrument {
     }
 
     private func report(into context: Context) {
+        // Never a sync hop: activation runs under the runner's lock, and a main-thread hook
+        // waiting for that same lock would leave the two waiting on each other for good.
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.report(into: context)
+            }
+            return
+        }
+
         // `emitIfChanged`, not `emit` — several notifications can fire for one user action.
         context.emitIfChanged(.deviceSetting) { out in
             Self.write(Self.current, into: &out)

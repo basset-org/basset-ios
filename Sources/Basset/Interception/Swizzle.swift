@@ -77,6 +77,27 @@ struct HookShape: Equatable {
         pointerArgument: 3
     )
 
+    /// `-collectionView:cellForItemAtIndexPath:` — two objects in, one out, timed around the call.
+    static let timedFactoryTwoObjects: HookShape = .init(
+        name: "timedFactory2", arguments: 4, returns: "@", firstArgument: "@"
+    )
+
+    /// An init consumes self and may return nil having released it: observers see only the result.
+    static let initializerTwoObjects: HookShape = .init(
+        name: "initializer2", arguments: 4, returns: "@", firstArgument: "@"
+    )
+
+    /// `-[CIImage initWithCVPixelBuffer:options:]` and its CGImage twin: a CoreFoundation
+    /// pointer first, an options dictionary second, an object out.
+    static let initializerPointerAndObject: HookShape = .init(
+        name: "initializerPointerAndObject",
+        arguments: 4,
+        returns: "@",
+        firstArgument: nil,
+        pointerArgument: 2,
+        argumentEncodings: [3: "@"]
+    )
+
     let name: String
     /// Including self and _cmd, the way the ObjC runtime counts.
     let arguments: Int
@@ -118,15 +139,22 @@ struct HookOwner: Hashable, Sendable {
     let rawValue: UInt64
 }
 
-private struct HookObserver {
-    let owner: HookOwner
-    let body: Any
+private protocol AnyHookSite: AnyObject {
+    var shape: HookShape { get }
+    func release(_ owner: HookOwner)
 }
 
-private final class HookSite {
+private final class HookSite<Body>: AnyHookSite {
+    /// One lock per hooked call: the IMP to chain and the observers to run, read together.
+    struct Live {
+        let chained: IMP?
+        let observers: [Body]
+    }
+
     private struct State {
         var chained: IMP?
-        var observers: [HookObserver] = []
+        var owners: [HookOwner] = []
+        var bodies: [Body] = []
     }
 
     let shape: HookShape
@@ -134,27 +162,31 @@ private final class HookSite {
 
     private let guarded: Mutex<State>
 
-    /// A copy under the lock, walked outside it — observers are app code, run unlocked.
-    var observers: [HookObserver] {
-        guarded.withLock { $0.observers }
-    }
-
-    private var chained: IMP? {
-        guarded.withLock { $0.chained }
-    }
-
     init(shape: HookShape, selector: Selector) {
         self.shape = shape
         self.selector = selector
         guarded = .init(State())
     }
 
-    func add(_ observer: HookObserver) {
-        guarded.withLock { $0.observers.append(observer) }
+    /// A copy under the lock, walked outside it — observers are app code, run unlocked.
+    func live() -> Live {
+        guarded.withLock { Live(chained: $0.chained, observers: $0.bodies) }
+    }
+
+    func add(_ owner: HookOwner, _ body: Body) {
+        guarded.withLock {
+            $0.owners.append(owner)
+            $0.bodies.append(body)
+        }
     }
 
     func release(_ owner: HookOwner) {
-        guarded.withLock { $0.observers.removeAll { $0.owner == owner } }
+        guarded.withLock { state in
+            for index in state.owners.indices.reversed() where state.owners[index] == owner {
+                state.owners.remove(at: index)
+                state.bodies.remove(at: index)
+            }
+        }
     }
 
     /// Swap and record happen together — a thunk mid-call must not chain a stale IMP.
@@ -162,7 +194,7 @@ private final class HookSite {
         guarded.withLock { $0.chained = swap() }
     }
 
-    func callChained(_ receiver: AnyObject) {
+    func callChained(_ chained: IMP?, _ receiver: AnyObject) {
         guard let chained else {
             return
         }
@@ -174,7 +206,7 @@ private final class HookSite {
         original(receiver, selector)
     }
 
-    func callChained(_ receiver: AnyObject, _ flag: Bool) {
+    func callChained(_ chained: IMP?, _ receiver: AnyObject, _ flag: Bool) {
         guard let chained else {
             return
         }
@@ -186,7 +218,7 @@ private final class HookSite {
         original(receiver, selector, flag)
     }
 
-    func callChained(_ receiver: AnyObject, _ argument: AnyObject?) {
+    func callChained(_ chained: IMP?, _ receiver: AnyObject, _ argument: AnyObject?) {
         guard let chained else {
             return
         }
@@ -198,7 +230,12 @@ private final class HookSite {
         original(receiver, selector, argument)
     }
 
-    func callChained(_ receiver: AnyObject, _ first: AnyObject?, _ second: AnyObject?) {
+    func callChained(
+        _ chained: IMP?,
+        _ receiver: AnyObject,
+        _ first: AnyObject?,
+        _ second: AnyObject?
+    ) {
         guard let chained else {
             return
         }
@@ -212,6 +249,7 @@ private final class HookSite {
     }
 
     func callChained(
+        _ chained: IMP?,
         _ receiver: AnyObject,
         _ first: AnyObject?,
         _ second: AnyObject?,
@@ -231,6 +269,7 @@ private final class HookSite {
     }
 
     func callChained(
+        _ chained: IMP?,
         _ receiver: AnyObject,
         _ action: Selector,
         _ target: AnyObject?,
@@ -249,7 +288,7 @@ private final class HookSite {
         original(receiver, selector, action, target, event)
     }
 
-    func callChained(_ receiver: AnyObject, _ integer: Int) {
+    func callChained(_ chained: IMP?, _ receiver: AnyObject, _ integer: Int) {
         guard let chained else {
             return
         }
@@ -262,6 +301,7 @@ private final class HookSite {
     }
 
     func callChained(
+        _ chained: IMP?,
         _ receiver: AnyObject,
         _ output: AnyObject?,
         _ buffer: UnsafeRawPointer?,
@@ -282,6 +322,7 @@ private final class HookSite {
 
     /// Drops nothing — the app must get back exactly what the original method produced.
     func callChained(
+        _ chained: IMP?,
         _ receiver: AnyObject,
         _ first: AnyObject?,
         _ second: AnyObject?,
@@ -303,7 +344,7 @@ private final class HookSite {
         original(receiver, selector, first, second, third, rect, pointer)
     }
 
-    func callChainedReturning(_ receiver: AnyObject) -> AnyObject? {
+    func callChainedReturning(_ chained: IMP?, _ receiver: AnyObject) -> AnyObject? {
         guard let chained else {
             return nil
         }
@@ -315,7 +356,9 @@ private final class HookSite {
         return original(receiver, selector)
     }
 
-    func callChainedReturning(_ receiver: AnyObject, _ first: AnyObject?) -> AnyObject? {
+    func callChainedReturning(_ chained: IMP?, _ receiver: AnyObject,
+                              _ first: AnyObject?) -> AnyObject?
+    {
         guard let chained else {
             return nil
         }
@@ -328,6 +371,7 @@ private final class HookSite {
     }
 
     func callChainedReturning(
+        _ chained: IMP?,
         _ receiver: AnyObject,
         _ first: AnyObject?,
         _ second: AnyObject?
@@ -345,6 +389,25 @@ private final class HookSite {
     }
 
     func callChainedReturning(
+        _ chained: IMP?,
+        _ receiver: AnyObject,
+        _ pointer: UnsafeRawPointer?,
+        _ object: AnyObject?
+    ) -> AnyObject? {
+        guard let chained else {
+            return nil
+        }
+
+        let original = unsafeBitCast(
+            chained,
+            to: (@convention(c) (AnyObject, Selector, UnsafeRawPointer?, AnyObject?)
+                -> AnyObject?).self
+        )
+        return original(receiver, selector, pointer, object)
+    }
+
+    func callChainedReturning(
+        _ chained: IMP?,
         _ receiver: AnyObject,
         _ first: AnyObject?,
         _ second: AnyObject?,
@@ -365,6 +428,36 @@ private final class HookSite {
 }
 
 public final class Swizzle: @unchecked Sendable {
+    /// Told on the way in and on the way out, so a watcher can arm before the call and read
+    /// what it made, and how long it took, after. The return passes through unsubstituted.
+    public struct TimedFactoryObserver {
+        public let entering: (AnyObject, AnyObject?, AnyObject?) -> Void
+        public let leaving: (AnyObject, AnyObject?, AnyObject?, AnyObject?, UInt64) -> Void
+
+        public init(
+            entering: @escaping (AnyObject, AnyObject?, AnyObject?) -> Void,
+            leaving: @escaping (AnyObject, AnyObject?, AnyObject?, AnyObject?, UInt64) -> Void
+        ) {
+            self.entering = entering
+            self.leaving = leaving
+        }
+    }
+
+    /// Entering runs before the chained call; elapsed covers only that call.
+    public struct SampleBufferObserver {
+        public let entering: (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?) -> Void
+        public let leaving: (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?, UInt64) -> Void
+
+        public init(
+            entering: @escaping (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?) -> Void,
+            leaving: @escaping (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?, UInt64)
+                -> Void
+        ) {
+            self.entering = entering
+            self.leaving = leaving
+        }
+    }
+
     /// Keyed on class identity: a metaclass and its class share a name, as can two images.
     private struct SiteKey: Hashable {
         let hooked: ObjectIdentifier
@@ -372,7 +465,7 @@ public final class Swizzle: @unchecked Sendable {
     }
 
     private static let lock: NSLock = .init()
-    private nonisolated(unsafe) static var sites: [SiteKey: HookSite] = [:]
+    private nonisolated(unsafe) static var sites: [SiteKey: any AnyHookSite] = [:]
     private nonisolated(unsafe) static var ownersHandedOut: UInt64 = 0
 
     /// v@:@^v@ — written out; no existing method has this signature to copy it from.
@@ -431,9 +524,10 @@ public final class Swizzle: @unchecked Sendable {
     ) -> SwizzleOutcome {
         install(target, selector, shape: .void, observer: observer) { site in
             let block: @convention(block) (AnyObject) -> Void = { receiver in
-                site.callChained(receiver)
-                for observer in site.observers {
-                    (observer.body as? (AnyObject) -> Void)?(receiver)
+                let live = site.live()
+                site.callChained(live.chained, receiver)
+                for observe in live.observers {
+                    observe(receiver)
                 }
             }
             return imp_implementationWithBlock(block)
@@ -447,9 +541,10 @@ public final class Swizzle: @unchecked Sendable {
     ) -> SwizzleOutcome {
         install(target, selector, shape: .voidBool, observer: observer) { site in
             let block: @convention(block) (AnyObject, Bool) -> Void = { receiver, flag in
-                site.callChained(receiver, flag)
-                for observer in site.observers {
-                    (observer.body as? (AnyObject, Bool) -> Void)?(receiver, flag)
+                let live = site.live()
+                site.callChained(live.chained, receiver, flag)
+                for observe in live.observers {
+                    observe(receiver, flag)
                 }
             }
             return imp_implementationWithBlock(block)
@@ -464,9 +559,10 @@ public final class Swizzle: @unchecked Sendable {
         install(target, selector, shape: .voidObject, observer: observer) { site in
             let block: @convention(block) (AnyObject, AnyObject?)
                 -> Void = { receiver, argument in
-                    site.callChained(receiver, argument)
-                    for observer in site.observers {
-                        (observer.body as? (AnyObject, AnyObject?) -> Void)?(
+                    let live = site.live()
+                    site.callChained(live.chained, receiver, argument)
+                    for observe in live.observers {
+                        observe(
                             receiver,
                             argument
                         )
@@ -486,9 +582,10 @@ public final class Swizzle: @unchecked Sendable {
         install(target, selector, shape: .voidTwoObjects, observer: observer) { site in
             let block: @convention(block) (AnyObject, AnyObject?, AnyObject?) -> Void = {
                 receiver, first, second in
-                site.callChained(receiver, first, second)
-                for observer in site.observers {
-                    (observer.body as? (AnyObject, AnyObject?, AnyObject?) -> Void)?(
+                let live = site.live()
+                site.callChained(live.chained, receiver, first, second)
+                for observe in live.observers {
+                    observe(
                         receiver, first, second
                     )
                 }
@@ -508,11 +605,10 @@ public final class Swizzle: @unchecked Sendable {
             let block: @convention(block) (
                 AnyObject, AnyObject?, AnyObject?, AnyObject?
             ) -> Void = { receiver, first, second, third in
-                site.callChained(receiver, first, second, third)
-                for observer in site.observers {
-                    (observer.body as? (
-                        AnyObject, AnyObject?, AnyObject?, AnyObject?
-                    ) -> Void)?(receiver, first, second, third)
+                let live = site.live()
+                site.callChained(live.chained, receiver, first, second, third)
+                for observe in live.observers {
+                    observe(receiver, first, second, third)
                 }
             }
             return imp_implementationWithBlock(block)
@@ -530,11 +626,10 @@ public final class Swizzle: @unchecked Sendable {
             let block: @convention(block) (
                 AnyObject, Selector, AnyObject?, AnyObject?
             ) -> Void = { receiver, action, target, event in
-                site.callChained(receiver, action, target, event)
-                for observer in site.observers {
-                    (observer.body as? (
-                        AnyObject, Selector, AnyObject?, AnyObject?
-                    ) -> Void)?(receiver, action, target, event)
+                let live = site.live()
+                site.callChained(live.chained, receiver, action, target, event)
+                for observe in live.observers {
+                    observe(receiver, action, target, event)
                 }
             }
             return imp_implementationWithBlock(block)
@@ -550,9 +645,10 @@ public final class Swizzle: @unchecked Sendable {
     ) -> SwizzleOutcome {
         install(target, selector, shape: .voidInteger, observer: observer) { site in
             let block: @convention(block) (AnyObject, Int) -> Void = { receiver, value in
-                site.callChained(receiver, value)
-                for observer in site.observers {
-                    (observer.body as? (AnyObject, Int) -> Void)?(receiver, value)
+                let live = site.live()
+                site.callChained(live.chained, receiver, value)
+                for observe in live.observers {
+                    observe(receiver, value)
                 }
             }
             return imp_implementationWithBlock(block)
@@ -574,9 +670,10 @@ public final class Swizzle: @unchecked Sendable {
         ) { site in
             let block: @convention(block) (AnyObject, AnyObject?)
                 -> Void = { receiver, argument in
-                    site.callChained(receiver, argument)
-                    for observer in site.observers {
-                        (observer.body as? (AnyObject, AnyObject?) -> Void)?(
+                    let live = site.live()
+                    site.callChained(live.chained, receiver, argument)
+                    for observe in live.observers {
+                        observe(
                             receiver,
                             argument
                         )
@@ -602,9 +699,10 @@ public final class Swizzle: @unchecked Sendable {
         ) { site in
             let block: @convention(block) (AnyObject, AnyObject?, AnyObject?) -> Void = {
                 receiver, first, second in
-                site.callChained(receiver, first, second)
-                for observer in site.observers {
-                    (observer.body as? (AnyObject, AnyObject?, AnyObject?) -> Void)?(
+                let live = site.live()
+                site.callChained(live.chained, receiver, first, second)
+                for observe in live.observers {
+                    observe(
                         receiver, first, second
                     )
                 }
@@ -630,11 +728,10 @@ public final class Swizzle: @unchecked Sendable {
             let block: @convention(block) (
                 AnyObject, AnyObject?, AnyObject?, AnyObject?
             ) -> Void = { receiver, first, second, third in
-                site.callChained(receiver, first, second, third)
-                for observer in site.observers {
-                    (observer.body as? (
-                        AnyObject, AnyObject?, AnyObject?, AnyObject?
-                    ) -> Void)?(receiver, first, second, third)
+                let live = site.live()
+                site.callChained(live.chained, receiver, first, second, third)
+                for observe in live.observers {
+                    observe(receiver, first, second, third)
                 }
             }
             return imp_implementationWithBlock(block)
@@ -642,13 +739,23 @@ public final class Swizzle: @unchecked Sendable {
     }
 
     /// Wraps where the delegate exists, defines where not — the buffer stays unbridged.
-    /// Elapsed nanoseconds cover only the chained call, timed the way `timing` times
-    /// `.timingVoid` — the app's own delegate work, not basset's observers after it.
     public func sampleBufferCallback(
         _ target: AnyClass?,
         _ selector: Selector,
         _ observer: @escaping (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?, UInt64)
             -> Void
+    ) -> SwizzleOutcome {
+        sampleBufferCallback(
+            target,
+            selector,
+            observing: SampleBufferObserver(entering: { _, _, _, _ in }, leaving: observer)
+        )
+    }
+
+    public func sampleBufferCallback(
+        _ target: AnyClass?,
+        _ selector: Selector,
+        observing observer: SampleBufferObserver
     ) -> SwizzleOutcome {
         install(
             target,
@@ -660,21 +767,26 @@ public final class Swizzle: @unchecked Sendable {
             let block: @convention(block) (
                 AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?
             ) -> Void = { receiver, output, buffer, connection in
+                let live = site.live()
+                guard !live.observers.isEmpty else {
+                    site.callChained(live.chained, receiver, output, buffer, connection)
+                    return
+                }
+
+                for observe in live.observers {
+                    observe.entering(receiver, output, buffer, connection)
+                }
                 var started = timespec()
                 clock_gettime(CLOCK_UPTIME_RAW, &started)
-                site.callChained(receiver, output, buffer, connection)
+                site.callChained(live.chained, receiver, output, buffer, connection)
                 var finished = timespec()
                 clock_gettime(CLOCK_UPTIME_RAW, &finished)
 
                 let startedAt = UInt64(started.tv_sec) * 1000000000 + UInt64(started.tv_nsec)
                 let finishedAt = UInt64(finished.tv_sec) * 1000000000 + UInt64(finished.tv_nsec)
                 let elapsed = finishedAt > startedAt ? finishedAt - startedAt : 0
-                for observer in site.observers {
-                    (
-                        observer.body
-                            as? (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?, UInt64)
-                            -> Void
-                    )?(receiver, output, buffer, connection, elapsed)
+                for observe in live.observers {
+                    observe.leaving(receiver, output, buffer, connection, elapsed)
                 }
             }
             return imp_implementationWithBlock(block)
@@ -688,9 +800,15 @@ public final class Swizzle: @unchecked Sendable {
     ) -> SwizzleOutcome {
         install(target, selector, shape: .timingVoid, observer: observer) { site in
             let block: @convention(block) (AnyObject) -> Void = { receiver in
+                let live = site.live()
+                guard !live.observers.isEmpty else {
+                    site.callChained(live.chained, receiver)
+                    return
+                }
+
                 var started = timespec()
                 clock_gettime(CLOCK_UPTIME_RAW, &started)
-                site.callChained(receiver)
+                site.callChained(live.chained, receiver)
                 var finished = timespec()
                 clock_gettime(CLOCK_UPTIME_RAW, &finished)
 
@@ -699,10 +817,50 @@ public final class Swizzle: @unchecked Sendable {
                 let finishedAt = UInt64(finished.tv_sec) * 1000000000 +
                     UInt64(finished.tv_nsec)
                 let elapsed = finishedAt > startedAt ? finishedAt - startedAt : 0
-                for observer in site.observers {
-                    (observer.body as? (AnyObject, UInt64) -> Void)?(receiver, elapsed)
+                for observe in live.observers {
+                    observe(receiver, elapsed)
                 }
             }
+            return imp_implementationWithBlock(block)
+        }
+    }
+
+    public func timingFactory(
+        _ target: AnyClass?,
+        _ selector: Selector,
+        takingTwoObjects: Void,
+        _ observer: TimedFactoryObserver
+    ) -> SwizzleOutcome {
+        install(
+            target, selector, shape: .timedFactoryTwoObjects, observer: observer
+        ) { site in
+            let block: @convention(block) (AnyObject, AnyObject?, AnyObject?)
+                -> AnyObject? = {
+                    receiver, first, second in
+                    let live = site.live()
+                    guard !live.observers.isEmpty else {
+                        return site.callChainedReturning(live.chained, receiver, first, second)
+                    }
+
+                    for observe in live.observers {
+                        observe.entering(receiver, first, second)
+                    }
+                    var started = timespec()
+                    clock_gettime(CLOCK_UPTIME_RAW, &started)
+                    let made = site.callChainedReturning(live.chained, receiver, first, second)
+                    var finished = timespec()
+                    clock_gettime(CLOCK_UPTIME_RAW, &finished)
+
+                    let startedAt = UInt64(started.tv_sec) * 1000000000 +
+                        UInt64(started.tv_nsec)
+                    let finishedAt = UInt64(finished.tv_sec) * 1000000000 +
+                        UInt64(finished.tv_nsec)
+                    let elapsed = finishedAt > startedAt ? finishedAt - startedAt : 0
+                    for observe in live.observers {
+                        observe.leaving(receiver, first, second, made, elapsed)
+                    }
+                    return made
+                }
             return imp_implementationWithBlock(block)
         }
     }
@@ -718,9 +876,10 @@ public final class Swizzle: @unchecked Sendable {
             target, selector, shape: .factory(objects: 0), kind: kind, observer: observer
         ) { site in
             let block: @convention(block) (AnyObject) -> AnyObject? = { receiver in
-                let made = site.callChainedReturning(receiver)
-                for observer in site.observers {
-                    (observer.body as? (AnyObject, AnyObject?) -> Void)?(receiver, made)
+                let live = site.live()
+                let made = site.callChainedReturning(live.chained, receiver)
+                for observe in live.observers {
+                    observe(receiver, made)
                 }
                 return made
             }
@@ -744,9 +903,10 @@ public final class Swizzle: @unchecked Sendable {
             let block: @convention(block) (
                 AnyObject, AnyObject?, AnyObject?, AnyObject?, CGRect, UnsafeRawPointer?
             ) -> Void = { receiver, first, second, third, rect, pointer in
-                site.callChained(receiver, first, second, third, rect, pointer)
-                for observer in site.observers {
-                    (observer.body as? (AnyObject) -> Void)?(receiver)
+                let live = site.live()
+                site.callChained(live.chained, receiver, first, second, third, rect, pointer)
+                for observe in live.observers {
+                    observe(receiver)
                 }
             }
             return imp_implementationWithBlock(block)
@@ -766,9 +926,10 @@ public final class Swizzle: @unchecked Sendable {
         ) { site in
             let block: @convention(block) (AnyObject, AnyObject?) -> AnyObject? = {
                 receiver, first in
-                let made = site.callChainedReturning(receiver, first)
-                for observer in site.observers {
-                    (observer.body as? (AnyObject, AnyObject?, AnyObject?) -> Void)?(
+                let live = site.live()
+                let made = site.callChainedReturning(live.chained, receiver, first)
+                for observe in live.observers {
+                    observe(
                         receiver, first, made
                     )
                 }
@@ -792,16 +953,58 @@ public final class Swizzle: @unchecked Sendable {
             let block: @convention(block) (AnyObject, AnyObject?, AnyObject?)
                 -> AnyObject? = {
                     receiver, first, second in
-                    let made = site.callChainedReturning(receiver, first, second)
-                    for observer in site.observers {
-                        (observer
-                            .body as? (AnyObject, AnyObject?, AnyObject?, AnyObject?)
-                            -> Void)?(
-                            receiver,
-                            first,
-                            second,
-                            made
-                        )
+                    let live = site.live()
+                    let made = site.callChainedReturning(live.chained, receiver, first, second)
+                    for observe in live.observers {
+                        observe(receiver, first, second, made)
+                    }
+                    return made
+                }
+            return imp_implementationWithBlock(block)
+        }
+    }
+
+    /// An `init…:…:` taking two objects; the observer sees what was made and nothing else.
+    public func afterInitializer(
+        _ target: AnyClass?,
+        _ selector: Selector,
+        takingTwoObjects: Void,
+        _ observer: @escaping (AnyObject?) -> Void
+    ) -> SwizzleOutcome {
+        install(
+            target, selector, shape: .initializerTwoObjects, observer: observer
+        ) { site in
+            let block: @convention(block) (AnyObject, AnyObject?, AnyObject?)
+                -> AnyObject? = {
+                    receiver, first, second in
+                    let live = site.live()
+                    let made = site.callChainedReturning(live.chained, receiver, first, second)
+                    for observe in live.observers {
+                        observe(made)
+                    }
+                    return made
+                }
+            return imp_implementationWithBlock(block)
+        }
+    }
+
+    /// An `init…:…:` taking a CoreFoundation pointer and an object — the pointer is passed
+    /// through untouched, never retained, and the observer sees only what was made.
+    public func afterInitializer(
+        _ target: AnyClass?,
+        _ selector: Selector,
+        takingPointerAndObject: Void,
+        _ observer: @escaping (AnyObject?) -> Void
+    ) -> SwizzleOutcome {
+        install(
+            target, selector, shape: .initializerPointerAndObject, observer: observer
+        ) { site in
+            let block: @convention(block) (AnyObject, UnsafeRawPointer?, AnyObject?)
+                -> AnyObject? = { receiver, pointer, options in
+                    let live = site.live()
+                    let made = site.callChainedReturning(live.chained, receiver, pointer, options)
+                    for observe in live.observers {
+                        observe(made)
                     }
                     return made
                 }
@@ -824,13 +1027,10 @@ public final class Swizzle: @unchecked Sendable {
             let block: @convention(block) (
                 AnyObject, AnyObject?, AnyObject?, AnyObject?
             ) -> AnyObject? = { receiver, first, second, third in
-                let made = site.callChainedReturning(receiver, first, second, third)
-                for observer in site.observers {
-                    (
-                        observer.body
-                            as? (AnyObject, AnyObject?, AnyObject?, AnyObject?,
-                                 AnyObject?) -> Void
-                    )?(receiver, first, second, third, made)
+                let live = site.live()
+                let made = site.callChainedReturning(live.chained, receiver, first, second, third)
+                for observe in live.observers {
+                    observe(receiver, first, second, third, made)
                 }
                 return made
             }
@@ -847,14 +1047,14 @@ public final class Swizzle: @unchecked Sendable {
         }
     }
 
-    private func install(
+    private func install<Body>(
         _ target: AnyClass?,
         _ selector: Selector,
         shape: HookShape,
         kind: MethodKind = .instance,
         addWhenAbsent encoding: String? = nil,
-        observer: Any,
-        build: (HookSite) -> IMP
+        observer: Body,
+        build: (HookSite<Body>) -> IMP
     ) -> SwizzleOutcome {
         guard let target, let hooked = kind.hooked(target) else {
             return .classMissing
@@ -913,19 +1113,19 @@ public final class Swizzle: @unchecked Sendable {
 
         let key = Self.key(hooked, selector)
         if let existing = Self.sites[key] {
-            guard existing.shape == shape else {
+            guard existing.shape == shape, let typed = existing as? HookSite<Body> else {
                 return .shapeConflict(
                     existing: existing.shape.name,
                     requested: shape.name
                 )
             }
 
-            existing.add(HookObserver(owner: owner, body: observer))
+            typed.add(owner, observer)
             return .joinedExisting
         }
 
-        let site = HookSite(shape: shape, selector: selector)
-        site.add(HookObserver(owner: owner, body: observer))
+        let site = HookSite<Body>(shape: shape, selector: selector)
+        site.add(owner, observer)
         let replacement = build(site)
 
         site.replacing {
@@ -946,32 +1146,32 @@ public final class Swizzle: @unchecked Sendable {
     }
 
     /// Nothing to chain — the site keeps chained nil, so observers run and call nothing.
-    private func define(
+    private func define<Body>(
         _ hooked: AnyClass,
         _ selector: Selector,
         shape: HookShape,
         encoding: String,
-        observer: Any,
-        build: (HookSite) -> IMP
+        observer: Body,
+        build: (HookSite<Body>) -> IMP
     ) -> SwizzleOutcome {
         Self.lock.lock()
         defer { Self.lock.unlock() }
 
         let key = Self.key(hooked, selector)
         if let existing = Self.sites[key] {
-            guard existing.shape == shape else {
+            guard existing.shape == shape, let typed = existing as? HookSite<Body> else {
                 return .shapeConflict(
                     existing: existing.shape.name,
                     requested: shape.name
                 )
             }
 
-            existing.add(HookObserver(owner: owner, body: observer))
+            typed.add(owner, observer)
             return .joinedExisting
         }
 
-        let site = HookSite(shape: shape, selector: selector)
-        site.add(HookObserver(owner: owner, body: observer))
+        let site = HookSite<Body>(shape: shape, selector: selector)
+        site.add(owner, observer)
         guard class_addMethod(hooked, selector, build(site), encoding) else {
             return .selectorMissing
         }

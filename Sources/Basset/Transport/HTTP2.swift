@@ -4,6 +4,8 @@ import Network
 
 /// Readings batched into POSTs. A failed POST is retried, not discarded — worth capturing.
 final class HTTP2Channel: Transport, @unchecked Sendable {
+    static let maxWaitingBytes = 512 * 1024
+
     private let endpoint: URL
     private let token: String
     private let requestId: UInt64
@@ -31,7 +33,6 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
 
     private let flushAfter: DispatchTimeInterval = .milliseconds(500)
     private let flushAt = 32 * 1024
-    private let maxWaitingBytes = 512 * 1024
     private let initialBackoff: TimeInterval
     private let maxBackoff: TimeInterval = 30
 
@@ -258,7 +259,7 @@ final class HTTP2Channel: Transport, @unchecked Sendable {
 
         // Bounded, oldest-first: an hour offline must not grow memory unboundedly.
         var held = waiting.reduce(0) { $0 + $1.bytes.count }
-        while held > maxWaitingBytes, let oldest = waiting.first {
+        while held > Self.maxWaitingBytes, let oldest = waiting.first {
             lost += oldest.frames
             held -= oldest.bytes.count
             waiting.removeFirst()

@@ -20,6 +20,46 @@ struct MemoryLedgerTests {
         #expect(ratio < 2)
     }
 
+    @Test func theSystemsFreeMemoryIsReadFromTheHost() throws {
+        let ledger = try #require(MemoryLedger.read())
+
+        #expect((ledger.systemFreeBytes ?? 0) > 0)
+        #expect((ledger.systemFreeBytes ?? 0) < ledger.systemPhysicalBytes)
+    }
+
+    /// `mach_host_self()` hands out a send right per call; a read a second would leak them.
+    @Test func repeatedReadsHoldOneHostRight() throws {
+        _ = MemoryLedger.read()
+        let host = mach_host_self()
+        defer { mach_port_deallocate(mach_task_self_, host) }
+        let send = mach_port_right_t(MACH_PORT_RIGHT_SEND)
+        var before: mach_port_urefs_t = 0
+        try #require(mach_port_get_refs(mach_task_self_, host, send, &before) == KERN_SUCCESS)
+
+        for _ in 0 ..< 8 {
+            _ = MemoryLedger.read()
+        }
+
+        var after: mach_port_urefs_t = 0
+        try #require(mach_port_get_refs(mach_task_self_, host, send, &after) == KERN_SUCCESS)
+        #expect(after == before)
+    }
+
+    @Test func systemFreeIsWrittenAsBytesAndAsAShareOfPhysical() {
+        var out = readings()
+        MemoryLedger(
+            usedBytes: 400,
+            availableBytes: 600,
+            systemFreeBytes: 250,
+            systemPhysicalBytes: 1000
+        ).write(into: &out)
+        let built = out.build()
+
+        #expect(built.componentIDs.contains(.systemFreeBytes))
+        #expect(built.componentIDs.contains(.systemFreeRatio))
+        #expect(built.components.first { $0.known == .systemFreeRatio }?.value.rendered == "0.25")
+    }
+
     @Test func theLimitIsWhatIsUsedPlusWhatIsLeft() {
         let ledger = MemoryLedger(usedBytes: 400, availableBytes: 600)
 
@@ -44,7 +84,12 @@ struct MemoryLedgerTests {
             .memoryUsedBytes,
             .memoryAvailableBytes,
             .memoryLimitBytes,
+            .memoryUsageRatio,
         ])
+        #expect(
+            complete.build().components.first { $0.known == .memoryUsageRatio }?.value.rendered
+                == "0.4"
+        )
         #expect(footprintOnly.build().componentIDs == [.memoryUsedBytes])
     }
 

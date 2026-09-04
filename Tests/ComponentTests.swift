@@ -1,5 +1,6 @@
 @testable import Basset
 import BassetEntityComponent
+import Foundation
 import Testing
 
 struct ComponentTests {
@@ -232,6 +233,26 @@ struct ComponentTests {
             (.debuggerAttached(false), .debuggerAttached),
             (.interfaceOrientation(""), .interfaceOrientation),
             (.bootTimeMicroseconds(0), .bootTimeMicroseconds),
+            (.reuseIdentifier(""), .reuseIdentifier),
+            (.sectionIndex(0), .sectionIndex),
+            (.itemIndex(0), .itemIndex),
+            (.memoryUsageRatio(0), .memoryUsageRatio),
+            (.systemFreeBytes(0), .systemFreeBytes),
+            (.systemFreeRatio(0), .systemFreeRatio),
+            (.memoryTag(""), .memoryTag),
+            (.residentBytes(0), .residentBytes),
+            (.dirtyBytes(0), .dirtyBytes),
+            (.compressedBytes(0), .compressedBytes),
+            (.regionCount(0), .regionCount),
+            (.dirtyDeltaBytes(0), .dirtyDeltaBytes),
+            (.appearedCount(0), .appearedCount),
+            (.appearedBytes(0), .appearedBytes),
+            (.vanishedCount(0), .vanishedCount),
+            (.vanishedBytes(0), .vanishedBytes),
+            (.imageSource(""), .imageSource),
+            (.imageData(Data()), .imageData),
+            (.imageFormat(""), .imageFormat),
+            (.screenScale(0), .screenScale),
         ]
 
         for (component, expected) in all {

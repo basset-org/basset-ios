@@ -34,7 +34,7 @@ public enum Instruments {
         .stream(LogSubsystems.self),
         .stream(SessionConfiguration.self),
         .reading(TransportSecurity.self),
-        .stream(FramePacing.self),
+        .stream(CommitPacing.self),
         .stream(AccessibilityFlags.self),
         .stream(DynamicType.self),
         .reading(LocaleSettings.self),
@@ -55,6 +55,11 @@ public enum Instruments {
         .stream(GestureState.self),
         .reading(ViewHierarchy.self),
         .stream(ImagingRenderPasses.self),
+        .stream(FrameRate.self),
+        .stream(CellConfiguration.self),
+        .stream(MemoryRegions.self),
+        .stream(ImagingSurfaces.self),
+        .reading(Screenshot.self),
     ]
 
     public static func named(_ name: String) -> Registration? {

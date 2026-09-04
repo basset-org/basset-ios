@@ -4,10 +4,10 @@ import Foundation
 import Testing
 
 /// Aggregation tested against a hand-filled `Tally` — the part that can be wrong quietly.
-struct FramePacingTests {
+struct CommitPacingTests {
     @Test func aWindowWithNoFramesSaysNothing() {
         var out = readings()
-        FramePacing.write(Tally(slots: 6), over: window(), into: &out)
+        CommitPacing.write(Tally(slots: 6), over: window(), into: &out)
 
         #expect(out.isEmpty)
     }
@@ -18,7 +18,7 @@ struct FramePacingTests {
         tally.add(TallySlot(0), 120)
 
         var out = readings()
-        FramePacing.write(tally, over: window(), into: &out)
+        CommitPacing.write(tally, over: window(), into: &out)
 
         #expect(rendered(out.build(), .occurrenceCount) == "120")
         #expect(out.build().componentIDs.contains(.deadlineMissCount) == false)
@@ -32,7 +32,7 @@ struct FramePacingTests {
         tally.raise(TallySlot(2), to: 4000000)
 
         var out = readings()
-        FramePacing.write(tally, over: window(), into: &out)
+        CommitPacing.write(tally, over: window(), into: &out)
 
         #expect(rendered(out.build(), .deadlineMissCount) == "9")
         #expect(rendered(out.build(), .deadlineOverrunNanoseconds) == "4000000")
@@ -44,19 +44,9 @@ struct FramePacingTests {
         tally.add(TallySlot(0), 1)
 
         var out = readings()
-        FramePacing.write(tally, over: window(nanoseconds: 2000000000), into: &out)
+        CommitPacing.write(tally, over: window(nanoseconds: 2000000000), into: &out)
 
         #expect(rendered(out.build(), .windowNanoseconds) == "2000000000")
-    }
-
-    @Test func fpsIsFramesDividedByTheWindowInSeconds() {
-        let tally = Tally(slots: 6)
-        tally.add(TallySlot(0), 60)
-
-        var out = readings()
-        FramePacing.write(tally, over: window(nanoseconds: 2000000000), into: &out)
-
-        #expect(rendered(out.build(), .fps) == "30.0")
     }
 
     @Test func commitTimeIsReportedAsBothTheTotalAndTheWorstOne() {
@@ -66,7 +56,7 @@ struct FramePacingTests {
         tally.raise(TallySlot(4), to: 7000000)
 
         var out = readings()
-        FramePacing.write(tally, over: window(), into: &out)
+        CommitPacing.write(tally, over: window(), into: &out)
 
         #expect(rendered(out.build(), .totalNanoseconds) == "25000000")
         #expect(rendered(out.build(), .peakNanoseconds) == "7000000")
@@ -79,10 +69,10 @@ struct FramePacingTests {
         tally.add(TallySlot(1), 2)
 
         var first = readings()
-        FramePacing.write(tally, over: window(), into: &first)
+        CommitPacing.write(tally, over: window(), into: &first)
 
         var second = readings()
-        FramePacing.write(tally, over: window(), into: &second)
+        CommitPacing.write(tally, over: window(), into: &second)
 
         #expect(rendered(first.build(), .occurrenceCount) == "30")
         #expect(second.isEmpty)

@@ -153,7 +153,7 @@ final class SessionConfiguration: Streamable, PlainInstrument {
                 )
             )
             out.put(.cachePolicy(name(of: configuration.requestCachePolicy)))
-            out.put(.sessionClass(String(describing: type(of: session))))
+            out.put(.sessionClass(RuntimeClassName.of(session)))
             if configuration.multipathServiceType != .none {
                 out.put(.multipath(true))
             }

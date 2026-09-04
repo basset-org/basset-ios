@@ -10,7 +10,7 @@ final class DisplayListChurn: Streamable, PlainInstrument {
     private struct Sample: Equatable {
         let itemCount: Int
         let seed: UInt32?
-        let fingerprint: Int
+        let fingerprint: Int?
     }
 
     private struct State {
@@ -271,7 +271,7 @@ final class HostAppear: Streamable, PlainInstrument {
             out.put(.hostKind(kind.rawValue))
             out.put(.hostRootViewType(root.name))
             out.put(.hostRootViewOpaque(root.isOpaque))
-            out.put(.viewControllerClass(String(describing: type(of: receiver))))
+            out.put(.viewControllerClass(RuntimeClassName.of(receiver)))
             if let loaded {
                 out.put(.hostAppearNanoseconds(context.clock.now().nanoseconds - loaded))
             }
@@ -799,8 +799,9 @@ enum SwiftUIReflection {
         let itemCount: Int
         /// `ViewUpdater.seed`, advanced once per SwiftUI update — the direct answer.
         let seed: UInt32?
-        /// Fallback for when no seed is found: a hash of each item's identity and version.
-        let fingerprint: Int
+        /// Only when no seed is found: a hash of each item's identity and version. Costs a
+        /// `Mirror` per item, so it is never computed while the seed answers.
+        let fingerprint: Int?
     }
 
     /// Tried newest-first: the object says which path works, not the OS version.
@@ -816,13 +817,18 @@ enum SwiftUIReflection {
         "viewGraph", "graph", "state",
     ]
 
+    /// The path that reached last time is tried first — the others each cost a failed
+    /// `Mirror` walk per sample on the main thread.
+    private static let provenPath: Mutex<Int?> = .init(nil)
+
     static func renderer(of hostingView: Any?) -> Reach {
         guard let hostingView else {
             return .noHostingView
         }
 
         var deepest: Reach?
-        for candidate in rendererPaths {
+        for index in candidateOrder() {
+            let candidate = rendererPaths[index]
             var current: Any = hostingView
             var failed: String?
             for step in candidate.path {
@@ -842,6 +848,7 @@ enum SwiftUIReflection {
                 }
                 continue
             }
+            provenPath.withLock { $0 = index }
             return .reached(current, generation: candidate.generation)
         }
         return deepest ?? .pathDeadEnded(generation: "none", atStep: "")
@@ -897,6 +904,15 @@ enum SwiftUIReflection {
         return nil
     }
 
+    private static func candidateOrder() -> [Int] {
+        let all = Array(rendererPaths.indices)
+        guard let proven = provenPath.withLock({ $0 }) else {
+            return all
+        }
+
+        return [proven] + all.filter { $0 != proven }
+    }
+
     private static func shape(of list: Any, updatedBy updater: Any) -> DisplayListShape? {
         guard let items = child(of: list, named: "items") else {
             return nil
@@ -905,6 +921,14 @@ enum SwiftUIReflection {
         let mirror = Mirror(reflecting: items)
         guard mirror.displayStyle == .collection else {
             return nil
+        }
+
+        if let seed = seed(of: updater) {
+            return DisplayListShape(
+                itemCount: mirror.children.count,
+                seed: seed,
+                fingerprint: nil
+            )
         }
 
         var hasher = Hasher()
@@ -916,7 +940,7 @@ enum SwiftUIReflection {
         }
         return DisplayListShape(
             itemCount: count,
-            seed: seed(of: updater),
+            seed: nil,
             fingerprint: hasher.finalize()
         )
     }

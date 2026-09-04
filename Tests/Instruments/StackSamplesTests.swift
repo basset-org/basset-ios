@@ -297,7 +297,20 @@ struct StackSampleReadingTests {
             .first { $0.hasPrefix("truncated") }
         #expect(truncation == "truncated: 4 more")
         #expect(readings.filter { rendered(.frameAddress, in: $0) != nil }.count
-            == StackSamples.stacksPerWindow)
+            == StackSamples.defaultStacksPerWindow)
+    }
+
+    @Test func aRaisedCapReportsMoreStacksBeforeTruncating() {
+        var window = StackWindow()
+        for index in 0 ..< 12 {
+            window.record([UInt64(0x1000 + index)])
+        }
+
+        let readings = emit(window, config: .init(intervalMs: 50, stacksPerWindow: 12))
+
+        #expect(readings.filter { rendered(.frameAddress, in: $0) != nil }.count == 12)
+        #expect(!readings
+            .contains { rendered(.mechanismStatus, in: $0)?.hasPrefix("truncated") == true })
     }
 
     /// Frames carry no index — write order is the only thing preserving stack order.
@@ -326,9 +339,12 @@ struct StackSampleReadingTests {
         #expect(!readings.contains { $0.known == .binaryImage })
     }
 
-    private func emit(_ window: StackWindow) -> [Entity] {
+    private func emit(
+        _ window: StackWindow,
+        config: StackSamples.Config = StackSamples.defaultConfig
+    ) -> [Entity] {
         var out = Readings(.stackSample)
-        StackSamples(config: StackSamples.defaultConfig).write(
+        StackSamples(config: config).write(
             window,
             over: Context.FlushWindow(nanoseconds: 1000000000),
             into: &out
@@ -373,8 +389,20 @@ struct StackSamplesConfigTests {
         )
         let range = try #require(field.type.intRange)
 
-        let lowest = StackSamples(config: .init(intervalMs: .min))
-        let highest = StackSamples(config: .init(intervalMs: .max))
+        let lowest = StackSamples(config: .init(intervalMs: .min, stacksPerWindow: .min))
+        let highest = StackSamples(config: .init(intervalMs: .max, stacksPerWindow: .max))
+        let cap = try #require(
+            InstrumentID.stackSamples
+                .metadata
+                .config
+                .first { $0.key == "stacksPerWindow" }?
+                .type
+                .intRange
+        )
+        #expect(lowest.stacksPerWindow == cap.lowerBound)
+        #expect(highest.stacksPerWindow == cap.upperBound)
+        #expect(StackSamples(config: .init(intervalMs: 50)).stacksPerWindow
+            == StackSamples.defaultStacksPerWindow)
         #expect(lowest.interval == Double(range.lowerBound) / 1000)
         #expect(highest.interval == Double(range.upperBound) / 1000)
     }

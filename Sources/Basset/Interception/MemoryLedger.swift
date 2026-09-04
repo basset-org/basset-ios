@@ -26,14 +26,33 @@ struct MemoryLedger {
         )
     }()
 
+    /// `mach_host_self()` hands out a new send right per call; one read a second would leak them.
+    private static let host: host_t = mach_host_self()
+
     let usedBytes: UInt64
     let availableBytes: UInt64?
+    /// Device-wide, from `host_statistics64`: free plus inactive pages. What a system-scope
+    /// pressure warning is about, which the app's own limit says nothing of.
+    let systemFreeBytes: UInt64?
+    let systemPhysicalBytes: UInt64
 
     var limitBytes: UInt64? {
         availableBytes.flatMap {
             let (limit, overflowed) = usedBytes.addingReportingOverflow($0)
             return overflowed ? nil : limit
         }
+    }
+
+    init(
+        usedBytes: UInt64,
+        availableBytes: UInt64?,
+        systemFreeBytes: UInt64? = nil,
+        systemPhysicalBytes: UInt64 = ProcessInfo.processInfo.physicalMemory
+    ) {
+        self.usedBytes = usedBytes
+        self.availableBytes = availableBytes
+        self.systemFreeBytes = systemFreeBytes
+        self.systemPhysicalBytes = systemPhysicalBytes
     }
 
     static func read() -> MemoryLedger? {
@@ -50,8 +69,27 @@ struct MemoryLedger {
 
         return MemoryLedger(
             usedBytes: info.phys_footprint,
-            availableBytes: headroom(from: info, wordsWritten: wordsWritten)
+            availableBytes: headroom(from: info, wordsWritten: wordsWritten),
+            systemFreeBytes: systemFree()
         )
+    }
+
+    private static func systemFree() -> UInt64? {
+        var stats = vm_statistics64_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size
+        )
+        let result = withUnsafeMutablePointer(to: &stats) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics64(host, HOST_VM_INFO64, $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else {
+            return nil
+        }
+
+        let pages = UInt64(stats.free_count) + UInt64(stats.inactive_count)
+        return pages * UInt64(vm_kernel_page_size)
     }
 
     /// A kernel predating `limit_bytes_remaining` writes fewer words; count says which.
@@ -74,11 +112,17 @@ struct MemoryLedger {
 
     func write(into out: inout Readings) {
         out.put(.memoryUsedBytes(usedBytes))
+        if let systemFreeBytes {
+            out.put(.systemFreeBytes(systemFreeBytes))
+            out.put(.systemFreeRatio(Float(systemFreeBytes) / Float(max(systemPhysicalBytes, 1))))
+        }
+
         guard let availableBytes, let limitBytes else {
             return
         }
 
         out.put(.memoryAvailableBytes(availableBytes))
         out.put(.memoryLimitBytes(limitBytes))
+        out.put(.memoryUsageRatio(Float(usedBytes) / Float(max(limitBytes, 1))))
     }
 }

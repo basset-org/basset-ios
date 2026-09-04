@@ -68,7 +68,7 @@ for and what it reveals.
 | [`permissions`](Sources/Basset/Instruments/Permissions.swift) | `status` `changes` | `authorizationStatus` across `AVCaptureDevice`, `CLLocationManager`, `PHPhotoLibrary`, `EKEventStore`, `CNContactStore` — allowed now, moved since |
 | [`uikit`](Sources/Basset/Instruments/UIKit.swift) | `viewController.appear` `view.layoutPass` `window.touches` | `viewDidAppear`, `layoutSubviews` and `sendEvent` swizzle — screen order, layout passes per second, what the finger did |
 | [`lifecycle`](Sources/Basset/Instruments/Lifecycle.swift) | `app.state` `lastRunEnded` | `UIApplication` notifications · persisted run record — foreground gaps, deaths with no crash report |
-| [`render`](Sources/Basset/Instruments/Render.swift) | `frame.pacing` | `CADisplayLink` — frames finished inside budget |
+| [`render`](Sources/Basset/Instruments/Render.swift) | `commit.pacing` `fps` | `CADisplayLink` — frames finished inside budget, frames actually presented per second |
 | [`runtime`](Sources/Basset/Instruments/Runtime.swift) | `threadSnapshot` `stackSamples` `linkedLibraries` `methodOwners` | `task_threads` + `THREAD_STATE` walk · timed resampling · `_dyld_image_count` · `dladdr` on an implementation — every stack dSYM-resolvable, what is linked in, what somebody swizzled |
 | [`power`](Sources/Basset/Instruments/Power.swift) | `thermalState` | `ProcessInfo.thermalState` notification — throttle level and every change |
 | [`device`](Sources/Basset/Instruments/Device.swift) | `info` | `sysctlbyname("hw.machine")` · `ProcessInfo` · Mach-O build UUID — model, OS, build identity |

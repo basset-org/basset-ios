@@ -25,6 +25,8 @@ final class MemoryPressure: Streamable, PlainInstrument {
 
     private var source: DispatchSourceMemoryPressure?
     private var observer: NSObjectProtocol?
+    /// Deltas here are since the previous critical crossing.
+    private let owners: Mutex<RegionLedger> = .init(RegionLedger())
 
     init() {}
 
@@ -76,8 +78,15 @@ final class MemoryPressure: Streamable, PlainInstrument {
 
     /// Never `emitIfChanged`: each crossing gets its own footprint, even warning-critical-warning.
     private func report(_ level: String, scope: String, context: Context) {
-        // Critical only: a thread walk on every warning would cost more than it explains.
-        let faultId: UInt32? = level == "critical" ? EntityIdentity.next() : nil
+        // Critical only: a thread walk and a VM walk on every warning cost more than they explain.
+        let isCritical = level == "critical"
+        let faultId: UInt32? = isCritical ? EntityIdentity.next() : nil
+        let ownersNow: RegionLedger.Table? =
+            if isCritical {
+                owners.withLock { $0.advance(to: VMRegionWalk.totalsByTag()) }
+            } else {
+                nil
+            }
 
         context.emit(.memoryPressure) { out in
             out.put(.memoryPressureLevel(level))
@@ -86,6 +95,7 @@ final class MemoryPressure: Streamable, PlainInstrument {
             if let faultId {
                 out.put(.faultId(faultId))
             }
+            ownersNow?.write(into: &out, ceiling: MemoryRegions.ceiling)
         }
         if let faultId {
             context.fault(.memoryPressure, faultId)

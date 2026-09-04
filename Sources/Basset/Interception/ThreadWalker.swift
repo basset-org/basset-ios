@@ -194,6 +194,26 @@ public final class ThreadWalker: @unchecked Sendable {
         return walkMainThread(reportingLockTimeout: &ignored)
     }
 
+    /// One thread by port, suspended only for the walk. Refused for the calling thread itself:
+    /// a thread cannot resume from its own suspension.
+    public func walk(thread port: thread_t) -> [UInt64]? {
+        guard !Self.isThreadSanitizerLoaded, port != 0 else {
+            return nil
+        }
+
+        let walking = mach_thread_self()
+        defer { mach_port_deallocate(mach_task_self_, walking) }
+        guard port != walking else {
+            return nil
+        }
+        guard Self.exclusive.lock(before: Date().addingTimeInterval(Self.exclusiveTimeout)) else {
+            return nil
+        }
+
+        defer { Self.exclusive.unlock() }
+        return Self.unwindSuspended(port)
+    }
+
     /// Same walk, but says whether the refusal was specifically the lock timing out — set only
     /// at that guard, so a caller can't blame it for a refusal that never reached the lock.
     public func walkMainThread(reportingLockTimeout lockTimedOut: inout Bool) -> [UInt64]? {

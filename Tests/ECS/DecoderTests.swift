@@ -203,6 +203,44 @@ struct DecoderTests {
         #expect(text.utf8.count == 254)
     }
 
+    /// Bytes carry a four-byte length, not the one-byte length a string has: an image is
+    /// hundreds of kilobytes, and the frame ceiling is the only cap that applies.
+    @Test func bytesRoundTripWithTheirFullLength() throws {
+        let encoder = FrameEncoder()
+        let payload = Data((0 ..< 70000).map { UInt8(truncatingIfNeeded: $0) })
+        let entity = Entity(
+            id: Entity.ID.screenshot.rawValue,
+            capturedAt: 7,
+            components: [.imageFormat("heic"), .imageData(payload)]
+        )
+
+        let frames = try FrameReader.frames(in: encoder.frame(encoder.encode(entity)))
+
+        guard case .entity(let decoded) = frames[0] else {
+            Issue.record("expected an entity frame")
+            return
+        }
+
+        #expect(decoded.components.count == 2)
+        #expect(decoded.components[1].value == .bytes(payload))
+        #expect(decoded.components[1].value.scalar == .bytes)
+        #expect(decoded.components[1].value.rendered == "70000 bytes")
+    }
+
+    @Test func bytesCutShortAreTruncatedNotMisread() throws {
+        let encoder = FrameEncoder()
+        let entity = Entity(
+            id: Entity.ID.screenshot.rawValue,
+            capturedAt: 7,
+            components: [.imageData(Data(repeating: 9, count: 64))]
+        )
+        let whole = encoder.encode(entity)
+
+        #expect(throws: DecoderError.self) {
+            try FrameReader.frames(in: encoder.frame(whole.dropLast(10)))
+        }
+    }
+
     private func framed(_ entities: [Entity]) -> Data {
         var out = Data()
         for entity in entities {
@@ -258,6 +296,9 @@ struct DecoderTests {
                 out.append(contentsOf: $0)
             }
         case .bool(let v): out.append(v ? 1 : 0)
+        case .bytes(let v):
+            withUnsafeBytes(of: UInt32(v.count).littleEndian) { out.append(contentsOf: $0) }
+            out.append(v)
         case .string(let v):
             let utf8 = Array(v.utf8.prefix(255))
             out.append(UInt8(utf8.count))

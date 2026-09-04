@@ -381,25 +381,38 @@ private func isActiveAndEnabled(_ connection: AnyObject) -> Bool {
 }
 #endif
 
-final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
+final class CameraFrameDelivery: Streamable, Configurable, LoadTimeInstall {
+    struct Config: Codable, Sendable {
+        let thresholdMs: Int
+    }
+
     private struct State {
         var instrumented: Set<ObjectIdentifier> = []
         /// Delegate classes this defined a callback on; every output on one needs rebinding.
         var defined: Set<ObjectIdentifier> = []
         var rebinding: Set<ObjectIdentifier> = []
         var watching = 0
+        /// Reset with the rest of the state on deactivate: a token left on a thread's stack by a
+        /// callback that entered before the stop and left after it would never be popped.
+        var inFlight: InFlightTokens = .init()
         /// Weak: an output the app released must not be kept alive to be asked about.
         let watched: NSHashTable<AnyObject> = .weakObjects()
     }
 
     static let id: InstrumentID = .cameraFrameDelivery
-    static let tallySlots = 5
+    static let tallySlots = 6
+    /// One frame at 30 fps — a callback longer than this cannot finish before the next frame.
+    static let defaultConfig: Config = .init(thresholdMs: 33)
+
+    private static let minimumThresholdMs = 1
+    private static let maximumThresholdMs = 5000
 
     private static let delivered: TallySlot = .first
     private static let dropped: TallySlot = .second
     private static let reason: TallySlot = .third
     private static let delegateDurationTotal: TallySlot = .init(3)
     private static let delegateDurationPeak: TallySlot = .init(4)
+    private static let overBudget: TallySlot = .init(5)
 
     #if os(iOS)
     private static let didOutput: Selector = .init(
@@ -410,7 +423,10 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
     )
     #endif
 
+    let thresholdNanoseconds: UInt64
+
     private let guarded: Mutex<State> = .init(State())
+    private let watchdog: CallbackWatchdog = .init(name: "dev.basset.camera.watchdog")
 
     private var isWatchingSomething: Bool {
         guarded.withLock { $0.watching > 0 }
@@ -429,10 +445,24 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
         #endif
     }
 
-    init() {}
+    init(config: Config) {
+        let clampedMs = min(
+            max(config.thresholdMs, Self.minimumThresholdMs),
+            Self.maximumThresholdMs
+        )
+        thresholdNanoseconds = UInt64(clampedMs) * 1000000
+    }
 
     static func relevance(_ registries: Registries) -> Relevance {
         cameraSessionRelevance(registries)
+    }
+
+    static func notWalkedStatus(
+        sanitizerLoaded: Bool = ThreadWalker.isThreadSanitizerLoaded
+    ) -> String {
+        sanitizerLoaded
+            ? "stack not walked: a thread sanitizer is loaded"
+            : "stack not walked: the callback returned before the watchdog reached it"
     }
 
     static func installAtLoad(_ hooks: HookTable) {
@@ -463,6 +493,7 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
             return
         }
 
+        watchdog.start()
         context.follow(class: videoOutput) { [weak self] output, _ in
             self?.instrument(output, with: context)
         }
@@ -477,6 +508,7 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
                 _ = context.tally.take(Self.reason)
                 _ = context.tally.take(Self.delegateDurationTotal)
                 _ = context.tally.take(Self.delegateDurationPeak)
+                _ = context.tally.take(Self.overBudget)
                 return
             }
 
@@ -489,12 +521,15 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
             }
             out.put(.delegateDurationNanoseconds(context.tally.take(Self.delegateDurationTotal)))
             out.put(.delegateDurationPeakNanoseconds(context.tally.take(Self.delegateDurationPeak)))
+            out.put(.frameBudgetNanoseconds(self.thresholdNanoseconds))
+            out.put(.overBudgetCount(context.tally.take(Self.overBudget)))
         }
         #endif
     }
 
     func stopObserving() {
         guarded.withLock { $0 = State() }
+        watchdog.stop()
     }
 
     #if os(iOS)
@@ -522,16 +557,60 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
         }
 
         let hot = context.hotPath
-        let delivery = context.swizzle
-            .sampleBufferCallback(subject, Self.didOutput) { _, _, _, _, elapsed in
-                guard hot.isActive else {
-                    return
-                }
+        let delegateClass = NSStringFromClass(subject)
+        let threshold = thresholdNanoseconds
+        let delivery = context.swizzle.sampleBufferCallback(
+            subject,
+            Self.didOutput,
+            observing: Swizzle.SampleBufferObserver(
+                entering: { [weak self] _, _, _, _ in
+                    guard let self else {
+                        return
+                    }
 
-                hot.add(Self.delivered)
-                hot.add(Self.delegateDurationTotal, elapsed)
-                hot.raise(Self.delegateDurationPeak, to: elapsed)
-            }
+                    var token: UInt64?
+                    if hot.isActive {
+                        token = self.watchdog.enter(threshold: threshold)
+                    }
+
+                    let thread = pthread_mach_thread_np(pthread_self())
+                    if !self.guarded.withLock({ $0.inFlight.push(token, on: thread) }), let token {
+                        _ = self.watchdog.leave(token)
+                    }
+                },
+                leaving: { [weak self] _, _, _, _, elapsed in
+                    // Popped before anything can return early: a deactivation between the enter
+                    // and the leave would otherwise strand this thread's token forever, and eight
+                    // of those refuse every later push for the life of the process.
+                    var frames: [UInt64]?
+                    if let self {
+                        let thread = pthread_mach_thread_np(pthread_self())
+                        let token = self.guarded.withLock { $0.inFlight.pop(on: thread) }
+                        frames = token.flatMap { self.watchdog.leave($0) }
+                    }
+
+                    guard hot.isActive else {
+                        return
+                    }
+
+                    hot.add(Self.delivered)
+                    hot.add(Self.delegateDurationTotal, elapsed)
+                    hot.raise(Self.delegateDurationPeak, to: elapsed)
+                    guard elapsed >= threshold else {
+                        return
+                    }
+
+                    hot.add(Self.overBudget)
+                    Self.reportOverBudget(
+                        delegateClass,
+                        elapsed: elapsed,
+                        budget: threshold,
+                        frames: frames,
+                        context
+                    )
+                }
+            )
+        )
         let drop = context.swizzle
             .sampleBufferCallback(subject, Self.didDrop) { _, _, buffer, _, _ in
                 guard hot.isActive else {
@@ -560,6 +639,42 @@ final class CameraFrameDelivery: Streamable, PlainInstrument, LoadTimeInstall {
 
         guarded.withLock { $0.defined.insert(ObjectIdentifier(subject)) }
         rebind(output, delegate: delegate)
+    }
+
+    private static func reportOverBudget(
+        _ delegateClass: String,
+        elapsed: UInt64,
+        budget: UInt64,
+        frames: [UInt64]?,
+        _ context: Context
+    ) {
+        let queueLabel = String(cString: __dispatch_queue_get_label(nil))
+        context.emit(.videoFrameCallback) { out in
+            out.put(.delegateClass(delegateClass))
+            out.put(.methodName(NSStringFromSelector(didOutput)))
+            out.put(.delegateDurationNanoseconds(elapsed))
+            out.put(.frameBudgetNanoseconds(budget))
+            if !queueLabel.isEmpty {
+                out.put(.queueLabel(queueLabel))
+            }
+            guard let frames else {
+                out.put(.mechanismStatus(notWalkedStatus()))
+                return
+            }
+            guard !frames.isEmpty else {
+                out
+                    .put(
+                        .mechanismStatus(
+                            "stack not walked: the walk of the callback's thread was refused"
+                        )
+                    )
+                return
+            }
+
+            for frame in frames {
+                out.put(.frameAddress(frame))
+            }
+        }
     }
 
     private func rebindIfDefined(
@@ -719,7 +834,7 @@ final class CameraSessionConfiguration: Streamable, Configurable, LoadTimeInstal
 
         context.emit(.captureSession) { out in
             out.put(.instanceId(instance))
-            out.put(.sessionClass(String(describing: type(of: session))))
+            out.put(.sessionClass(RuntimeClassName.of(session)))
             out.put(.sessionPreset(session.value(forKey: "sessionPreset") as? String ?? ""))
             out.put(.inputCount(UInt32(inputs.count)))
             out.put(.outputCount(UInt32(outputs.count)))

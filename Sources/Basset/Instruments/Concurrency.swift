@@ -5,7 +5,8 @@ import Foundation
 import UIKit
 #endif
 
-/// A frozen main thread can mean suspended, debugged or backgrounded — only one is a real hang.
+/// A frozen main thread can mean suspended or backgrounded as well as hung — those two are not
+/// measured. A paused debugger is reported as the hang it looks like, tagged `debuggerAttached`.
 struct HangWatch {
     enum Verdict: Equatable {
         case quiet
@@ -24,32 +25,13 @@ struct HangWatch {
         /// Overshoot past the deadline — the monotonic clock can't tell sleeping from blocking.
         let overshoot: TimeInterval
         let foreground: Bool
-        let debugged: Bool
     }
-
-    /// Restated while attached: a reader must not hunt for the one poll it began on.
-    static let suppressionRestatedEvery: UInt64 = 60 * 1000000000
 
     let threshold: UInt64
 
-    static func debuggerSuppressionDue(
-        is debugged: Bool,
-        lastSaid: MonotonicTime?,
-        now: MonotonicTime
-    ) -> Bool {
-        guard debugged else {
-            return false
-        }
-        guard let lastSaid else {
-            return true
-        }
-
-        return now.nanoseconds &- lastSaid.nanoseconds >= suppressionRestatedEvery
-    }
-
     func step(_ state: inout State, _ poll: Poll) -> Verdict {
-        // A hang ending backgrounded, suspended or debugged can't be measured, so nothing emits.
-        guard !poll.debugged, poll.foreground, poll.overshoot < seconds(threshold) else {
+        // A hang ending backgrounded or suspended can't be measured, so nothing emits.
+        guard poll.foreground, poll.overshoot < seconds(threshold) else {
             state = State()
             return .quiet
         }
@@ -87,7 +69,8 @@ struct HangWatch {
 }
 
 enum Debugger {
-    /// `P_TRACED` from the kernel — a paused debugger is the longest hang the SDK will ever see.
+    /// `P_TRACED` from the kernel — a paused debugger reads as the longest hang the SDK ever sees,
+    /// so hang readings say when one was attached.
     static var isAttached: Bool {
         var info = kinfo_proc()
         var size = MemoryLayout<kinfo_proc>.stride
@@ -151,7 +134,6 @@ final class MainThreadHang: Streamable, Configurable {
             1000000000
         let watching = Thread { [heartbeat, watch, clock] in
             var state = HangWatch.State()
-            var saidSuppressed: MonotonicTime?
             var faultId: UInt32?
 
             while !Thread.current.isCancelled {
@@ -162,34 +144,13 @@ final class MainThreadHang: Streamable, Configurable {
                 }
 
                 let debugged = Debugger.isAttached
-                let sampledAt = clock.now()
-                if HangWatch.debuggerSuppressionDue(
-                    is: debugged,
-                    lastSaid: saidSuppressed,
-                    now: sampledAt
-                ) {
-                    saidSuppressed = sampledAt
-                    context.emit(.mainThread) { out in
-                        out.put(.debuggerAttached(true))
-                        out.put(
-                            .mechanismStatus(
-                                "suppressed: a debugger is attached, so no hang can be measured"
-                            )
-                        )
-                    }
-                }
-                if !debugged {
-                    saidSuppressed = nil
-                }
-
                 let verdict = watch.step(
                     &state,
                     HangWatch.Poll(
                         beat: heartbeat.read(),
                         now: clock.now(),
                         overshoot: Date().timeIntervalSince(deadline),
-                        foreground: ApplicationPresence.isForeground,
-                        debugged: debugged
+                        foreground: ApplicationPresence.isForeground
                     )
                 )
 
@@ -206,6 +167,9 @@ final class MainThreadHang: Streamable, Configurable {
                         out.put(.hangResolved(false))
                         out.put(.runLoopTurnCount(turns))
                         out.put(.faultId(id))
+                        if debugged {
+                            out.put(.debuggerAttached(true))
+                        }
                     }
                     // While still stuck — anything else enabled here reads the frozen process.
                     context.fault(.hang, id)
@@ -216,6 +180,9 @@ final class MainThreadHang: Streamable, Configurable {
                         out.put(.runLoopTurnCount(turns))
                         if let faultId {
                             out.put(.faultId(faultId))
+                        }
+                        if debugged {
+                            out.put(.debuggerAttached(true))
                         }
                     }
                     faultId = nil

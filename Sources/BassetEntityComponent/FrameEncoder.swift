@@ -99,6 +99,9 @@ public struct FrameEncoder {
             let utf8 = Self.utf8(of: value)
             out.append(UInt8(utf8.count))
             out.append(contentsOf: utf8)
+        case .bytes(let value):
+            appendLittleEndian(UInt32(clamping: value.count), to: &out)
+            out.append(contentsOf: value.prefix(Int(UInt32.max)))
         }
     }
 

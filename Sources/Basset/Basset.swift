@@ -8,6 +8,10 @@ public struct Config: Sendable {
     public var quicPort: UInt16
     public var http2Port: UInt16
     public var ingestDomain: String?
+    /// Off by default: a screenshot is the one reading that carries what is on screen, so a
+    /// request from the control plane can only take one when the app has said so here. A
+    /// machine attached over the cable can always take one.
+    public var allowsScreenshots: Bool
 
     /// Ports are defaults: the control plane names the ingest host, not its port.
     public init(
@@ -15,13 +19,15 @@ public struct Config: Sendable {
         control: URL = URL(string: "https://ctrl.basset.dev")!,
         quicPort: UInt16 = 30943,
         http2Port: UInt16 = 30944,
-        ingestDomain: String? = nil
+        ingestDomain: String? = nil,
+        allowsScreenshots: Bool = false
     ) {
         self.apiKey = apiKey
         self.control = control
         self.quicPort = quicPort
         self.http2Port = http2Port
         self.ingestDomain = ingestDomain
+        self.allowsScreenshots = allowsScreenshots
     }
 }
 
@@ -47,6 +53,7 @@ public enum Basset {
             return
         }
 
+        ScreenshotPolicy.allowRemote(config.allowsScreenshots)
         let started = DeviceLoop(config: config)
         loop = started
 

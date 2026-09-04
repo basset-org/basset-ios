@@ -13,6 +13,7 @@ public enum Scalar: UInt8, Sendable, CaseIterable {
     case float64 = 10
     case string = 11
     case bool = 12
+    case bytes = 13
 }
 
 public protocol ScalarValue {
@@ -101,6 +102,14 @@ extension String: ScalarValue {
     }
 }
 
+// MARK: - Data + ScalarValue
+
+extension Data: ScalarValue {
+    public var componentValue: ComponentValue {
+        .bytes(self)
+    }
+}
+
 // MARK: - Bool + ScalarValue
 
 extension Bool: ScalarValue { public var componentValue: ComponentValue {
@@ -120,6 +129,7 @@ public enum ComponentValue: Equatable, Sendable {
     case float64(Double)
     case string(String)
     case bool(Bool)
+    case bytes(Data)
 
     public var scalar: Scalar {
         switch self {
@@ -135,6 +145,7 @@ public enum ComponentValue: Equatable, Sendable {
         case .float64: .float64
         case .string: .string
         case .bool: .bool
+        case .bytes: .bytes
         }
     }
 
@@ -152,6 +163,7 @@ public enum ComponentValue: Equatable, Sendable {
         case .float64(let value): "\(value)"
         case .string(let value): value
         case .bool(let value): value ? "true" : "false"
+        case .bytes(let value): "\(value.count) bytes"
         }
     }
 }
@@ -160,7 +172,7 @@ public enum ComponentValue: Equatable, Sendable {
 /// compile time; the raw init exists for the decoder, since grow-only ids mean a byte
 /// stream can carry one newer than this build knows.
 public struct Component: Equatable, Sendable {
-    public enum ID: UInt16, Sendable, CaseIterable {
+    public enum ID: UInt16, Sendable, CaseIterable, Codable {
         case cpuUsageRatio = 1
         case fps = 2
         case deviceId = 3
@@ -408,6 +420,26 @@ public struct Component: Equatable, Sendable {
         case retiredActiveInstrument = 245
         case bootTimeMicroseconds = 246
         case appName = 247
+        case reuseIdentifier = 248
+        case sectionIndex = 249
+        case itemIndex = 250
+        case memoryUsageRatio = 251
+        case systemFreeBytes = 252
+        case systemFreeRatio = 253
+        case memoryTag = 254
+        case residentBytes = 255
+        case dirtyBytes = 256
+        case compressedBytes = 257
+        case regionCount = 258
+        case dirtyDeltaBytes = 259
+        case appearedCount = 260
+        case appearedBytes = 261
+        case vanishedCount = 262
+        case vanishedBytes = 263
+        case imageSource = 264
+        case imageData = 265
+        case imageFormat = 266
+        case screenScale = 267
     }
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.
@@ -455,6 +487,26 @@ public extension Component {
     static func deviceKind(_ value: String) -> Component { .init(.deviceKind, value) }
     static func sdkVersion(_ value: String) -> Component { .init(.sdkVersion, value) }
     static func appName(_ value: String) -> Component { .init(.appName, value) }
+    static func reuseIdentifier(_ value: String) -> Component { .init(.reuseIdentifier, value) }
+    static func sectionIndex(_ value: UInt32) -> Component { .init(.sectionIndex, value) }
+    static func itemIndex(_ value: UInt32) -> Component { .init(.itemIndex, value) }
+    static func memoryUsageRatio(_ value: Float) -> Component { .init(.memoryUsageRatio, value) }
+    static func systemFreeBytes(_ value: UInt64) -> Component { .init(.systemFreeBytes, value) }
+    static func systemFreeRatio(_ value: Float) -> Component { .init(.systemFreeRatio, value) }
+    static func memoryTag(_ value: String) -> Component { .init(.memoryTag, value) }
+    static func residentBytes(_ value: UInt64) -> Component { .init(.residentBytes, value) }
+    static func dirtyBytes(_ value: UInt64) -> Component { .init(.dirtyBytes, value) }
+    static func compressedBytes(_ value: UInt64) -> Component { .init(.compressedBytes, value) }
+    static func regionCount(_ value: UInt32) -> Component { .init(.regionCount, value) }
+    static func dirtyDeltaBytes(_ value: Int64) -> Component { .init(.dirtyDeltaBytes, value) }
+    static func appearedCount(_ value: UInt32) -> Component { .init(.appearedCount, value) }
+    static func appearedBytes(_ value: UInt64) -> Component { .init(.appearedBytes, value) }
+    static func vanishedCount(_ value: UInt32) -> Component { .init(.vanishedCount, value) }
+    static func vanishedBytes(_ value: UInt64) -> Component { .init(.vanishedBytes, value) }
+    static func imageSource(_ value: String) -> Component { .init(.imageSource, value) }
+    static func imageData(_ value: Data) -> Component { .init(.imageData, value) }
+    static func imageFormat(_ value: String) -> Component { .init(.imageFormat, value) }
+    static func screenScale(_ value: Float) -> Component { .init(.screenScale, value) }
     static func passCount(_ value: UInt64) -> Component { .init(.passCount, value) }
     static func totalNanoseconds(_ value: UInt64) -> Component { .init(.totalNanoseconds, value) }
     static func peakNanoseconds(_ value: UInt64) -> Component { .init(.peakNanoseconds, value) }

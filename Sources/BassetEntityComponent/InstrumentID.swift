@@ -33,7 +33,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
     case logSubsystems = 33
     case sessionConfiguration = 34
     case transportSecurity = 35
-    case framePacing = 36
+    case commitPacing = 36
     case accessibilitySettings = 37
     case dynamicType = 38
     case localeSettings = 39
@@ -54,6 +54,11 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
     case gestureState = 56
     case viewHierarchy = 57
     case imagingRenderPasses = 58
+    case displayFrameRate = 59
+    case cellConfiguration = 60
+    case memoryRegions = 61
+    case imagingSurfaces = 62
+    case screenshot = 63
     case configRefused = 0xff00
     case instrumentsActive = 0xff01
     case instrumentsRelevant = 0xff02
@@ -94,7 +99,12 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .logSubsystems: "log.subsystems"
         case .sessionConfiguration: "network.session.configuration"
         case .transportSecurity: "network.transportSecurity"
-        case .framePacing: "render.frame.pacing"
+        case .commitPacing: "render.commit.pacing"
+        case .displayFrameRate: "render.fps"
+        case .cellConfiguration: "uikit.cell.configuration"
+        case .memoryRegions: "memory.regions"
+        case .imagingSurfaces: "imaging.surfaces"
+        case .screenshot: "device.screenshot"
         case .accessibilitySettings: "environment.accessibility"
         case .dynamicType: "environment.dynamicType"
         case .localeSettings: "environment.locale"
@@ -157,7 +167,12 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .logSubsystems: .log
         case .sessionConfiguration: .network
         case .transportSecurity: .network
-        case .framePacing: .render
+        case .commitPacing: .render
+        case .displayFrameRate: .render
+        case .cellConfiguration: .uikit
+        case .memoryRegions: .memory
+        case .imagingSurfaces: .imaging
+        case .screenshot: .device
         case .accessibilitySettings: .environment
         case .dynamicType: .environment
         case .localeSettings: .environment
@@ -221,7 +236,12 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .logSubsystems: .stream
         case .sessionConfiguration: .stream
         case .transportSecurity: .reading
-        case .framePacing: .stream
+        case .commitPacing: .stream
+        case .displayFrameRate: .stream
+        case .cellConfiguration: .stream
+        case .memoryRegions: .stream
+        case .imagingSurfaces: .stream
+        case .screenshot: .reading
         case .accessibilitySettings: .stream
         case .dynamicType: .stream
         case .localeSettings: .reading
@@ -261,7 +281,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         // A simulator has no receiver or speaker; it reports whatever output device the Mac uses.
         case .audioRoute:
             .init(simulator: false)
-        case .framePacing:
+        case .commitPacing:
             .init(minIOS: 18)
         // A simulator draws through the Mac's own GPU onto the Mac's own display.
         case .metalDrawablePresentation,
