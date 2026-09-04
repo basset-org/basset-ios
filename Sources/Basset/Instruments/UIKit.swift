@@ -25,7 +25,7 @@ final class ViewControllerAppear: Streamable, PlainInstrument {
 
     private func appeared(_ receiver: AnyObject, _ context: Context) {
         context.emit(.screen) { out in
-            out.put(.viewControllerClass(String(describing: type(of: receiver))))
+            out.put(.viewControllerClass(RuntimeClassName.of(receiver)))
         }
     }
 }
@@ -110,8 +110,7 @@ final class WindowTouches: Streamable, Configurable {
 
     static let id: InstrumentID = .windowTouches
 
-    /// Off by default — the walk this triggers is the cost `instrument-domains.md` refuses to
-    /// pay on every touch; asking for it is opting into paying it on `.began` only.
+    /// Off by default — a hierarchy walk is O(views); asking for it pays that on `.began` only.
     static let defaultConfig: Config = .init(hierarchy: false)
 
     private let hierarchy: Bool
@@ -382,7 +381,7 @@ final class ViewHierarchy: Snapshotable, Configurable {
     /// coordinate space this instrument promises, so `bounds` is converted to `root` instead.
     private static func put(_ match: Match, in root: UIView, into out: inout Readings) {
         let inRoot = match.view.convert(match.view.bounds, to: root)
-        out.put(.runtimeClassName(String(describing: type(of: match.view))))
+        out.put(.runtimeClassName(RuntimeClassName.of(match.view)))
         out.put(.originXPoints(Double(inRoot.origin.x)))
         out.put(.originYPoints(Double(inRoot.origin.y)))
         out.put(.frameWidthPoints(Double(inRoot.width)))
@@ -482,16 +481,57 @@ final class ControlAction: Streamable, PlainInstrument {
                 return
             }
 
-            out.put(.methodClass(String(describing: type(of: target))))
+            out.put(.methodClass(RuntimeClassName.of(target)))
         }
     }
     #endif
+}
+
+/// Last state per recognizer; leaves on `.possible`, oldest evicted past `capacity`.
+struct GestureTransitions: Equatable {
+    static let possible = 0
+    static let capacity = 64
+
+    private(set) var lastState: [ObjectIdentifier: Int] = [:]
+
+    private var oldestFirst: [ObjectIdentifier] = []
+
+    mutating func record(_ recognizer: ObjectIdentifier, _ state: Int) -> Bool {
+        let previous = lastState[recognizer] ?? Self.possible
+        if state == Self.possible {
+            forget(recognizer)
+        } else {
+            remember(recognizer, state)
+        }
+        return previous != state
+    }
+
+    private mutating func remember(_ recognizer: ObjectIdentifier, _ state: Int) {
+        if lastState.updateValue(state, forKey: recognizer) != nil {
+            return
+        }
+
+        oldestFirst.append(recognizer)
+        while oldestFirst.count > Self.capacity {
+            lastState.removeValue(forKey: oldestFirst.removeFirst())
+        }
+    }
+
+    private mutating func forget(_ recognizer: ObjectIdentifier) {
+        guard lastState.removeValue(forKey: recognizer) != nil else {
+            return
+        }
+
+        oldestFirst.removeAll { $0 == recognizer }
+    }
 }
 
 /// Which gesture recognizer transitioned and to what. `setState:` is not in the public header —
 /// this hooks it by selector name, and the install fails soft if it's ever gone.
 final class GestureState: Streamable, PlainInstrument {
     static let id: InstrumentID = .gestureState
+
+    private let transitions: Mutex<GestureTransitions> = .init(GestureTransitions())
 
     init() {}
 
@@ -507,16 +547,22 @@ final class GestureState: Streamable, PlainInstrument {
         #endif
     }
 
-    func stopObserving() {}
+    func stopObserving() {
+        transitions.withLock { $0 = GestureTransitions() }
+    }
 
     #if canImport(UIKit)
+    /// Runs on the main thread inside UIKit's own setter, so everything before the emit has
+    /// to be a lock and a dictionary lookup — the class name is only formatted for a transition.
     private func changed(_ receiver: AnyObject, _ state: Int, _ context: Context) {
-        guard let recognized = UIGestureRecognizer.State(rawValue: state) else {
+        guard transitions.withLock({ $0.record(ObjectIdentifier(receiver), state) }),
+              let recognized = UIGestureRecognizer.State(rawValue: state)
+        else {
             return
         }
 
         context.emit(.gestureRecognizer) { out in
-            out.put(.runtimeClassName(String(describing: type(of: receiver))))
+            out.put(.runtimeClassName(RuntimeClassName.of(receiver)))
             out.put(.gestureRecognizerState(Self.name(of: recognized)))
         }
     }

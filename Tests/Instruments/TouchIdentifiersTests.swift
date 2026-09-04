@@ -60,3 +60,67 @@ struct TouchIdentifiersTests {
         #expect(Set(assigned).count == assigned.count)
     }
 }
+
+struct GestureTransitionsTests {
+    /// Held, not made inline: a freed object's address is reused, and two identifiers made
+    /// from throwaway objects can be the same one.
+    private let first: NSObject = .init()
+    private let second: NSObject = .init()
+
+    private var one: ObjectIdentifier {
+        ObjectIdentifier(first)
+    }
+
+    @Test func onlyAChangeOfStateIsAReading() {
+        var transitions = GestureTransitions()
+
+        let began = transitions.record(one, 1)
+        let stillBegan = transitions.record(one, 1)
+        let againBegan = transitions.record(one, 1)
+        let ended = transitions.record(one, 3)
+
+        #expect(began)
+        #expect(!stillBegan)
+        #expect(!againBegan)
+        #expect(ended)
+    }
+
+    @Test func returningToPossibleIsATransitionAndForgetsTheRecognizer() {
+        var transitions = GestureTransitions()
+        _ = transitions.record(one, 1)
+
+        let reset = transitions.record(one, GestureTransitions.possible)
+        let remembered = transitions.lastState.isEmpty
+        let resetAgain = transitions.record(one, GestureTransitions.possible)
+
+        #expect(reset)
+        #expect(remembered)
+        #expect(!resetAgain)
+    }
+
+    /// A recognizer freed mid-gesture never reports `.possible`; the table stays bounded anyway.
+    @Test func theOldestEntryIsEvictedOnceTheTableIsFull() {
+        var transitions = GestureTransitions()
+        let held = (0...GestureTransitions.capacity).map { _ in NSObject() }
+        for recognizer in held {
+            _ = transitions.record(ObjectIdentifier(recognizer), 1)
+        }
+
+        #expect(transitions.lastState.count == GestureTransitions.capacity)
+        #expect(transitions.lastState[ObjectIdentifier(held[0])] == nil)
+        #expect(transitions.lastState[ObjectIdentifier(held[1])] == 1)
+        withExtendedLifetime(held) {}
+    }
+
+    @Test func recognizersAreTrackedApart() {
+        var transitions = GestureTransitions()
+        let other = ObjectIdentifier(second)
+        _ = transitions.record(one, 2)
+
+        let otherChanged = transitions.record(other, 2)
+        let oneUnchanged = transitions.record(one, 2)
+
+        #expect(otherChanged)
+        #expect(!oneUnchanged)
+    }
+}

@@ -53,6 +53,23 @@ import Testing
 
 @objc private class Tracked: NSObject {}
 
+/// A two-object factory, the shape `-collectionView:cellForItemAtIndexPath:` has.
+@objc private class TimedFactorySubject: NSObject {
+    static let workNanoseconds: UInt64 = 2000000
+
+    private(set) var ran = 0
+
+    @objc dynamic func make(_ first: AnyObject?, second: AnyObject?) -> Tracked? {
+        ran += 1
+        Thread.sleep(forTimeInterval: Double(Self.workNanoseconds) / 1000000000)
+        guard second != nil else {
+            return nil
+        }
+
+        return Tracked()
+    }
+}
+
 /// A two-object setter, the shape `-setSampleBufferDelegate:queue:` has.
 @objc private class TwoObjectSubject: NSObject {
     private(set) var ran = 0
@@ -219,7 +236,9 @@ struct ChangeGatedEmissionTests {
         #expect(first.fingerprint != different.fingerprint)
     }
 
-    private func context(_ sink: @escaping @Sendable (Entity) -> Void) -> Context {
+    private func context(
+        _ sink: @escaping @Sendable (Entity) -> Void
+    ) -> Context {
         let status = AtomicStatus()
         status.activate()
         return Context(
@@ -604,6 +623,46 @@ struct FactorySwizzleTests {
         #expect(seen.first?.1 === b)
         #expect(seen.first?.2 == nil)
         #expect(seen.first?.3 === returned)
+    }
+
+    @Test func aTimedFactoryTellsBeforeAndAfterTheCallAndPassesItsReturnThrough() {
+        let swizzle = Swizzle()
+        var ranAtEntering = [Int]()
+        var ranAtLeaving = [Int]()
+        var made = [AnyObject?]()
+        var elapsed = [UInt64]()
+
+        #expect(
+            swizzle.timingFactory(
+                TimedFactorySubject.self,
+                #selector(TimedFactorySubject.make(_:second:)),
+                takingTwoObjects: (),
+                Swizzle.TimedFactoryObserver(
+                    entering: { receiver, _, _ in
+                        ranAtEntering.append((receiver as? TimedFactorySubject)?.ran ?? -1)
+                    },
+                    leaving: { receiver, _, _, result, nanoseconds in
+                        ranAtLeaving.append((receiver as? TimedFactorySubject)?.ran ?? -1)
+                        made.append(result)
+                        elapsed.append(nanoseconds)
+                    }
+                )
+            ) == .installed
+        )
+
+        let subject = TimedFactorySubject()
+        let argument = Tracked()
+        let returned = subject.make(argument, second: argument)
+        let none = subject.make(argument, second: nil)
+
+        #expect(ranAtEntering == [0, 1], "entering runs before the chained call")
+        #expect(ranAtLeaving == [1, 2], "leaving runs after it")
+        #expect(returned != nil)
+        #expect(none == nil)
+        #expect(made.count == 2)
+        #expect(made[0] === returned, "the caller gets the object the original made")
+        #expect(made[1] == nil, "and a nil return stays nil")
+        #expect(elapsed.allSatisfy { $0 >= TimedFactorySubject.workNanoseconds })
     }
 
     /// A class method lives on the metaclass — reaching through the class finds nothing.
@@ -1338,7 +1397,7 @@ struct AvailabilityTests {
 
     /// Catalog membership and runnability are different — this reports what's declared.
     @Test func aRegistrationReportsWhatTheInstrumentDeclares() {
-        #expect(InstrumentID.framePacing.availability.minIOS == 18)
+        #expect(InstrumentID.commitPacing.availability.minIOS == 18)
         #expect(InstrumentID.cameraFrameDelivery.availability.simulator == false)
         #expect(InstrumentID.memoryFootprint.availability == Availability())
     }

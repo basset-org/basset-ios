@@ -26,14 +26,23 @@ public enum BassetAttached {
         }
     }
 
+    private enum RebindDecision {
+        case retry(afterSeconds: Int)
+        case superseded
+        case exhausted
+    }
+
     /// Walked upward until one binds, because two apps may be attached at once and a
     /// port left in TIME_WAIT by a previous run is common.
     public static let firstPort: UInt16 = 30950
     public static let portsToTry = 10
+    /// Rebinds after a listener failure back off 1, 2, 4, 8, 16 s; a return to foreground resets.
+    public static let rebindAttemptLimit = 5
 
     private static let lock: NSLock = .init()
     private static let rebindQueue: DispatchQueue = .init(label: "dev.basset.attached.rebind")
     private nonisolated(unsafe) static var link: AttachedLink?
+    private nonisolated(unsafe) static var rebindAttempts = 0
     private nonisolated(unsafe) static var isListening = false
     private nonisolated(unsafe) static var watchingForeground = false
     private nonisolated(unsafe) static var backgrounded = false
@@ -50,7 +59,10 @@ public enum BassetAttached {
     /// why, when no port was free.
     @discardableResult
     public static func listen() -> UInt16? {
-        lock.withLock { isListening = true }
+        lock.withLock {
+            isListening = true
+            rebindAttempts = 0
+        }
         watchForeground()
         return bind()
     }
@@ -60,6 +72,7 @@ public enum BassetAttached {
             isListening = false
             watchingForeground = false
             backgrounded = false
+            rebindAttempts = 0
             link?.stop()
             link = nil
             let existing = observers
@@ -80,7 +93,7 @@ public enum BassetAttached {
         }
 
         do {
-            let opened = try AttachedLink()
+            let opened = try AttachedLink { failed in rebind(replacing: failed) }
             let published = lock.withLock { () -> AttachedLink? in
                 guard isListening else {
                     return nil
@@ -155,6 +168,39 @@ public enum BassetAttached {
         }
     }
 
+    /// Rebinds with backoff, only while `failed` is still the current link.
+    private static func rebind(replacing failed: AttachedLink) {
+        let decision = lock.withLock { () -> RebindDecision in
+            guard isListening, link === failed else {
+                return .superseded
+            }
+            guard rebindAttempts < rebindAttemptLimit else {
+                return .exhausted
+            }
+
+            rebindAttempts += 1
+            return .retry(afterSeconds: 1 << (rebindAttempts - 1))
+        }
+        switch decision {
+        case .superseded:
+            return
+        case .exhausted:
+            NSLog(
+                "[basset] attached listener not rebound after \(rebindAttemptLimit) attempts"
+            )
+            return
+        case .retry(let afterSeconds):
+            rebindQueue.asyncAfter(deadline: .now() + .seconds(afterSeconds)) {
+                let stillCurrent = lock.withLock { isListening && link === failed }
+                guard stillCurrent, bind() == nil else {
+                    return
+                }
+
+                rebind(replacing: failed)
+            }
+        }
+    }
+
     /// Off the notification's own thread — usually the main thread, and `bind()` can
     /// block for seconds walking candidate ports.
     private static func rebindIfBackgrounded() {
@@ -167,6 +213,7 @@ public enum BassetAttached {
             return
         }
 
+        lock.withLock { rebindAttempts = 0 }
         rebindQueue.async {
             _ = bind()
         }

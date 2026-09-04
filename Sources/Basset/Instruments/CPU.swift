@@ -36,7 +36,7 @@ final class ThreadCPUUsage: Streamable, Configurable {
     }
 
     func observe(_ context: Context) {
-        context.flush(every: .seconds(windowSeconds), into: .thread) { [weak self] out, window in
+        context.flush(every: .seconds(windowSeconds), into: .process) { [weak self] out, window in
             guard let self else {
                 return
             }
@@ -86,28 +86,30 @@ final class ThreadCPUUsage: Streamable, Configurable {
         }
     }
 
-    private func write(
+    /// The process total leads every window, idle or not, so a chart draws zero, not a gap.
+    func write(
         _ taken: ThreadInventory.Snapshot,
         over window: Context.FlushWindow,
         into out: inout Readings
     ) {
         let busy = consumed(in: taken, within: window.nanoseconds)
             .sorted { $0.nanoseconds > $1.nanoseconds }
+        let total = busy.reduce(UInt64(0)) { $0 &+ $1.nanoseconds }
 
-        guard let first = busy.first else {
-            return
-        }
+        out.put(.windowNanoseconds(window.nanoseconds))
+        out.put(.cpuNanoseconds(total))
+        out.put(.cpuUsageRatio(Float(total) / Float(max(window.nanoseconds, 1))))
+        out.put(.occurrenceCount(UInt64(busy.count)))
 
-        put(first, over: window, into: &out)
-        for entry in busy.dropFirst(1).prefix(Self.ceiling - 1) {
-            out.also(out.entity) { additional in put(entry, over: window, into: &additional) }
+        for entry in busy.prefix(Self.ceiling) {
+            out.also(.thread) { thread in put(entry, over: window, into: &thread) }
         }
 
         guard busy.count > Self.ceiling else {
             return
         }
 
-        out.also(out.entity) { additional in
+        out.also(.thread) { additional in
             additional.put(.windowNanoseconds(window.nanoseconds))
             additional.put(.mechanismStatus("truncated: \(busy.count - Self.ceiling) more"))
         }

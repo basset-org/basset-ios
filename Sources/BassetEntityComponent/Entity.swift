@@ -54,6 +54,14 @@ public struct Entity: Equatable, Sendable {
         case imageRender = 50
         case activeInstruments = 51
         case relevantInstruments = 52
+        case cellProvider = 53
+        case cell = 54
+        case videoFrameCallback = 55
+        case memoryRegion = 56
+        case surfaceWindow = 57
+        case surface = 58
+        case imageSource = 59
+        case screenshot = 60
         case instrumentConfig = 0xff00
     }
 

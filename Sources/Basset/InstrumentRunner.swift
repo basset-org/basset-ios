@@ -50,15 +50,23 @@ final class InstrumentRunner: @unchecked Sendable {
     private let atLaunchRequests: AtLaunchRequests
     private let backlogDirectory: URL
     private let encoder: FrameEncoder = .init()
+    /// `.userInitiated` for the same reason as the flush pool below: a desired-state push
+    /// converges with a `sync` onto this queue, behind every emit already queued, and at
+    /// `utility` that wait was measured at seven seconds on a saturated phone.
     private let queue: DispatchQueue = .init(
         label: QueueLabel.instrumentRunner,
-        qos: .utility
+        qos: .userInitiated
     )
 
     /// Per-instrument serial queues over this pool, so one slow instrument can't starve the rest.
+    /// `.userInitiated`, not `.utility`: on a two-core phone saturated by the app's own
+    /// user-initiated work, utility got no time for eleven seconds at a stretch while the
+    /// camera delivered 628 frames and the sampler took 214 stacks, and the readings that
+    /// should explain such a stretch are the ones that go missing. The work here is a few
+    /// milliseconds a second; the band matters, not the cost.
     private let flushPool: DispatchQueue = .init(
         label: QueueLabel.instrumentRunnerFlush,
-        qos: .utility,
+        qos: .userInitiated,
         attributes: .concurrent
     )
 
@@ -411,7 +419,7 @@ final class InstrumentRunner: @unchecked Sendable {
             registries: registries,
             timerQueue: DispatchQueue(
                 label: QueueLabel.flush(instrument: registration.name),
-                qos: .utility,
+                qos: .userInitiated,
                 target: flushPool
             ),
             tallySlots: registration.tallySlots,
@@ -651,6 +659,7 @@ final class InstrumentRunner: @unchecked Sendable {
                 .imageName(image.name),
                 .imageLoadAddress(image.loadAddress),
                 .imageUUID(image.uuid),
+                .imageTextBytes(image.size),
                 .launchId(LaunchIdentity.current),
             ])
 

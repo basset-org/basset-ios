@@ -8,13 +8,17 @@ import Network
 final class AttachedLink: AttachedChannel, @unchecked Sendable {
     let port: UInt16
 
+    /// Called on the link's queue when the listener dies for a reason other than `stop()`.
+    private let onFailure: (AttachedLink) -> Void
     private let listener: NWListener
     private let queue: DispatchQueue
     private let lock: NSLock = .init()
+    private var closed = false
     private var connection: NWConnection?
     private var reader: LengthPrefixedReader = .init()
 
-    init() throws {
+    init(onFailure: @escaping (AttachedLink) -> Void = { _ in }) throws {
+        self.onFailure = onFailure
         var opened: NWListener?
         var chosen: UInt16 = BassetAttached.firstPort
         let queue = DispatchQueue(label: "dev.basset.attached")
@@ -57,6 +61,16 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
         opened.newConnectionHandler = { [weak self] connection in
             self?.accept(connection)
         }
+        // Suspension closes the socket, a hung main never rebinds it; reported on the link's queue.
+        opened.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .cancelled,
+                 .failed:
+                self?.reportFailure()
+            default:
+                break
+            }
+        }
     }
 
     private static func bound(_ listener: NWListener, on queue: DispatchQueue) -> Bool {
@@ -91,6 +105,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
     func stop() {
         AttachedBridge.close(self)
         lock.withLock {
+            closed = true
             connection?.cancel()
             connection = nil
             reader = LengthPrefixedReader()
@@ -101,6 +116,15 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
     func send(_ frame: Data) {
         let open = lock.withLock { connection }
         open?.send(content: frame, completion: .idempotent)
+    }
+
+    private func reportFailure() {
+        let stopped = lock.withLock { closed }
+        guard !stopped else {
+            return
+        }
+
+        onFailure(self)
     }
 
     private func isCurrent(_ candidate: NWConnection) -> Bool {

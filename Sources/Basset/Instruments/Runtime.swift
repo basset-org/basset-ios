@@ -77,6 +77,13 @@ final class ThreadSnapshot: Faultable, PlainInstrument {
 final class StackSamples: Streamable, Configurable {
     struct Config: Codable, Sendable {
         let intervalMs: Int
+        /// Optional so a config written before the key existed still decodes.
+        let stacksPerWindow: Int?
+
+        init(intervalMs: Int, stacksPerWindow: Int? = nil) {
+            self.intervalMs = intervalMs
+            self.stacksPerWindow = stacksPerWindow
+        }
     }
 
     /// A reference, not the mutex itself — noncopyable, so a closure can't capture it.
@@ -97,8 +104,8 @@ final class StackSamples: Streamable, Configurable {
 
     static let id: InstrumentID = .stackSamples
 
-    /// Bites only when every sample differs — reports as truncation, not a top-8 cutoff.
-    static let stacksPerWindow = 8
+    /// Bites only when every sample differs; raise it when the truncation status keeps saying so.
+    static let defaultStacksPerWindow = 8
 
     /// Fast enough to catch a stall in several samples, slow enough to stay under budget.
     static let defaultConfig: Config = .init(intervalMs: 50)
@@ -106,8 +113,13 @@ final class StackSamples: Streamable, Configurable {
     /// Below the minimum, sampling burns CPU; above the maximum, a stall hides between samples.
     private static let minimumIntervalMs = 10
     private static let maximumIntervalMs = 1000
+    /// Every stack is one reading against the request's cap — the maximum keeps one second of
+    /// samples from being able to spend it all.
+    private static let minimumStacksPerWindow = 1
+    private static let maximumStacksPerWindow = 64
 
     let interval: TimeInterval
+    let stacksPerWindow: Int
 
     private let walker: ThreadWalker = .init()
     private let samples: Samples = .init()
@@ -116,6 +128,10 @@ final class StackSamples: Streamable, Configurable {
     init(config: Config) {
         let clampedMs = min(max(config.intervalMs, Self.minimumIntervalMs), Self.maximumIntervalMs)
         interval = Double(clampedMs) / 1000
+        stacksPerWindow = min(
+            max(config.stacksPerWindow ?? Self.defaultStacksPerWindow, Self.minimumStacksPerWindow),
+            Self.maximumStacksPerWindow
+        )
         // Captured while the main thread still answers — before launch identifies it.
         MainThreadPort.capture()
     }
@@ -180,17 +196,17 @@ final class StackSamples: Streamable, Configurable {
         }
 
         Self.put(first, in: closed, over: elapsed, into: &out)
-        for stack in hottest.dropFirst().prefix(Self.stacksPerWindow - 1) {
+        for stack in hottest.dropFirst().prefix(stacksPerWindow - 1) {
             out.also(out.entity) { additional in
                 Self.put(stack, in: closed, over: elapsed, into: &additional)
             }
         }
 
-        if hottest.count > Self.stacksPerWindow {
+        if hottest.count > stacksPerWindow {
             out.also(out.entity) { additional in
                 additional.put(.windowNanoseconds(elapsed.nanoseconds))
                 additional.put(
-                    .mechanismStatus("truncated: \(hottest.count - Self.stacksPerWindow) more")
+                    .mechanismStatus("truncated: \(hottest.count - stacksPerWindow) more")
                 )
             }
         }

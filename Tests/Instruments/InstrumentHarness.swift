@@ -3,7 +3,7 @@ import BassetEntityComponent
 import Foundation
 
 /// Activates an instrument for real so a test asserts the wiring, not what a `write` test checks.
-final class InstrumentHarness<Instrument: Streamable & PlainInstrument>: @unchecked Sendable {
+final class InstrumentHarness<Instrument: Streamable>: @unchecked Sendable {
     let instrument: Instrument
     /// Reachable so a test can seed what the load-time half would have caught.
     let registries: Registries = .init()
@@ -18,7 +18,7 @@ final class InstrumentHarness<Instrument: Streamable & PlainInstrument>: @unchec
         lock.withLock { collected }
     }
 
-    init(_ build: () -> Instrument = { Instrument() }) {
+    init(_ build: () -> Instrument) {
         instrument = build()
     }
 
@@ -64,5 +64,11 @@ final class InstrumentHarness<Instrument: Streamable & PlainInstrument>: @unchec
 
     func value(_ id: Component.ID, in entity: Entity?) -> String? {
         entity?.components.first { $0.known == id }?.value.rendered
+    }
+}
+
+extension InstrumentHarness where Instrument: PlainInstrument {
+    convenience init() {
+        self.init { Instrument() }
     }
 }

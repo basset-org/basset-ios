@@ -6,10 +6,16 @@ import Testing
 /// A mistake in these counters costs a number, never the host app.
 struct TallySlotTests {
     /// Registration only — that the runner hands the count over is `TallyHandoffTests`'s claim.
-    @Test func framePacingDeclaresTheSixCountersItWrites() throws {
-        let pacing = try #require(Instruments.all.first { $0.id == .framePacing })
+    @Test func commitPacingDeclaresTheSixCountersItWrites() throws {
+        let pacing = try #require(Instruments.all.first { $0.id == .commitPacing })
 
         #expect(pacing.tallySlots == 6)
+    }
+
+    @Test func frameRateDeclaresTheOneCounterItWrites() throws {
+        let rate = try #require(Instruments.all.first { $0.id == .displayFrameRate })
+
+        #expect(rate.tallySlots == 1)
     }
 
     @Test func anInstrumentThatDeclaresNothingGetsTheSharedDefault() {

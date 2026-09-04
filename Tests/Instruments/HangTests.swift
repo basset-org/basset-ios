@@ -22,15 +22,13 @@ private func poll(
     _ beat: MainRunLoopHeartbeat.Beat,
     now: UInt64,
     overshoot: TimeInterval = 0,
-    foreground: Bool = true,
-    debugged: Bool = false
+    foreground: Bool = true
 ) -> HangWatch.Poll {
     HangWatch.Poll(
         beat: beat,
         now: MonotonicTime(nanoseconds: now),
         overshoot: overshoot,
-        foreground: foreground,
-        debugged: debugged
+        foreground: foreground
     )
 }
 
@@ -144,46 +142,6 @@ struct HangWatchTests {
         )
 
         #expect(verdict == .quiet)
-    }
-
-    @Test func aPausedDebuggerIsNotAHang() {
-        var state = HangWatch.State()
-
-        let verdict = watch.step(
-            &state,
-            poll(beat(idleAt: 5000000000), now: 8000000000, debugged: true)
-        )
-
-        #expect(verdict == .quiet)
-    }
-
-    @Test func debuggerSuppressionIsSaidAtOnceAndThenRestated() {
-        let attached = MonotonicTime(nanoseconds: 1000000000000)
-        #expect(
-            HangWatch.debuggerSuppressionDue(is: true, lastSaid: nil, now: attached)
-        )
-        #expect(
-            !HangWatch.debuggerSuppressionDue(
-                is: true,
-                lastSaid: attached,
-                now: MonotonicTime(nanoseconds: attached.nanoseconds + 1000000000)
-            )
-        )
-        #expect(
-            HangWatch.debuggerSuppressionDue(
-                is: true,
-                lastSaid: attached,
-                now: MonotonicTime(
-                    nanoseconds: attached.nanoseconds + HangWatch.suppressionRestatedEvery
-                )
-            )
-        )
-    }
-
-    @Test func nothingIsSaidWhileNoDebuggerIsAttached() {
-        let now = MonotonicTime(nanoseconds: 1000000000000)
-        #expect(!HangWatch.debuggerSuppressionDue(is: false, lastSaid: nil, now: now))
-        #expect(!HangWatch.debuggerSuppressionDue(is: false, lastSaid: now, now: now))
     }
 
     /// A guard interrupting a hang leaves `began` with no `ended` — no unmeasured duration ships.

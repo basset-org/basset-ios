@@ -241,6 +241,19 @@ private final class Renderer {
     }
 }
 
+/// A renderer whose updater carries no seed — the shape the fingerprint exists for.
+private final class SeedlessRenderer {
+    let lastList: FakeList?
+
+    init(identities: [UInt32] = [1, 2, 3]) {
+        lastList = FakeList(
+            items: identities.map {
+                FakeItem(identity: FakeValue(value: $0), version: FakeValue(value: $0))
+            }
+        )
+    }
+}
+
 private final class ViewGraph {
     let renderer: Renderer? = Renderer()
 }
@@ -346,18 +359,28 @@ struct SwiftUIReflectionTests {
 
     /// Item count doesn't move when a re-render changes content without changing structure.
     @Test func fingerprintsWhatTheItemsSayNotHowManyThereAre() {
-        let before = SwiftUIReflection.displayList(in: Renderer(identities: [1, 2, 3]))
-        let after = SwiftUIReflection.displayList(in: Renderer(identities: [1, 2, 9]))
+        let before = SwiftUIReflection.displayList(in: SeedlessRenderer(identities: [1, 2, 3]))
+        let after = SwiftUIReflection.displayList(in: SeedlessRenderer(identities: [1, 2, 9]))
 
         #expect(before?.itemCount == after?.itemCount)
+        #expect(before?.fingerprint != nil)
         #expect(before?.fingerprint != after?.fingerprint)
     }
 
     @Test func fingerprintIsStableForAnUnchangedList() {
-        let first = SwiftUIReflection.displayList(in: Renderer())
-        let second = SwiftUIReflection.displayList(in: Renderer())
+        let first = SwiftUIReflection.displayList(in: SeedlessRenderer())
+        let second = SwiftUIReflection.displayList(in: SeedlessRenderer())
 
         #expect(first?.fingerprint == second?.fingerprint)
+    }
+
+    /// The seed is the answer; walking every item for a hash on top of it was the cost.
+    @Test func skipsTheItemWalkWhenTheSeedAnswers() {
+        let shape = SwiftUIReflection.displayList(in: Renderer(identities: [1, 2, 3]))
+
+        #expect(shape?.seed == 1429)
+        #expect(shape?.itemCount == 3)
+        #expect(shape?.fingerprint == nil)
     }
 
     /// Newest first, so an OS this table has never seen is still tried, not assumed unreachable.

@@ -5,8 +5,9 @@ import Foundation
 import UIKit
 #endif
 
-/// UIUpdateLink over CADisplayLink: unpaused CADisplayLink fires every vsync even when idle.
-final class FramePacing: Streamable, PlainInstrument {
+/// Only ticks when the app itself commits real work — deliberately not a frame rate.
+/// `FrameRate` below is the unpaused-link instrument for that.
+final class CommitPacing: Streamable, PlainInstrument {
     private enum Slot {
         static let frames: TallySlot = .init(0)
         static let misses: TallySlot = .init(1)
@@ -16,7 +17,7 @@ final class FramePacing: Streamable, PlainInstrument {
         static let worstLatency: TallySlot = .init(5)
     }
 
-    static let id: InstrumentID = .framePacing
+    static let id: InstrumentID = .commitPacing
     /// Six slots; the shared default is four.
     static let tallySlots = 6
 
@@ -40,7 +41,6 @@ final class FramePacing: Streamable, PlainInstrument {
 
         out.put(.occurrenceCount(frames))
         out.put(.windowNanoseconds(window.nanoseconds))
-        out.put(.fps(Float(frames) / (Float(window.nanoseconds) / 1000000000)))
 
         let misses = tally.take(Slot.misses)
         let overrun = tally.take(Slot.worstOverrun)
@@ -157,6 +157,95 @@ final class FramePacing: Streamable, PlainInstrument {
             .connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first { $0.activationState == .foregroundActive }
+    }
+    #endif
+}
+
+/// The literal fps: an unpaused `CADisplayLink` ticking every vsync, the cost `CommitPacing`
+/// avoids.
+final class FrameRate: NSObject, Streamable, Configurable {
+    struct Config: Codable, Sendable {
+        let windowSeconds: Int
+    }
+
+    private enum Slot {
+        static let ticks: TallySlot = .init(0)
+    }
+
+    static let id: InstrumentID = .displayFrameRate
+    static let tallySlots = 1
+    static let defaultConfig: Config = .init(windowSeconds: 1)
+
+    /// Below the minimum a read spends the budget too fast; above it the number goes stale.
+    private static let minimumWindowSeconds = 1
+    private static let maximumWindowSeconds = 10
+
+    let windowSeconds: Int
+
+    #if canImport(UIKit)
+    private var link: CADisplayLink?
+    #endif
+    private var hotPath: HotPath?
+
+    init(config: Config) {
+        windowSeconds = min(
+            max(config.windowSeconds, Self.minimumWindowSeconds),
+            Self.maximumWindowSeconds
+        )
+        super.init()
+    }
+
+    static func write(
+        _ tally: Tally,
+        over window: Context.FlushWindow,
+        into out: inout Readings
+    ) {
+        let ticks = tally.take(Slot.ticks)
+        // A blocked main thread cannot tick the link either — a gap here is a real one.
+        guard ticks > 0 else {
+            return
+        }
+
+        out.put(.fps(Float(ticks) / Float(window.seconds)))
+        out.put(.windowNanoseconds(window.nanoseconds))
+    }
+
+    func observe(_ context: Context) {
+        #if canImport(UIKit)
+        let hot = context.hotPath
+        DispatchQueue.main.async { [weak self] in
+            guard let self, context.isActive else {
+                return
+            }
+
+            self.hotPath = hot
+            let driving = CADisplayLink(target: self, selector: #selector(self.tick))
+            driving.add(to: .main, forMode: .common)
+            self.link = driving
+        }
+
+        context
+            .flush(every: .seconds(windowSeconds),
+                   into: .displayUpdate)
+            { [tally = context.tally] out, window in
+                Self.write(tally, over: window, into: &out)
+            }
+        #endif
+    }
+
+    func stopObserving() {
+        #if canImport(UIKit)
+        DispatchQueue.main.async { [weak self] in
+            self?.link?.invalidate()
+            self?.link = nil
+            self?.hotPath = nil
+        }
+        #endif
+    }
+
+    #if canImport(UIKit)
+    @objc private func tick(_ link: CADisplayLink) {
+        hotPath?.add(Slot.ticks)
     }
     #endif
 }

@@ -35,6 +35,53 @@ struct ThreadCPUUsageConfigTests {
 struct ThreadCPUUsageWindowTests {
     private let window: UInt64 = 5000000000
 
+    @Test func theProcessTotalLeadsAndSumsEveryThread() {
+        let instrument = ThreadCPUUsage(config: .init(windowSeconds: 5))
+        let elapsed = Context.FlushWindow(nanoseconds: window)
+        var seeding = Readings(.process)
+        instrument.write(
+            snapshot([sample(1, cpu: 100), sample(2, cpu: 100)]),
+            over: elapsed,
+            into: &seeding
+        )
+
+        var out = Readings(.process)
+        instrument.write(
+            snapshot([sample(1, cpu: 3000000100), sample(2, cpu: 4000000100)]),
+            over: elapsed,
+            into: &out
+        )
+        let process = out.build()
+        let threads = out.additionalEntities()
+
+        #expect(process.known == .process)
+        #expect(process.components
+            .first { $0.known == .cpuNanoseconds }?
+            .value
+            .rendered == "7000000000")
+        #expect(process.components.first { $0.known == .cpuUsageRatio }?.value.rendered == "1.4")
+        #expect(threads.count == 2)
+        #expect(threads.allSatisfy { $0.known == .thread })
+        #expect(threads[0]
+            .components
+            .first { $0.known == .cpuNanoseconds }?
+            .value
+            .rendered == "4000000000")
+    }
+
+    @Test func anIdleWindowStillWritesAZeroProcessTotal() {
+        let instrument = ThreadCPUUsage(config: .init(windowSeconds: 5))
+        let elapsed = Context.FlushWindow(nanoseconds: window)
+        var seeding = Readings(.process)
+        instrument.write(snapshot([sample(1, cpu: 100)]), over: elapsed, into: &seeding)
+
+        var out = Readings(.process)
+        instrument.write(snapshot([sample(1, cpu: 100)]), over: elapsed, into: &out)
+
+        #expect(out.build().components.first { $0.known == .cpuNanoseconds }?.value.rendered == "0")
+        #expect(out.additionalEntities().isEmpty)
+    }
+
     @Test func aThreadBornAndGoneWithinOneWindowIsStillReported() {
         let instrument = ThreadCPUUsage(config: .init(windowSeconds: 5))
 

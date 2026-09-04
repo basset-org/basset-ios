@@ -173,6 +173,15 @@ private struct PayloadReader {
             }
 
             return .string(text)
+        case .bytes:
+            let length = try Int(fixedWidth(UInt32.self))
+            guard start + length <= end else {
+                throw DecoderError.truncated
+            }
+
+            let slice = Data(bytes[start ..< (start + length)])
+            start += length
+            return .bytes(slice)
         }
     }
 
