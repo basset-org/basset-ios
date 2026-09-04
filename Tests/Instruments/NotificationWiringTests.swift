@@ -119,7 +119,10 @@ struct UIKitWiringTests {
             == "accessibilityExtraExtraExtraLarge")
     }
 
-    @Test func anAccessibilityReadingArrivesOnActivation() {
+    /// `@MainActor`: the flags are read on the main thread, and activation from anywhere
+    /// else hops there asynchronously, which a loaded runner can leave waiting past the
+    /// harness's patience.
+    @Test @MainActor func anAccessibilityReadingArrivesOnActivation() {
         let harness = InstrumentHarness<AccessibilityFlags>()
         harness.start()
         defer { harness.stop() }
