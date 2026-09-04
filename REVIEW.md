@@ -1,8 +1,7 @@
 # Reviewing this SDK
 
-The standard a change here is held to. cubic's review rule, configured in its web
-UI rather than in this repository, points at this file, so it is what the
-automated review applies, and it is the brief for anyone opening a pull request.
+The standard a change here is held to: the brief for anyone reviewing a change,
+a person or Claude Code's `/code-review`, and for anyone opening a pull request.
 
 Two things make this repository unlike most, and nearly every rule below follows
 from one of them: **the code runs inside somebody else's app**, and **it is
