@@ -320,3 +320,101 @@ final class LogSubsystems: Streamable, Configurable {
 
     func stopObserving() {}
 }
+
+/// The app's own lines as written, each stamped with its own time — the reason a state
+/// moved sits beside the reading that shows it moving.
+final class LogMessages: Streamable, Configurable {
+    static let id: InstrumentID = .logMessages
+    static let defaultConfig: LogSubsystemFilter = .init(subsystem: nil)
+
+    /// Per flush; a chatty app is described by its first lines and a count, not drained.
+    private static let linesPerFlush = 64
+    private static let applePrefix = "com.apple."
+
+    /// A request usually arrives after the thing it is about; the last minute is what the
+    /// app said while getting there.
+    private static let retroactiveWindow: TimeInterval = 60
+
+    let reader: LogStoreReader
+
+    init(config: LogSubsystemFilter) {
+        let scoped = !config.subsystems.isEmpty
+        reader = LogStoreReader(
+            subsystems: config.subsystems,
+            since: Date().addingTimeInterval(-Self.retroactiveWindow),
+            ceiling: Self.linesPerFlush,
+            admitting: { Self.admits($0, scoped: scoped) }
+        )
+    }
+
+    /// Debug lines are not in the store and undefined ones say nothing; Apple's own
+    /// subsystems, and the frameworks that name none, log at info level constantly, so
+    /// they are in only when asked for by name.
+    static func admits(_ record: LogRecord, scoped: Bool) -> Bool {
+        switch record.level {
+        case .debug,
+             .undefined:
+            false
+        case .error,
+             .fault,
+             .info,
+             .notice:
+            scoped || !(record.subsystem.isEmpty || record.subsystem.hasPrefix(applePrefix))
+        }
+    }
+
+    static func write(
+        _ records: [LogRecord],
+        over window: Context.FlushWindow,
+        into out: inout Readings
+    ) {
+        for (index, record) in records.enumerated() {
+            if index == 0 {
+                put(record, over: window, into: &out)
+                continue
+            }
+            out.also(out.entity) { additional in put(record, over: window, into: &additional) }
+        }
+    }
+
+    private static func put(
+        _ record: LogRecord,
+        over window: Context.FlushWindow,
+        into out: inout Readings
+    ) {
+        out.put(.windowNanoseconds(window.nanoseconds))
+        out.put(.loggedAtMicroseconds(UInt64(max(0, record.date.timeIntervalSince1970 * 1000000))))
+        out.put(.logSubsystem(record.subsystem))
+        out.put(.logCategory(record.category))
+        out.put(.logLevel(record.level.rawValue))
+        out.put(.logMessage(Redaction.message(record.message)))
+    }
+
+    func observe(_ context: Context) {
+        context.flush(every: .seconds(15), into: .logRecord) { [reader] out, window in
+            switch reader.drain() {
+            case .unavailable(let reason):
+                out.put(.windowNanoseconds(window.nanoseconds))
+                out.put(.mechanismStatus("unavailable: \(reason)"))
+            case .read(let records, let cutShort):
+                guard !records.isEmpty else {
+                    return
+                }
+
+                Self.write(records, over: window, into: &out)
+                guard cutShort else {
+                    return
+                }
+
+                out.also(out.entity) { additional in
+                    additional.put(.windowNanoseconds(window.nanoseconds))
+                    additional.put(
+                        .mechanismStatus("read stopped on its ceiling; more unread")
+                    )
+                }
+            }
+        }
+    }
+
+    func stopObserving() {}
+}

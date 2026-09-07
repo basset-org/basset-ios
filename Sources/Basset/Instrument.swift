@@ -74,6 +74,7 @@ public enum FaultKind: String, Sendable {
     case hang
     case termination
     case memoryPressure
+    case repeatedTaps
 }
 
 public struct Registration: @unchecked Sendable {

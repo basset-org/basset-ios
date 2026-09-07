@@ -74,6 +74,28 @@ public extension HookTable {
         }
     }
 
+    /// For `capturePhotoWithSettings:delegate:`-shaped calls, where the delegate is the
+    /// second of two arguments and lives only as long as that one call.
+    @discardableResult
+    func trackDelegateClass(at selector: Selector,
+                            on owner: AnyClass?,
+                            delegateSecondOfTwo: Void) -> SwizzleOutcome
+    {
+        guard let owner else {
+            return .classMissing
+        }
+
+        let classes = registries.delegates(ObjectIdentifier(owner))
+        return swizzle.after(owner, selector, takingTwoObjects: ()) {
+            (_, _, delegate: AnyObject?) in
+            guard let delegate else {
+                return
+            }
+
+            classes.add((delegate as? NSObject)?.classForCoder ?? type(of: delegate))
+        }
+    }
+
     /// For `setDelegate:queue:`-shaped setters, where the delegate is the first of two arguments.
     @discardableResult
     func trackDelegateClass(at selector: Selector,

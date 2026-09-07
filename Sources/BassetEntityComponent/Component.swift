@@ -440,6 +440,15 @@ public struct Component: Equatable, Sendable {
         case imageData = 265
         case imageFormat = 266
         case screenScale = 267
+        case accessibilityIdentifier = 268
+        case accessibilityLabel = 269
+        case commandId = 270
+        case interactionEnabled = 271
+        case recognizerClasses = 272
+        case viewText = 273
+        case loggedAtMicroseconds = 274
+        case photoUniqueId = 275
+        case settleNanoseconds = 276
     }
 
     // Order is load-bearing: value before id avoids padding out to a wider stride.
@@ -927,6 +936,31 @@ public extension Component {
         value
     ) }
     static func touchId(_ value: UInt32) -> Component { .init(.touchId, value) }
+    static func accessibilityIdentifier(_ value: String) -> Component { .init(
+        .accessibilityIdentifier,
+        value
+    ) }
+    static func accessibilityLabel(_ value: String) -> Component { .init(
+        .accessibilityLabel,
+        value
+    ) }
+    static func commandId(_ value: UInt32) -> Component { .init(.commandId, value) }
+    static func interactionEnabled(_ value: Bool) -> Component { .init(
+        .interactionEnabled,
+        value
+    ) }
+    static func recognizerClasses(_ value: String) -> Component { .init(
+        .recognizerClasses,
+        value
+    ) }
+    static func viewText(_ value: String) -> Component { .init(.viewText, value) }
+    static func loggedAtMicroseconds(_ value: UInt64) -> Component {
+        .init(.loggedAtMicroseconds, value)
+    }
+
+    static func photoUniqueId(_ value: UInt64) -> Component { .init(.photoUniqueId, value) }
+    static func settleNanoseconds(_ value: UInt64) -> Component { .init(.settleNanoseconds, value) }
+
     static func originXPoints(_ value: Double) -> Component { .init(.originXPoints, value) }
     static func originYPoints(_ value: Double) -> Component { .init(.originYPoints, value) }
     static func frameWidthPoints(_ value: Double) -> Component { .init(

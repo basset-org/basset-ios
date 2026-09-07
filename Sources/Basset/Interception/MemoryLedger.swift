@@ -97,6 +97,9 @@ struct MemoryLedger {
         from info: task_vm_info_data_t,
         wordsWritten: mach_msg_type_number_t
     ) -> UInt64? {
+        #if targetEnvironment(simulator)
+        return nil
+        #else
         if wordsWritten >= wordsThroughRemainingBytes {
             return info.limit_bytes_remaining
         }
@@ -108,6 +111,7 @@ struct MemoryLedger {
         }
         #endif
         return nil
+        #endif
     }
 
     func write(into out: inout Readings) {

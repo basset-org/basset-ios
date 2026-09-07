@@ -5,10 +5,10 @@ import Foundation
 /// can never collide regardless of which instrument produced them or how many times it fired.
 /// Paired with `launchId`, which rides every reading automatically, for uniqueness across a
 /// crash or relaunch: `entityId` alone only ever needs to be unique within one launch.
-enum EntityIdentity {
+public enum EntityIdentity {
     private static let counter: Mutex<UInt32> = .init(0)
 
-    static func next() -> UInt32 {
+    public static func next() -> UInt32 {
         counter.withLock { count in
             count &+= 1
             return count

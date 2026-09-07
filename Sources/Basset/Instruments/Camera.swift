@@ -562,6 +562,7 @@ final class CameraFrameDelivery: Streamable, Configurable, LoadTimeInstall {
         let delivery = context.swizzle.sampleBufferCallback(
             subject,
             Self.didOutput,
+            defineWhenAbsent: true,
             observing: Swizzle.SampleBufferObserver(
                 entering: { [weak self] _, _, _, _ in
                     guard let self else {
@@ -612,7 +613,9 @@ final class CameraFrameDelivery: Streamable, Configurable, LoadTimeInstall {
             )
         )
         let drop = context.swizzle
-            .sampleBufferCallback(subject, Self.didDrop) { _, _, buffer, _, _ in
+            .sampleBufferCallback(subject, Self.didDrop,
+                                  defineWhenAbsent: true)
+            { _, _, buffer, _, _ in
                 guard hot.isActive else {
                     return
                 }
@@ -947,6 +950,473 @@ final class CameraSessionState: Streamable, PlainInstrument, LoadTimeInstall {
             out.put(.instanceId(instance))
             out.put(.sessionRunning((session.value(forKey: "isRunning") as? Bool) ?? false))
             out.put(.sessionInterrupted((session.value(forKey: "isInterrupted") as? Bool) ?? false))
+        }
+    }
+    #endif
+}
+
+/// Every AVCapture delegate callback, counted and timed per method; photo captures
+/// followed stage by stage under one photo id.
+final class CameraDelegateCallbacks: Streamable, PlainInstrument, LoadTimeInstall {
+    struct Method: Equatable, Sendable {
+        let selector: String
+        /// Object arguments after the receiver, the output included.
+        let objects: Int
+        /// Defined on a delegate that never wrote it — only a notification the framework
+        /// sends optionally. The callback that hands over the photo or the file is never
+        /// defined: the framework would then hand it here instead of to the app.
+        let definedWhenAbsent: Bool
+        /// Key path on the second argument that reaches the capture's unique id.
+        let photoIdKeyPath: String?
+
+        var isSampleBuffer: Bool {
+            selector.hasSuffix("SampleBuffer:fromConnection:")
+        }
+
+        var isPhotoStage: Bool {
+            photoIdKeyPath != nil
+        }
+    }
+
+    struct Owner: Sendable {
+        let className: String
+        let setter: String
+        let delegateIsSecondArgument: Bool
+        let methods: [Method]
+    }
+
+    private struct HookKey: Hashable {
+        let delegateClass: ObjectIdentifier
+        let selector: String
+    }
+
+    private struct State {
+        var hooked: [HookKey: SwizzleOutcome] = [:]
+        var delegateNames: [Int: Set<String>] = [:]
+    }
+
+    static let id: InstrumentID = .cameraDelegateCallbacks
+
+    static let owners: [Owner] = [
+        Owner(
+            className: "AVCaptureVideoDataOutput",
+            setter: "setSampleBufferDelegate:queue:",
+            delegateIsSecondArgument: false,
+            methods: [
+                Method(
+                    selector: "captureOutput:didOutputSampleBuffer:fromConnection:",
+                    objects: 3,
+                    definedWhenAbsent: false,
+                    photoIdKeyPath: nil
+                ),
+                Method(
+                    selector: "captureOutput:didDropSampleBuffer:fromConnection:",
+                    objects: 3,
+                    definedWhenAbsent: true,
+                    photoIdKeyPath: nil
+                ),
+            ]
+        ),
+        Owner(
+            className: "AVCaptureAudioDataOutput",
+            setter: "setSampleBufferDelegate:queue:",
+            delegateIsSecondArgument: false,
+            methods: [
+                Method(
+                    selector: "captureOutput:didOutputSampleBuffer:fromConnection:",
+                    objects: 3,
+                    definedWhenAbsent: false,
+                    photoIdKeyPath: nil
+                ),
+            ]
+        ),
+        Owner(
+            className: "AVCapturePhotoOutput",
+            setter: "capturePhotoWithSettings:delegate:",
+            delegateIsSecondArgument: true,
+            methods: [
+                Method(
+                    selector: "captureOutput:willBeginCaptureForResolvedSettings:",
+                    objects: 2,
+                    definedWhenAbsent: true,
+                    photoIdKeyPath: "uniqueID"
+                ),
+                Method(
+                    selector: "captureOutput:willCapturePhotoForResolvedSettings:",
+                    objects: 2,
+                    definedWhenAbsent: true,
+                    photoIdKeyPath: "uniqueID"
+                ),
+                Method(
+                    selector: "captureOutput:didCapturePhotoForResolvedSettings:",
+                    objects: 2,
+                    definedWhenAbsent: true,
+                    photoIdKeyPath: "uniqueID"
+                ),
+                Method(
+                    selector: "captureOutput:didFinishProcessingPhoto:error:",
+                    objects: 3,
+                    definedWhenAbsent: false,
+                    photoIdKeyPath: "resolvedSettings.uniqueID"
+                ),
+                Method(
+                    selector: "captureOutput:didFinishCapturingDeferredPhotoProxy:error:",
+                    objects: 3,
+                    definedWhenAbsent: false,
+                    photoIdKeyPath: "resolvedSettings.uniqueID"
+                ),
+                Method(
+                    selector: "captureOutput:didFinishCaptureForResolvedSettings:error:",
+                    objects: 3,
+                    definedWhenAbsent: true,
+                    photoIdKeyPath: "uniqueID"
+                ),
+            ]
+        ),
+        Owner(
+            className: "AVCaptureFileOutput",
+            setter: "startRecordingToOutputFileURL:recordingDelegate:",
+            delegateIsSecondArgument: true,
+            methods: [
+                Method(
+                    selector: "captureOutput:didStartRecordingToOutputFileAtURL:fromConnections:",
+                    objects: 3,
+                    definedWhenAbsent: true,
+                    photoIdKeyPath: nil
+                ),
+                Method(
+                    selector: "captureOutput:didPauseRecordingToOutputFileAtURL:fromConnections:",
+                    objects: 3,
+                    definedWhenAbsent: true,
+                    photoIdKeyPath: nil
+                ),
+                Method(
+                    selector: "captureOutput:didResumeRecordingToOutputFileAtURL:fromConnections:",
+                    objects: 3,
+                    definedWhenAbsent: true,
+                    photoIdKeyPath: nil
+                ),
+                Method(
+                    selector: "captureOutput:willFinishRecordingToOutputFileAtURL:fromConnections:error:",
+                    objects: 4,
+                    definedWhenAbsent: true,
+                    photoIdKeyPath: nil
+                ),
+                Method(
+                    selector: "captureOutput:didFinishRecordingToOutputFileAtURL:fromConnections:error:",
+                    objects: 4,
+                    definedWhenAbsent: false,
+                    photoIdKeyPath: nil
+                ),
+            ]
+        ),
+        Owner(
+            className: "AVCaptureMetadataOutput",
+            setter: "setMetadataObjectsDelegate:queue:",
+            delegateIsSecondArgument: false,
+            methods: [
+                Method(
+                    selector: "captureOutput:didOutputMetadataObjects:fromConnection:",
+                    objects: 3,
+                    definedWhenAbsent: false,
+                    photoIdKeyPath: nil
+                ),
+            ]
+        ),
+        Owner(
+            className: "AVCaptureDataOutputSynchronizer",
+            setter: "setDelegate:queue:",
+            delegateIsSecondArgument: false,
+            methods: [
+                Method(
+                    selector: "dataOutputSynchronizer:didOutputSynchronizedDataCollection:",
+                    objects: 2,
+                    definedWhenAbsent: false,
+                    photoIdKeyPath: nil
+                ),
+            ]
+        ),
+    ]
+
+    /// Three per method: calls, total nanoseconds, peak nanoseconds.
+    static let slotsPerMethod = 3
+
+    static let slotBases: [[Int]] = {
+        var next = 0
+        return owners.map { owner in
+            owner.methods.map { _ in
+                defer { next += slotsPerMethod }
+                return next
+            }
+        }
+    }()
+
+    static var tallySlots: Int {
+        slotsPerMethod * owners.reduce(0) { $0 + $1.methods.count }
+    }
+
+    private let guarded: Mutex<State> = .init(State())
+
+    init() {}
+
+    static func relevance(_ registries: Registries) -> Relevance {
+        cameraSessionRelevance(registries)
+    }
+
+    static func installAtLoad(_ hooks: HookTable) {
+        #if os(iOS)
+        for owner in owners {
+            guard let ownerClass = objc_getClass(owner.className) as? AnyClass else {
+                continue
+            }
+
+            if owner.delegateIsSecondArgument {
+                hooks.trackDelegateClass(
+                    at: Selector(owner.setter),
+                    on: ownerClass,
+                    delegateSecondOfTwo: ()
+                )
+            } else {
+                hooks.trackDelegateClass(
+                    at: Selector(owner.setter),
+                    on: ownerClass,
+                    takingTwoObjects: ()
+                )
+            }
+        }
+        #endif
+    }
+
+    func observe(_ context: Context) {
+        #if os(iOS)
+        for (ownerIndex, owner) in Self.owners.enumerated() {
+            guard let ownerClass = objc_getClass(owner.className) as? AnyClass else {
+                continue
+            }
+
+            context.followDelegateClasses(of: ownerClass) { [weak self] delegateClass in
+                self?.hook(delegateClass, ownerIndex: ownerIndex, context)
+            }
+        }
+
+        context.flush(every: .seconds(1), into: .delegateMethod) { [weak self] out, window in
+            self?.flush(into: &out, over: window, context)
+        }
+        #endif
+    }
+
+    func stopObserving() {
+        guarded.withLock { $0 = State() }
+    }
+
+    #if os(iOS)
+    /// One class may serve two outputs — video and audio data — so its name is recorded
+    /// under every owner that set it, while its methods are hooked once and the hook sorts
+    /// each call to the owner that made it.
+    private func hook(_ delegateClass: AnyClass, ownerIndex: Int, _ context: Context) {
+        let owner = Self.owners[ownerIndex]
+        let delegateName = NSStringFromClass(delegateClass)
+        for (methodIndex, method) in owner.methods.enumerated() {
+            let key = HookKey(
+                delegateClass: ObjectIdentifier(delegateClass),
+                selector: method.selector
+            )
+            let base = Self.slotBases[ownerIndex][methodIndex]
+            let already = guarded.withLock { state -> SwizzleOutcome? in
+                state.delegateNames[base, default: []].insert(delegateName)
+                return state.hooked[key]
+            }
+            let outcome: SwizzleOutcome
+            if let already {
+                outcome = already
+            } else {
+                outcome = install(
+                    method,
+                    on: delegateClass,
+                    named: delegateName,
+                    ownerIndex: ownerIndex,
+                    context
+                )
+                guarded.withLock { $0.hooked[key] = outcome }
+            }
+
+            context.emit(.delegateMethod) { out in
+                out.put(.runtimeClassName(owner.className))
+                out.put(.delegateClass(delegateName))
+                out.put(.methodName(method.selector))
+                out.put(.callbackImplemented(Self.isAppsOwn(outcome)))
+                out.put(.mechanismStatus(Self.describe(outcome)))
+            }
+        }
+    }
+
+    private func install(
+        _ method: Method,
+        on delegateClass: AnyClass,
+        named delegateName: String,
+        ownerIndex: Int,
+        _ context: Context
+    ) -> SwizzleOutcome {
+        let ownerClasses = Self.owners.map { objc_getClass($0.className) as? AnyClass }
+        let hot = context.hotPath
+        let selector = Selector(method.selector)
+        let record: (AnyObject?, UInt64) -> Void = { output, elapsed in
+            guard hot.isActive else {
+                return
+            }
+
+            let resolved = Self.ownerIndex(of: output, among: ownerClasses) ?? ownerIndex
+            guard let methodIndex = Self.owners[resolved]
+                .methods
+                .firstIndex(where: { $0.selector == method.selector })
+            else {
+                return
+            }
+
+            let base = Self.slotBases[resolved][methodIndex]
+            hot.add(TallySlot(base))
+            hot.add(TallySlot(base + 1), elapsed)
+            hot.raise(TallySlot(base + 2), to: elapsed)
+        }
+
+        guard !method.isSampleBuffer else {
+            return context.swizzle.sampleBufferCallback(
+                delegateClass,
+                selector,
+                defineWhenAbsent: method.definedWhenAbsent
+            ) { _, output, _, _, elapsed in
+                record(output, elapsed)
+            }
+        }
+
+        return context.swizzle.timedCallback(
+            delegateClass,
+            selector,
+            objects: method.objects,
+            defineWhenAbsent: method.definedWhenAbsent
+        ) { [weak self] _, arguments, elapsed in
+            record(arguments.first ?? nil, elapsed)
+            guard method.isPhotoStage, let self else {
+                return
+            }
+
+            self.reportPhotoStage(
+                method,
+                delegateName: delegateName,
+                arguments: arguments,
+                elapsed: elapsed,
+                context
+            )
+        }
+    }
+
+    private static func isAppsOwn(_ outcome: SwizzleOutcome) -> Bool {
+        outcome == .installed || outcome == .joinedExisting
+    }
+
+    private static func describe(_ outcome: SwizzleOutcome) -> String {
+        switch outcome {
+        case .installed,
+             .joinedExisting:
+            "hooked"
+        case .implemented:
+            "defined: the delegate never wrote it"
+        case .selectorMissing:
+            "not implemented by the delegate"
+        default:
+            "not hooked: \(outcome)"
+        }
+    }
+
+    private static func ownerIndex(of output: AnyObject?, among classes: [AnyClass?]) -> Int? {
+        guard let output else {
+            return nil
+        }
+
+        return classes.firstIndex { ownerClass in
+            guard let ownerClass else {
+                return false
+            }
+
+            return output.isKind(of: ownerClass)
+        }
+    }
+
+    private func reportPhotoStage(
+        _ method: Method,
+        delegateName: String,
+        arguments: [AnyObject?],
+        elapsed: UInt64,
+        _ context: Context
+    ) {
+        let subject = arguments.count > 1 ? arguments[1] as? NSObject : nil
+        let photoId = method.photoIdKeyPath
+            .flatMap { Self.number(at: $0, of: subject) }
+            .map { UInt64(bitPattern: $0.int64Value) }
+        let error = arguments.count > 2 ? arguments[2] as? NSError : nil
+        context.emit(.photoCapture) { out in
+            out.put(.runtimeClassName("AVCapturePhotoOutput"))
+            out.put(.delegateClass(delegateName))
+            out.put(.methodName(method.selector))
+            out.put(.delegateDurationNanoseconds(elapsed))
+            if let photoId {
+                out.put(.photoUniqueId(photoId))
+            }
+            if let error {
+                out.put(.errorDomain(error.domain))
+                out.put(.errorCode(Int32(clamping: error.code)))
+                out.put(.mechanismStatus("error: \(error.localizedDescription)"))
+            }
+        }
+    }
+
+    /// Each key is asked for before it is read: `valueForKey:` on a key the framework has
+    /// dropped raises an Objective-C exception nothing in Swift can catch.
+    private static func number(at keyPath: String, of subject: NSObject?) -> NSNumber? {
+        var current = subject
+        for key in keyPath.split(separator: ".").map(String.init) {
+            guard let object = current, object.responds(to: Selector(key)) else {
+                return nil
+            }
+
+            current = object.value(forKey: key) as? NSObject
+        }
+        return current as? NSNumber
+    }
+
+    private func flush(
+        into out: inout Readings,
+        over window: Context.FlushWindow,
+        _ context: Context
+    ) {
+        let names = guarded.withLock { $0.delegateNames }
+        var first = true
+        for (ownerIndex, owner) in Self.owners.enumerated() {
+            for (methodIndex, method) in owner.methods.enumerated() {
+                let base = Self.slotBases[ownerIndex][methodIndex]
+                let calls = context.tally.take(TallySlot(base))
+                let total = context.tally.take(TallySlot(base + 1))
+                let peak = context.tally.take(TallySlot(base + 2))
+                guard calls > 0 else {
+                    continue
+                }
+
+                let put = { (row: inout Readings) in
+                    row.put(.windowNanoseconds(window.nanoseconds))
+                    row.put(.runtimeClassName(owner.className))
+                    row.put(.delegateClass((names[base] ?? []).sorted().joined(separator: ", ")))
+                    row.put(.methodName(method.selector))
+                    row.put(.occurrenceCount(calls))
+                    row.put(.delegateDurationNanoseconds(total))
+                    row.put(.delegateDurationPeakNanoseconds(peak))
+                }
+                if first {
+                    put(&out)
+                    first = false
+                } else {
+                    out.also(out.entity) { additional in put(&additional) }
+                }
+            }
         }
     }
     #endif

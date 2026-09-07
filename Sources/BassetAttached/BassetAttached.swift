@@ -68,17 +68,20 @@ public enum BassetAttached {
     }
 
     public static func stop() {
+        var stopping: AttachedLink?
         let removed = lock.withLock { () -> [NSObjectProtocol] in
             isListening = false
             watchingForeground = false
             backgrounded = false
             rebindAttempts = 0
-            link?.stop()
+            stopping = link
             link = nil
             let existing = observers
             observers = []
             return existing
         }
+        stopping?.stop()
+        DrivingOverlay.hideFromAnyThread()
 
         let center = NotificationCenter.default
         for observer in removed {
@@ -92,6 +95,13 @@ public enum BassetAttached {
             return nil
         }
 
+        let previous = lock.withLock { () -> AttachedLink? in
+            let current = link
+            link = nil
+            return current
+        }
+        previous?.stop()
+
         do {
             let opened = try AttachedLink { failed in rebind(replacing: failed) }
             let published = lock.withLock { () -> AttachedLink? in
@@ -99,7 +109,6 @@ public enum BassetAttached {
                     return nil
                 }
 
-                link?.stop()
                 link = opened
                 return opened
             }
@@ -169,7 +178,7 @@ public enum BassetAttached {
     }
 
     /// Rebinds with backoff, only while `failed` is still the current link.
-    private static func rebind(replacing failed: AttachedLink) {
+    private static func rebind(replacing failed: AttachedLink?) {
         let decision = lock.withLock { () -> RebindDecision in
             guard isListening, link === failed else {
                 return .superseded
@@ -196,7 +205,7 @@ public enum BassetAttached {
                     return
                 }
 
-                rebind(replacing: failed)
+                rebind(replacing: nil)
             }
         }
     }
@@ -215,7 +224,11 @@ public enum BassetAttached {
 
         lock.withLock { rebindAttempts = 0 }
         rebindQueue.async {
-            _ = bind()
+            guard bind() == nil else {
+                return
+            }
+
+            rebind(replacing: nil)
         }
     }
 }

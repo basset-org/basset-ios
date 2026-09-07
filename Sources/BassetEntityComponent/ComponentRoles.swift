@@ -94,6 +94,7 @@ public extension Component.ID {
              .sampleCount,
              .screenScale,
              .serverNanoseconds,
+             .settleNanoseconds,
              .silenceNanoseconds,
              .systemFreeBytes,
              .systemFreeRatio,
@@ -117,12 +118,14 @@ public extension Component.ID {
         case .displayListSeed:
             .quantity
 
-        case .deviceId,
+        case .commandId,
+             .deviceId,
              .deviceUniqueId,
              .faultId,
              .instanceId,
              .instrument,
              .launchId,
+             .photoUniqueId,
              .threadIdentifier,
              .touchId,
              .userId,
@@ -145,7 +148,8 @@ public extension Component.ID {
 
         // A wall-clock instant; charted, it would draw a line whose slope is the passage of time.
         case .bootTimeMicroseconds,
-             .intervalEndMicroseconds:
+             .intervalEndMicroseconds,
+             .loggedAtMicroseconds:
             .state
 
         case .accuracyClass,
@@ -258,7 +262,9 @@ public extension Component.ID {
              .viewControllerClass:
             .state
 
-        case .accessibilityTextSize,
+        case .accessibilityIdentifier,
+             .accessibilityLabel,
+             .accessibilityTextSize,
              .allowsCellular,
              .allowsConstrained,
              .allowsExpensive,
@@ -275,12 +281,14 @@ public extension Component.ID {
              .hostRootViewOpaque,
              .implementationInMappedImage,
              .insecureLoadsAllowed,
+             .interactionEnabled,
              .multipath,
              .otherAudioPlaying,
              .outputPixelFormatSupported,
              .ownedByDeclaringImage,
              .pathSatisfied,
              .proxyConnection,
+             .recognizerClasses,
              .retiredSyncSucceeded,
              .secondaryAudioSilenced,
              .sessionInterrupted,
@@ -292,6 +300,7 @@ public extension Component.ID {
              .uses24HourTime,
              .usesMetricSystem,
              .videoMirrored,
+             .viewText,
              .waitsForConnectivity:
             .state
         }
