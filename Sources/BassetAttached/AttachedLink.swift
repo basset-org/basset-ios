@@ -13,6 +13,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
     private let listener: NWListener
     private let queue: DispatchQueue
     private let lock: NSLock = .init()
+    private let ended: DispatchSemaphore = .init(value: 0)
     private var closed = false
     private var connection: NWConnection?
     private var reader: LengthPrefixedReader = .init()
@@ -66,6 +67,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
             switch state {
             case .cancelled,
                  .failed:
+                self?.ended.signal()
                 self?.reportFailure()
             default:
                 break
@@ -103,7 +105,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
     }
 
     func stop() {
-        AttachedBridge.close(self)
+        detached()
         lock.withLock {
             closed = true
             connection?.cancel()
@@ -111,11 +113,20 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
             reader = LengthPrefixedReader()
         }
         listener.cancel()
+        // The port is free once the listener reports cancelled, not when cancel() returns;
+        // binding the replacement before that lands it one port up.
+        _ = ended.wait(timeout: .now() + 1)
     }
 
     func send(_ frame: Data) {
         let open = lock.withLock { connection }
         open?.send(content: frame, completion: .idempotent)
+    }
+
+    /// Nothing the attached machine put on the screen may outlive it.
+    private func detached() {
+        AttachedBridge.close(self)
+        DrivingOverlay.hideFromAnyThread()
     }
 
     private func reportFailure() {
@@ -149,6 +160,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
             case .cancelled,
                  .failed:
                 AttachedBridge.close(self)
+                DrivingOverlay.hideFromAnyThread()
             default:
                 break
             }
@@ -170,7 +182,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
             }
             guard error == nil, !isComplete else {
                 if isCurrent(connection) {
-                    AttachedBridge.close(self)
+                    detached()
                 }
                 return
             }
@@ -190,6 +202,12 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
             }
             guard let document else {
                 return
+            }
+
+            if AttachedCommands
+                .handle(document, reply: { [weak self] frame in self?.send(frame) })
+            {
+                continue
             }
 
             try? AttachedBridge.apply(document)

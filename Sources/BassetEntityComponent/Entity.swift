@@ -62,6 +62,10 @@ public struct Entity: Equatable, Sendable {
         case surface = 58
         case imageSource = 59
         case screenshot = 60
+        case repeatedTaps = 61
+        case command = 62
+        case delegateMethod = 63
+        case photoCapture = 64
         case instrumentConfig = 0xff00
     }
 

@@ -59,6 +59,9 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
     case memoryRegions = 61
     case imagingSurfaces = 62
     case screenshot = 63
+    case repeatedTaps = 64
+    case logMessages = 65
+    case cameraDelegateCallbacks = 66
     case configRefused = 0xff00
     case instrumentsActive = 0xff01
     case instrumentsRelevant = 0xff02
@@ -97,6 +100,8 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .coreDataChanges: "storage.coreData.changes"
         case .logFaults: "log.faults"
         case .logSubsystems: "log.subsystems"
+        case .logMessages: "log.messages"
+        case .cameraDelegateCallbacks: "camera.delegate.callbacks"
         case .sessionConfiguration: "network.session.configuration"
         case .transportSecurity: "network.transportSecurity"
         case .commitPacing: "render.commit.pacing"
@@ -125,6 +130,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .controlAction: "uikit.control.action"
         case .gestureState: "uikit.gesture.state"
         case .viewHierarchy: "uikit.view.hierarchy"
+        case .repeatedTaps: "uikit.taps.repeated"
         case .configRefused: "basset.configRefused"
         case .instrumentsActive: "basset.instrumentsActive"
         case .instrumentsRelevant: "basset.instrumentsRelevant"
@@ -165,6 +171,8 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .coreDataChanges: .storage
         case .logFaults: .log
         case .logSubsystems: .log
+        case .logMessages: .log
+        case .cameraDelegateCallbacks: .camera
         case .sessionConfiguration: .network
         case .transportSecurity: .network
         case .commitPacing: .render
@@ -193,6 +201,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .controlAction: .uikit
         case .gestureState: .uikit
         case .viewHierarchy: .uikit
+        case .repeatedTaps: .uikit
         case .configRefused: .basset
         case .instrumentsActive: .basset
         case .instrumentsRelevant: .basset
@@ -234,6 +243,8 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .coreDataChanges: .stream
         case .logFaults: .stream
         case .logSubsystems: .stream
+        case .logMessages: .stream
+        case .cameraDelegateCallbacks: .stream
         case .sessionConfiguration: .stream
         case .transportSecurity: .reading
         case .commitPacing: .stream
@@ -262,6 +273,7 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
         case .controlAction: .stream
         case .gestureState: .stream
         case .viewHierarchy: .reading
+        case .repeatedTaps: .stream
         // Never activated: basset emits this itself, outside the registration table.
         case .configRefused: .reading
         case .instrumentsActive: .reading
@@ -272,7 +284,8 @@ public enum InstrumentID: UInt16, Sendable, CaseIterable {
     /// Stated only where it differs from the floor every instrument shares.
     public var availability: Availability {
         switch self {
-        case .cameraDeviceFormat,
+        case .cameraDelegateCallbacks,
+             .cameraDeviceFormat,
              .cameraDeviceInventory,
              .cameraFrameDelivery,
              .cameraSessionConfiguration,

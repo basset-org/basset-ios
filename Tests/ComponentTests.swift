@@ -253,6 +253,15 @@ struct ComponentTests {
             (.imageData(Data()), .imageData),
             (.imageFormat(""), .imageFormat),
             (.screenScale(0), .screenScale),
+            (.accessibilityIdentifier(""), .accessibilityIdentifier),
+            (.accessibilityLabel(""), .accessibilityLabel),
+            (.commandId(0), .commandId),
+            (.interactionEnabled(false), .interactionEnabled),
+            (.recognizerClasses(""), .recognizerClasses),
+            (.viewText(""), .viewText),
+            (.loggedAtMicroseconds(0), .loggedAtMicroseconds),
+            (.photoUniqueId(0), .photoUniqueId),
+            (.settleNanoseconds(0), .settleNanoseconds),
         ]
 
         for (component, expected) in all {

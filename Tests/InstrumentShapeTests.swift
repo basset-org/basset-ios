@@ -153,13 +153,13 @@ struct InstrumentShapeTests {
     /// Grow-only ids — nothing removed or renumbered; duplicates already fail to compile.
     @Test func idSpacesOnlyEverGrow() {
         // Holes are retirements, never reissued (components: see retiredIdsStayReserved).
-        let instrumentIds: [UInt16] = Array(1...21) + Array(23...39) + Array(42...63) + [
+        let instrumentIds: [UInt16] = Array(1...21) + Array(23...39) + Array(42...66) + [
             0xff00,
             0xff01,
             0xff02,
         ]
-        let componentIds: [UInt16] = Array(1...267)
-        let entityIds: [UInt16] = Array(0...32) + Array(35...60) + [0xff00]
+        let componentIds: [UInt16] = Array(1...276)
+        let entityIds: [UInt16] = Array(0...32) + Array(35...64) + [0xff00]
 
         #expect(instrumentIdSnapshot == instrumentIds)
         #expect(componentIdSnapshot == componentIds)

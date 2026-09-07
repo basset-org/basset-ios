@@ -60,6 +60,9 @@ public enum Instruments {
         .stream(MemoryRegions.self),
         .stream(ImagingSurfaces.self),
         .reading(Screenshot.self),
+        .stream(RepeatedTaps.self),
+        .stream(LogMessages.self),
+        .stream(CameraDelegateCallbacks.self),
     ]
 
     public static func named(_ name: String) -> Registration? {

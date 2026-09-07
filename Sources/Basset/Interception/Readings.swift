@@ -65,6 +65,21 @@ public struct Readings {
         )
     }
 
+    /// Every entity this reading produced, the record first, each tagged the way `tagged`
+    /// tags one — for a caller outside the runner that answers with a whole reading.
+    public func allEntities(taggedAs instrument: InstrumentID) -> [Entity] {
+        ([build()] + additional).map { entity in
+            Entity(
+                id: entity.id,
+                capturedAt: entity.capturedAt,
+                components: entity.components + [
+                    .instrument(instrument.rawValue),
+                    .launchId(LaunchIdentity.current),
+                ]
+            )
+        }
+    }
+
     func build() -> Entity {
         Entity(entity, capturedAt: capturedAt, components: components)
     }

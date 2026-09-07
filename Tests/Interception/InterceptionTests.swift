@@ -125,6 +125,21 @@ import Testing
 /// The same callback left unwritten, which is what most delegates look like.
 @objc private class ThreeObjectSilentSubject: NSObject {}
 
+@objc private class FourObjectSubject: NSObject {
+    private(set) var ran = 0
+
+    @objc(captureOutput:didFinishRecordingToOutputFileAtURL:fromConnections:error:)
+    dynamic func captureOutput(
+        _ output: AnyObject?,
+        didFinishRecordingToOutputFileAt url: AnyObject?,
+        fromConnections connections: AnyObject?,
+        error: AnyObject?
+    ) {
+        ran += 1
+        Thread.sleep(forTimeInterval: 0.002)
+    }
+}
+
 @objc private class ObjectBufferSubject: NSObject {
     @objc dynamic func captureOutput(
         _ output: AnyObject?,
@@ -790,6 +805,58 @@ struct FactorySwizzleTests {
         #expect(seen == 1)
     }
 
+    @Test func aTimedFourObjectCallbackPassesEveryArgumentAndItsElapsedTime() {
+        let swizzle = Swizzle()
+        var seen = [AnyObject?]()
+        var elapsed: UInt64 = 0
+        let selector = Selector(
+            "captureOutput:didFinishRecordingToOutputFileAtURL:fromConnections:error:"
+        )
+
+        #expect(
+            swizzle.timedCallback(
+                FourObjectSubject.self, selector, objects: 4, defineWhenAbsent: false
+            ) { _, arguments, nanoseconds in
+                seen = arguments
+                elapsed = nanoseconds
+            } == .installed
+        )
+
+        let subject = FourObjectSubject()
+        let output = Tracked()
+        let url = Tracked()
+        let connections = Tracked()
+        subject.captureOutput(
+            output, didFinishRecordingToOutputFileAt: url, fromConnections: connections,
+            error: nil
+        )
+
+        #expect(subject.ran == 1, "the original implementation is chained, never replaced")
+        #expect(seen.count == 4)
+        #expect(seen[0] === output)
+        #expect(seen[1] === url)
+        #expect(seen[2] === connections)
+        #expect(seen[3] == nil)
+        #expect(elapsed >= 2000000, "the sleep inside the callback is what was timed")
+    }
+
+    @Test func aTimedCallbackIsDefinedOnlyWhenAsked() {
+        let swizzle = Swizzle()
+        let selector = Selector("captureOutput:willBeginCaptureForResolvedSettings:")
+
+        #expect(
+            swizzle.timedCallback(
+                ThreeObjectSilentSubject.self, selector, objects: 2, defineWhenAbsent: false
+            ) { _, _, _ in } == .selectorMissing
+        )
+        #expect(
+            swizzle.timedCallback(
+                ThreeObjectSilentSubject.self, selector, objects: 2, defineWhenAbsent: true
+            ) { _, _, _ in } == .implemented
+        )
+        #expect(ThreeObjectSilentSubject().responds(to: selector))
+    }
+
     /// Three objects and two are different shapes — one site can't carry both thunks.
     @Test func aThreeObjectShapeRefusesATwoObjectSelector() {
         let swizzle = Swizzle()
@@ -812,7 +879,8 @@ struct FactorySwizzleTests {
         #expect(
             swizzle
                 .sampleBufferCallback(BufferSubject.self,
-                                      Self.didOutput)
+                                      Self.didOutput,
+                                      defineWhenAbsent: true)
                 { _, _, got, _, nanoseconds in
                     seen += 1
                     buffer = got
@@ -840,7 +908,8 @@ struct FactorySwizzleTests {
             "nothing answers this selector before the hook"
         )
         #expect(
-            swizzle.sampleBufferCallback(SilentSubject.self, Self.didDrop) { _, _, _, _, _ in
+            swizzle.sampleBufferCallback(SilentSubject.self, Self.didDrop, defineWhenAbsent: true) {
+                _, _, _, _, _ in
                 seen += 1
             } == .implemented
         )
@@ -868,8 +937,11 @@ struct FactorySwizzleTests {
         let swizzle = Swizzle()
 
         #expect(
-            swizzle.sampleBufferCallback(ObjectBufferSubject.self, Self.didOutput) {
-                _, _, _, _, _ in
+            swizzle.sampleBufferCallback(
+                ObjectBufferSubject.self,
+                Self.didOutput,
+                defineWhenAbsent: true
+            ) { _, _, _, _, _ in
             } == .argumentKindMismatch(shape: "sampleBufferCallback")
         )
     }

@@ -77,6 +77,17 @@ struct HookShape: Equatable {
         pointerArgument: 3
     )
 
+    /// Delegate callbacks taking only objects, timed around the chained call — one shape per
+    /// arity, named apart from the untimed ones so a site never carries two thunk kinds.
+    static let timedTwoObjects: HookShape = .init(
+        name: "timedTwoObjects", arguments: 4, returns: "v", firstArgument: "@"
+    )
+    static let timedThreeObjects: HookShape = .init(
+        name: "timedThreeObjects", arguments: 5, returns: "v", firstArgument: "@"
+    )
+    static let timedFourObjects: HookShape = .init(
+        name: "timedFourObjects", arguments: 6, returns: "v", firstArgument: "@"
+    )
     /// `-collectionView:cellForItemAtIndexPath:` — two objects in, one out, timed around the call.
     static let timedFactoryTwoObjects: HookShape = .init(
         name: "timedFactory2", arguments: 4, returns: "@", firstArgument: "@"
@@ -320,6 +331,27 @@ private final class HookSite<Body>: AnyHookSite {
         original(receiver, selector, output, buffer, connection)
     }
 
+    func callChained(
+        _ chained: IMP?,
+        _ receiver: AnyObject,
+        _ first: AnyObject?,
+        _ second: AnyObject?,
+        _ third: AnyObject?,
+        _ fourth: AnyObject?
+    ) {
+        guard let chained else {
+            return
+        }
+
+        let original = unsafeBitCast(
+            chained,
+            to: (@convention(c) (
+                AnyObject, Selector, AnyObject?, AnyObject?, AnyObject?, AnyObject?
+            ) -> Void).self
+        )
+        original(receiver, selector, first, second, third, fourth)
+    }
+
     /// Drops nothing — the app must get back exactly what the original method produced.
     func callChained(
         _ chained: IMP?,
@@ -458,6 +490,10 @@ public final class Swizzle: @unchecked Sendable {
         }
     }
 
+    /// Receives the receiver, every object argument in order, and how long the chained
+    /// call took.
+    public typealias TimedObjectsObserver = (AnyObject, [AnyObject?], UInt64) -> Void
+
     /// Keyed on class identity: a metaclass and its class share a name, as can two images.
     private struct SiteKey: Hashable {
         let hooked: ObjectIdentifier
@@ -515,6 +551,17 @@ public final class Swizzle: @unchecked Sendable {
         let onNSObject = class_getMethodImplementation(NSObject.self, selector)
             .map { unsafeBitCast($0, to: UnsafeRawPointer.self) }
         return onClass != onNSObject
+    }
+
+    private static func elapsedNanoseconds(_ run: () -> Void) -> UInt64 {
+        var started = timespec()
+        clock_gettime(CLOCK_UPTIME_RAW, &started)
+        run()
+        var finished = timespec()
+        clock_gettime(CLOCK_UPTIME_RAW, &finished)
+        let startedAt = UInt64(started.tv_sec) * 1000000000 + UInt64(started.tv_nsec)
+        let finishedAt = UInt64(finished.tv_sec) * 1000000000 + UInt64(finished.tv_nsec)
+        return finishedAt > startedAt ? finishedAt - startedAt : 0
     }
 
     public func after(
@@ -738,16 +785,19 @@ public final class Swizzle: @unchecked Sendable {
         }
     }
 
-    /// Wraps where the delegate exists, defines where not — the buffer stays unbridged.
+    /// Wraps where the delegate exists; defines where not only when asked, since a defined
+    /// callback is one the framework starts delivering buffers to. The buffer stays unbridged.
     public func sampleBufferCallback(
         _ target: AnyClass?,
         _ selector: Selector,
+        defineWhenAbsent: Bool,
         _ observer: @escaping (AnyObject, AnyObject?, UnsafeRawPointer?, AnyObject?, UInt64)
             -> Void
     ) -> SwizzleOutcome {
         sampleBufferCallback(
             target,
             selector,
+            defineWhenAbsent: defineWhenAbsent,
             observing: SampleBufferObserver(entering: { _, _, _, _ in }, leaving: observer)
         )
     }
@@ -755,13 +805,14 @@ public final class Swizzle: @unchecked Sendable {
     public func sampleBufferCallback(
         _ target: AnyClass?,
         _ selector: Selector,
+        defineWhenAbsent: Bool,
         observing observer: SampleBufferObserver
     ) -> SwizzleOutcome {
         install(
             target,
             selector,
             shape: .sampleBufferCallback,
-            addWhenAbsent: Self.sampleBufferEncoding,
+            addWhenAbsent: defineWhenAbsent ? Self.sampleBufferEncoding : nil,
             observer: observer
         ) { site in
             let block: @convention(block) (
@@ -790,6 +841,84 @@ public final class Swizzle: @unchecked Sendable {
                 }
             }
             return imp_implementationWithBlock(block)
+        }
+    }
+
+    /// A delegate callback of two, three or four object arguments, timed. Defined where
+    /// absent only when asked, and only for a notification the framework sends optionally:
+    /// defining a required or photo-delivering callback changes which one the app gets.
+    public func timedCallback(
+        _ target: AnyClass?,
+        _ selector: Selector,
+        objects: Int,
+        defineWhenAbsent: Bool,
+        _ observer: @escaping TimedObjectsObserver
+    ) -> SwizzleOutcome {
+        switch objects {
+        case 2:
+            install(
+                target,
+                selector,
+                shape: .timedTwoObjects,
+                addWhenAbsent: defineWhenAbsent ? "v@:@@" : nil,
+                observer: observer
+            ) { site in
+                let block: @convention(block) (AnyObject, AnyObject?, AnyObject?) -> Void = {
+                    receiver, first, second in
+                    let live = site.live()
+                    let elapsed = Self.elapsedNanoseconds {
+                        site.callChained(live.chained, receiver, first, second)
+                    }
+                    for observe in live.observers {
+                        observe(receiver, [first, second], elapsed)
+                    }
+                }
+                return imp_implementationWithBlock(block)
+            }
+        case 3:
+            install(
+                target,
+                selector,
+                shape: .timedThreeObjects,
+                addWhenAbsent: defineWhenAbsent ? "v@:@@@" : nil,
+                observer: observer
+            ) { site in
+                let block: @convention(block) (
+                    AnyObject, AnyObject?, AnyObject?, AnyObject?
+                ) -> Void = { receiver, first, second, third in
+                    let live = site.live()
+                    let elapsed = Self.elapsedNanoseconds {
+                        site.callChained(live.chained, receiver, first, second, third)
+                    }
+                    for observe in live.observers {
+                        observe(receiver, [first, second, third], elapsed)
+                    }
+                }
+                return imp_implementationWithBlock(block)
+            }
+        case 4:
+            install(
+                target,
+                selector,
+                shape: .timedFourObjects,
+                addWhenAbsent: defineWhenAbsent ? "v@:@@@@" : nil,
+                observer: observer
+            ) { site in
+                let block: @convention(block) (
+                    AnyObject, AnyObject?, AnyObject?, AnyObject?, AnyObject?
+                ) -> Void = { receiver, first, second, third, fourth in
+                    let live = site.live()
+                    let elapsed = Self.elapsedNanoseconds {
+                        site.callChained(live.chained, receiver, first, second, third, fourth)
+                    }
+                    for observe in live.observers {
+                        observe(receiver, [first, second, third, fourth], elapsed)
+                    }
+                }
+                return imp_implementationWithBlock(block)
+            }
+        default:
+            .signatureMismatch(expected: objects + 2, actual: 0)
         }
     }
 

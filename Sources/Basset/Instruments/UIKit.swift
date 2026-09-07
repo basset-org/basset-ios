@@ -92,6 +92,69 @@ struct TouchIdentifiers {
     }
 }
 
+/// The view a touch was delivered to, by class and the two names an app gives a control.
+/// UIKit-free so the memory keyed on it is testable without a `UITouch`.
+struct TouchTarget: Equatable {
+    let identity: ObjectIdentifier
+    let className: String
+    let accessibilityIdentifier: String?
+    let accessibilityLabel: String?
+}
+
+/// Remembers each touch's target from its `.began`. By `.ended` a recognizer that cancelled
+/// delivery to the view has already cleared `UITouch.view` — and a control whose recognizer
+/// fires on touch-down is exactly the one a person is about to tap again.
+struct TouchTargets {
+    private var byTouch: [ObjectIdentifier: TouchTarget] = [:]
+
+    mutating func began(_ touch: ObjectIdentifier, on target: TouchTarget?) {
+        guard let target else {
+            byTouch.removeValue(forKey: touch)
+            return
+        }
+
+        byTouch[touch] = target
+    }
+
+    mutating func ended(_ touch: ObjectIdentifier) -> TouchTarget? {
+        byTouch.removeValue(forKey: touch)
+    }
+}
+
+#if canImport(UIKit)
+extension TouchTarget {
+    /// `touch.view` while UIKit still associates one; otherwise the view a hit-test at the
+    /// touch's own location would deliver to now.
+    static func of(_ touch: UITouch) -> TouchTarget? {
+        let view = touch.view ?? touch.window?.hitTest(touch.location(in: nil), with: nil)
+        guard let view else {
+            return nil
+        }
+
+        return TouchTarget(
+            identity: ObjectIdentifier(view),
+            className: RuntimeClassName.of(view),
+            accessibilityIdentifier: nonEmpty(view.accessibilityIdentifier),
+            accessibilityLabel: view is UIControl ? nonEmpty(view.accessibilityLabel) : nil
+        )
+    }
+
+    func write(into out: inout Readings) {
+        out.put(.runtimeClassName(className))
+        if let accessibilityIdentifier {
+            out.put(.accessibilityIdentifier(accessibilityIdentifier))
+        }
+        if let accessibilityLabel {
+            out.put(.accessibilityLabel(accessibilityLabel))
+        }
+    }
+
+    private static func nonEmpty(_ text: String?) -> String? {
+        text.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+#endif
+
 /// Touch begin/end/cancel are timestamped; `moved` events are counted once a second instead.
 final class WindowTouches: Streamable, Configurable {
     struct Config: Codable, Sendable {
@@ -116,6 +179,7 @@ final class WindowTouches: Streamable, Configurable {
     private let hierarchy: Bool
     private let moves: Mutex<Moves> = .init(Moves())
     private let touchIds: Mutex<TouchIdentifiers> = .init(TouchIdentifiers())
+    private let targets: Mutex<TouchTargets> = .init(TouchTargets())
 
     init(config: Config) {
         hierarchy = config.hierarchy
@@ -147,6 +211,7 @@ final class WindowTouches: Streamable, Configurable {
     func stopObserving() {
         moves.withLock { $0 = Moves() }
         touchIds.withLock { $0 = TouchIdentifiers() }
+        targets.withLock { $0 = TouchTargets() }
     }
 
     #if canImport(UIKit)
@@ -231,6 +296,13 @@ final class WindowTouches: Streamable, Configurable {
             } else {
                 touchIds.withLock { $0.end(key) }
             }
+        let target: TouchTarget?
+        if phase == .began {
+            target = TouchTarget.of(touch)
+            targets.withLock { $0.began(key, on: target) }
+        } else {
+            target = targets.withLock { $0.ended(key) } ?? TouchTarget.of(touch)
+        }
 
         context.emit(.touches) { out in
             out.put(.touchPhase(Self.name(of: phase)))
@@ -240,8 +312,17 @@ final class WindowTouches: Streamable, Configurable {
             if let touchId {
                 out.put(.touchId(touchId))
             }
+            target?.write(into: &out)
 
-            guard hierarchy, phase == .began, let touchId, let window = touch.window else {
+            guard let touchId else {
+                return
+            }
+
+            if phase != .began {
+                Self.putRecognizers(of: touch, touchId: touchId, into: &out)
+            }
+
+            guard hierarchy, phase == .began, let window = touch.window else {
                 return
             }
 
@@ -249,6 +330,76 @@ final class WindowTouches: Streamable, Configurable {
                 ViewHierarchy.writeMatches(at: location, in: window, parent: touchId, into: &hier)
             }
         }
+
+        if phase == .ended || phase == .cancelled, let touchId, Thread.isMainThread {
+            Self.measureSettle(touchId: touchId, liftedAt: touch.timestamp, context)
+        }
+    }
+
+    /// From the finger lifting to the main run loop next going idle: how long the tap's
+    /// handler and everything it did synchronously kept the interface busy. A tap that
+    /// settles in 200 ms froze the screen for 200 ms whether or not it counts as a hang.
+    /// The start is the touch's own stamp, since this runs after `sendEvent:` returned and
+    /// the handler has already had its turn.
+    private static func measureSettle(
+        touchId: UInt32,
+        liftedAt: TimeInterval,
+        _ context: Context
+    ) {
+        let startedAt = liftedAt.isFinite ? UInt64(max(0, liftedAt) * 1000000000) : 0
+        var observer: CFRunLoopObserver?
+        observer = CFRunLoopObserverCreateWithHandler(
+            nil,
+            CFRunLoopActivity.beforeWaiting.rawValue,
+            false,
+            0
+        ) { _, _ in
+            var finished = timespec()
+            clock_gettime(CLOCK_UPTIME_RAW, &finished)
+            let finishedAt = UInt64(finished.tv_sec) * 1000000000 + UInt64(finished.tv_nsec)
+            context.emit(.touches) { out in
+                out.put(.touchPhase("settled"))
+                out.put(.touchId(touchId))
+                out.put(.settleNanoseconds(finishedAt > startedAt ? finishedAt - startedAt : 0))
+            }
+            if let observer {
+                CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
+            }
+            observer = nil
+        }
+        if let observer {
+            CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+        }
+    }
+
+    /// The recognizers UIKit routed this touch through, and the state each is in as the touch
+    /// ends — read after `sendEvent:` returned, so a discrete recognizer already shows the
+    /// `.ended` it reached for this touch and one that lost shows `.failed` or `.cancelled`.
+    /// A touch that ends with none past `.possible` reached a view that did nothing with it.
+    private static func putRecognizers(
+        of touch: UITouch,
+        touchId: UInt32,
+        into out: inout Readings
+    ) {
+        for recognizer in touch.gestureRecognizers ?? [] where recognizer.state != .possible {
+            out.also(.gestureRecognizer) { entry in
+                entry.put(.runtimeClassName(RuntimeClassName.of(recognizer)))
+                entry.put(.gestureRecognizerState(GestureState.name(of: recognizer.state)))
+                entry.put(.touchId(touchId))
+                if let view = recognizer.view {
+                    entry.put(.hostViewClass(RuntimeClassName.of(view)))
+                    putAccessibilityIdentifier(of: view, into: &entry)
+                }
+            }
+        }
+    }
+
+    static func putAccessibilityIdentifier(of view: UIView, into out: inout Readings) {
+        guard let identifier = view.accessibilityIdentifier, !identifier.isEmpty else {
+            return
+        }
+
+        out.put(.accessibilityIdentifier(identifier))
     }
     #endif
 
@@ -453,30 +604,37 @@ final class ViewHierarchy: Snapshotable, Configurable {
 }
 
 /// Which control fired and where the action went — `sendAction:to:forEvent:` is UIKit's own
-/// funnel for every button, switch and control event, so one hook covers all of them.
+/// funnel for every selector-based control event, and `sendAction:` the one for a `UIAction`
+/// handler added with `addAction:for:`, so the two hooks together cover every button, switch
+/// and control event however its handler was attached.
 final class ControlAction: Streamable, PlainInstrument {
     static let id: InstrumentID = .controlAction
 
     init() {}
 
-    func observe(_ context: Context) {
-        #if canImport(UIKit)
-        _ = context.swizzle.after(
-            UIControl.self,
-            #selector(UIControl.sendAction(_:to:for:)),
-            takingSelectorAndTwoObjects: ()
-        ) { [weak self] (_, action: Selector, target: AnyObject?, _: AnyObject?) in
-            self?.fired(action, target, context)
+    #if canImport(UIKit)
+    /// A `UIAction` has no selector; its identifier is the app's own name for it when one was
+    /// given, else the title, else UIKit's generated identifier.
+    private static func name(of action: UIAction) -> String {
+        if !action.title.isEmpty {
+            return action.title
         }
-        #endif
+
+        return action.identifier.rawValue
     }
 
-    func stopObserving() {}
-
-    #if canImport(UIKit)
-    private func fired(_ action: Selector, _ target: AnyObject?, _ context: Context) {
+    private func fired(
+        _ action: String,
+        from control: AnyObject,
+        to target: AnyObject?,
+        _ context: Context
+    ) {
         context.emit(.controlAction) { out in
-            out.put(.methodName(NSStringFromSelector(action)))
+            out.put(.methodName(action))
+            out.put(.runtimeClassName(RuntimeClassName.of(control)))
+            if let view = control as? UIView {
+                WindowTouches.putAccessibilityIdentifier(of: view, into: &out)
+            }
             guard let target else {
                 return
             }
@@ -485,6 +643,30 @@ final class ControlAction: Streamable, PlainInstrument {
         }
     }
     #endif
+
+    func observe(_ context: Context) {
+        #if canImport(UIKit)
+        _ = context.swizzle.after(
+            UIControl.self,
+            #selector(UIControl.sendAction(_:to:for:)),
+            takingSelectorAndTwoObjects: ()
+        ) { [weak self] (receiver, action: Selector, target: AnyObject?, _: AnyObject?) in
+            self?.fired(NSStringFromSelector(action), from: receiver, to: target, context)
+        }
+        _ = context.swizzle.after(
+            UIControl.self,
+            #selector(UIControl.sendAction(_:) as (UIControl) -> (UIAction) -> Void)
+        ) { [weak self] (receiver, argument: AnyObject?) in
+            guard let action = argument as? UIAction else {
+                return
+            }
+
+            self?.fired(Self.name(of: action), from: receiver, to: nil, context)
+        }
+        #endif
+    }
+
+    func stopObserving() {}
 }
 
 /// Last state per recognizer; leaves on `.possible`, oldest evicted past `capacity`.
@@ -564,11 +746,15 @@ final class GestureState: Streamable, PlainInstrument {
         context.emit(.gestureRecognizer) { out in
             out.put(.runtimeClassName(RuntimeClassName.of(receiver)))
             out.put(.gestureRecognizerState(Self.name(of: recognized)))
+            if let view = (receiver as? UIGestureRecognizer)?.view {
+                out.put(.hostViewClass(RuntimeClassName.of(view)))
+                WindowTouches.putAccessibilityIdentifier(of: view, into: &out)
+            }
         }
     }
 
     /// `.recognized` shares `.ended`'s raw value — a discrete recognizer's own name for it.
-    private static func name(of state: UIGestureRecognizer.State) -> String {
+    static func name(of state: UIGestureRecognizer.State) -> String {
         switch state {
         case .possible: "possible"
         case .began: "began"
@@ -581,3 +767,17 @@ final class GestureState: Streamable, PlainInstrument {
     }
     #endif
 }
+
+#if canImport(UIKit)
+/// The hit-test walk `uikit.view.hierarchy` runs, for a caller that has a root view of its own.
+public enum ViewsAtPoint {
+    public static func write(
+        at point: CGPoint,
+        in root: UIView,
+        parent: UInt32,
+        into out: inout Readings
+    ) {
+        ViewHierarchy.writeMatches(at: point, in: root, parent: parent, into: &out)
+    }
+}
+#endif

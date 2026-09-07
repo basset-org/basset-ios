@@ -881,6 +881,48 @@ public extension InstrumentID {
                     ),
                 ]
             )
+        case .cameraDelegateCallbacks:
+            InstrumentMetadata(
+                summary: "Every AVCapture delegate callback the app receives — video, audio, photo, movie, metadata, synchronizer — counted and timed per method, and each photo capture followed from shutter to delivery",
+                whenToUse: "a photo never arrives, arrives late, or arrives with an error; a recording does not start or finish; metadata or audio stops; or to see which delegate methods the app implements at all before reading its handlers",
+                reveals: [
+                    "per second, for each delegate method that ran: how many times, total and peak time inside the app's own handler, which output class called it and which delegate class answered",
+                    "for every photo capture, one reading per stage as it happens — willBeginCapture, willCapturePhoto, didCapturePhoto, didFinishProcessingPhoto, didFinishCapture — sharing the capture's photo id, so shutter lag and processing time are the gaps between their times",
+                    "the error a photo or recording finished with, domain and code, on the stage that carried it",
+                    "which delegate methods the app implements, reported once per delegate class as each is hooked; a notification the app never wrote is defined so it is still seen, the callbacks that hand over a photo or a file never are",
+                ],
+                related: [
+                    "camera.frames.delivery", "camera.session.configuration",
+                    "camera.session.state",
+                    "log.messages",
+                ],
+                mechanism: .swizzle,
+                cadence: .interval,
+                overhead: .low,
+                minimumSDKVersion: "0.8.0"
+            )
+        case .logMessages:
+            InstrumentMetadata(
+                summary: "What the app itself logged, line by line, with the moment each line was written",
+                whenToUse: "state moved and nothing tapped — a camera, session, mode or screen changed on its own and the app's own log says why; also to attribute an effect to the tap that caused it",
+                reveals: [
+                    "every info, notice, error and fault line from the app's own subsystems (com.apple.* is left out unless named), each stamped with when it was logged, not when the window flushed",
+                    "the app's stated reason for a transition — a policy, a pressure response, a retry — beside the reading that shows the transition",
+                    "what the ceiling left out, rather than dropping it quietly",
+                ],
+                related: ["log.faults", "log.subsystems"],
+                mechanism: .osLogStore,
+                cadence: .interval,
+                overhead: .medium,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "subsystem",
+                        type: .string(maxLength: 256),
+                        description: "Only this subsystem's lines, Apple's included. Default: every subsystem that is not com.apple.*."
+                    ),
+                ],
+                minimumSDKVersion: "0.8.0"
+            )
         case .sessionConfiguration:
             InstrumentMetadata(
                 summary: "What each URLSession is permitted to do, which its requests never say",
@@ -1364,6 +1406,8 @@ public extension InstrumentID {
                     "a cancelled touch, which is what a scroll view stealing a tap looks like from the outside and the usual reason a button appears not to work",
                     "drag movement as a per-second total rather than as a reading per movement, because a drag delivers those by the hundred and no capture is worth spending on them",
                     "each touch's own location, and an id shared with the hierarchy reading `hierarchy` pairs with it, so the two can be found again together",
+                    "the view UIKit delivered the touch to, by class and accessibility identifier — the answer a hit-test gave, so a tap that landed on an overlay instead of the button under it says so on the tap itself",
+                    "as the touch ends, every gesture recognizer that handled it and the state each reached, with the view it belongs to — a tap whose recognizers all read failed or cancelled, or that lists none at all, reached a view that did nothing with it",
                     "every view under it, only when `hierarchy` is set, and only for the touch that began — not for every touch, and not for a gesture that recognizes without one",
                 ],
                 related: [
@@ -1394,7 +1438,8 @@ public extension InstrumentID {
                 summary: "Every control action UIKit sent, and which class received it",
                 whenToUse: "a button appears to do nothing, or the question is whether a tap ever reached a target's action method at all",
                 reveals: [
-                    "the action selector UIKit sent and the class of the object it was sent to, for every control event in the app",
+                    "the action selector UIKit sent, the control that sent it by class and accessibility identifier, and the class of the object it was sent to, for every control event in the app",
+                    "a UIAction handler firing, named by the action's title or identifier — the path a button configured with addAction:for: takes, which sends no selector at all",
                     "UIKit's own internal actions on a control, not only the app's own — a UIButton sends itself selectors like _buttonDown: and _buttonUp: through this same funnel for its highlight state, so an app's own action is one reading among several rather than the only one",
                     "nothing when the target is nil, which is a control configured with no handler rather than a failure to observe one",
                     "nothing about the touch that led to it — pair with uikit.window.touches for where and when",
@@ -1414,7 +1459,7 @@ public extension InstrumentID {
                 summary: "Every gesture recognizer's state transition, and which class it belongs to",
                 whenToUse: "a gesture is suspected of never recognizing, or the question is whether a pan, tap or swipe recognizer ever began at all",
                 reveals: [
-                    "each state a gesture recognizer transitioned through — possible, began, changed, ended, cancelled, failed — and the recognizer's own class",
+                    "each state a gesture recognizer transitioned through — possible, began, changed, ended, cancelled, failed — the recognizer's own class, and the view it is attached to by class and accessibility identifier",
                     "a recognizer that enters .began and then .cancelled, which is what another recognizer or a scroll view winning the gesture looks like from here",
                     "every gesture recognizer that transitions, including ones the app never added — UIKit attaches its own to ordinary views for system interactions, and a reading naming one of those is not a bug in the app being read",
                     "nothing if this build's UIKit ever removes the underlying selector: the hook is on `setState:`, which UIKit does not declare in its public header, and the install fails soft rather than crashing when it can't find it",
@@ -1459,6 +1504,46 @@ public extension InstrumentID {
                     ),
                 ],
                 minimumSDKVersion: "0.4.0"
+            )
+        case .repeatedTaps:
+            InstrumentMetadata(
+                summary: "Rage tapping: the same control tapped again and again within a few seconds, with what was under the finger",
+                whenToUse: "always, alongside whatever else is running — nobody files this bug, but a person who taps one control three times in five seconds is reporting that it did nothing",
+                reveals: [
+                    "each burst of taps on one control, the moment it reaches the threshold and again when it ends: how many taps, over how long, where, and the view UIKit delivered them to by class and accessibility identifier",
+                    "every view under the burst's centre, front to back, as uikit.view.hierarchy would list them — the overlay sitting on the control shows up here before anyone guesses at it",
+                    "a fault id shared with the thread snapshot taken as the burst is recognised, when runtime.threadSnapshot is running, so what the main thread was doing while the taps went nowhere sits beside the taps",
+                    "nothing about why the control did nothing: pair with uikit.gesture.state and uikit.control.action for whether the handler ran, and with the instrument for the subsystem the control should have moved",
+                ],
+                related: [
+                    "uikit.window.touches",
+                    "uikit.gesture.state",
+                    "uikit.control.action",
+                    "uikit.view.hierarchy",
+                    "runtime.threadSnapshot",
+                    "device.screenshot",
+                ],
+                mechanism: .swizzle,
+                cadence: .onChange,
+                overhead: .low,
+                config: [
+                    InstrumentMetadata.ConfigField(
+                        key: "taps",
+                        type: .int(range: 2...20),
+                        description: "Taps on one control that make a burst. Default 3."
+                    ),
+                    InstrumentMetadata.ConfigField(
+                        key: "withinMs",
+                        type: .int(range: 500...60000),
+                        description: "Longest gap between two taps that still counts as the same burst, in milliseconds. Default 5000."
+                    ),
+                    InstrumentMetadata.ConfigField(
+                        key: "radiusPoints",
+                        type: .double(range: 8...200),
+                        description: "How far from the burst's centre a tap may land and still belong to it, in points. Default 44, a fingertip."
+                    ),
+                ],
+                minimumSDKVersion: "0.8.0"
             )
         case .instrumentsActive:
             InstrumentMetadata(

@@ -82,6 +82,24 @@ public final class Context: @unchecked Sendable {
         raise(kind, id, status)
     }
 
+    /// `fault` for a hook that cannot pay for the contributors — one on the main thread, where
+    /// a thread snapshot would suspend the process inside the call it is measuring.
+    public func faultWithoutBlocking(_ kind: FaultKind, _ id: UInt32) {
+        guard status.isActive else {
+            return
+        }
+
+        let status = status
+        let raise = raise
+        timerQueue.async {
+            guard status.isActive else {
+                return
+            }
+
+            raise(kind, id, status)
+        }
+    }
+
     public func registry<Tracked: AnyObject>(_ type: Tracked.Type) -> [Tracked] {
         registries.registry(type).all
     }
@@ -105,6 +123,18 @@ public final class Context: @unchecked Sendable {
         _ attach: @escaping (AnyObject, UInt32) -> Void
     ) {
         let registry = registries.registry(runtimeClass: trackedClass)
+        let token = registry.attachAndFollow(attach)
+        lock.lock()
+        unfollows.append { registry.stopFollowing(token) }
+        lock.unlock()
+    }
+
+    /// Every delegate class already set on an owner and every one set while this stays active.
+    public func followDelegateClasses(
+        of ownerClass: AnyClass,
+        _ attach: @escaping (AnyClass) -> Void
+    ) {
+        let registry = registries.delegates(ObjectIdentifier(ownerClass))
         let token = registry.attachAndFollow(attach)
         lock.lock()
         unfollows.append { registry.stopFollowing(token) }
