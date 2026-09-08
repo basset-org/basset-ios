@@ -127,6 +127,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
     private func detached() {
         AttachedBridge.close(self)
         DrivingOverlay.hideFromAnyThread()
+        KeepAwake.releaseFromAnyThread()
     }
 
     private func reportFailure() {
@@ -161,6 +162,7 @@ final class AttachedLink: AttachedChannel, @unchecked Sendable {
                  .failed:
                 AttachedBridge.close(self)
                 DrivingOverlay.hideFromAnyThread()
+                KeepAwake.releaseFromAnyThread()
             default:
                 break
             }

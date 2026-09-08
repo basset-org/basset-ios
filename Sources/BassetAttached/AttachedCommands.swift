@@ -74,6 +74,7 @@ enum AttachedCommands {
     static let swipe = "swipe"
     static let type = "type"
     static let overlay = "overlay"
+    static let keepAwake = "keepAwake"
     static let screenText = "screenText"
 
     static let done = "done"
@@ -154,6 +155,11 @@ enum AttachedCommands {
                     blocksTouches: command.bool("blocksTouches") ?? true
                 )
                 return [finished(shown ? done : "noForegroundScene")]
+            }
+        case keepAwake:
+            return await MainActor.run {
+                KeepAwake.hold(command.bool("awake") ?? true)
+                return [finished(done, [.settingEnabled(KeepAwake.isHeld)])]
             }
         #endif
         default:
