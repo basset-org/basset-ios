@@ -66,6 +66,8 @@ public struct Entity: Equatable, Sendable {
         case command = 62
         case delegateMethod = 63
         case photoCapture = 64
+        case appIcon = 65
+        case overlay = 66
         case instrumentConfig = 0xff00
     }
 

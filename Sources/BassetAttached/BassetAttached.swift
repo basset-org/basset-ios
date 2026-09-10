@@ -89,6 +89,11 @@ public enum BassetAttached {
         }
     }
 
+    /// A frame of the app's own, outside any command: the overlay's Cancel is the one so far.
+    static func send(_ frame: Data) {
+        lock.withLock { link }?.send(frame)
+    }
+
     @discardableResult
     private static func bind() -> UInt16? {
         guard lock.withLock({ isListening }) else {

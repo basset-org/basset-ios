@@ -4,23 +4,34 @@ import UIKit
 #endif
 
 #if DEBUG && canImport(UIKit)
-/// A window above the app saying Basset is driving it. Real fingers stop at it when asked;
-/// synthetic touches never meet it, since they are delivered to the app's own key window,
-/// and a screenshot never shows it, since only the key window is drawn.
+/// A window above the app saying Basset is attached. When it blocks, real fingers stop at
+/// it and only its Cancel button answers; synthetic touches never meet it, since they are
+/// delivered to the app's own key window, and a screenshot never shows it, since only the
+/// key window is drawn.
 @MainActor
 enum DrivingOverlay {
     private final class OverlayWindow: UIWindow {
         var blocksTouches = false
 
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-            blocksTouches ? self : nil
+            guard blocksTouches else {
+                return nil
+            }
+
+            return super.hitTest(point, with: event) ?? self
         }
     }
 
     private static var window: OverlayWindow?
-    private static var label: UILabel?
+    private static var backdrop: UIView?
+    private static var banner: UIView?
+    private static var titleLabel: UILabel?
+    private static var whyLabel: UILabel?
+    private static var bannerLabel: UILabel?
+    private static var cancelButton: UIButton?
+    private static var onCancel: (() -> Void)?
 
-    static func show(text: String, blocksTouches: Bool) -> Bool {
+    static func show(text: String, blocksTouches: Bool, onCancel: @escaping () -> Void) -> Bool {
         guard let scene = UIApplication.shared
             .connectedScenes
             .compactMap({ $0 as? UIWindowScene })
@@ -31,7 +42,11 @@ enum DrivingOverlay {
 
         let overlay = window ?? make(in: scene)
         overlay.blocksTouches = blocksTouches
-        label?.text = text
+        Self.onCancel = onCancel
+        whyLabel?.text = text
+        bannerLabel?.text = text
+        backdrop?.isHidden = !blocksTouches
+        banner?.isHidden = blocksTouches
         overlay.isHidden = false
         return true
     }
@@ -39,7 +54,13 @@ enum DrivingOverlay {
     static func hide() {
         window?.isHidden = true
         window = nil
-        label = nil
+        backdrop = nil
+        banner = nil
+        titleLabel = nil
+        whyLabel = nil
+        bannerLabel = nil
+        cancelButton = nil
+        onCancel = nil
     }
 
     /// An app left under a blocking overlay takes a force-quit to use again.
@@ -47,51 +68,101 @@ enum DrivingOverlay {
         DispatchQueue.main.async { hide() }
     }
 
+    private static func cancelTapped() {
+        let handler = onCancel
+        hide()
+        handler?()
+    }
+
     private static func make(in scene: UIWindowScene) -> OverlayWindow {
         let overlay = OverlayWindow(windowScene: scene)
         overlay.windowLevel = .alert + 1
         overlay.backgroundColor = .clear
 
-        let border = UIView(frame: overlay.bounds)
-        border.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        border.layer.borderColor = UIColor.systemTeal.cgColor
-        border.layer.borderWidth = 4
-        border.isUserInteractionEnabled = false
-        overlay.addSubview(border)
+        let black = UIView(frame: overlay.bounds)
+        black.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        black.backgroundColor = .black
+        black.isUserInteractionEnabled = false
+        overlay.addSubview(black)
 
-        let banner = UIView()
-        banner.translatesAutoresizingMaskIntoConstraints = false
-        banner.backgroundColor = UIColor.systemTeal.withAlphaComponent(0.92)
-        banner.layer.cornerRadius = 14
-        banner.isUserInteractionEnabled = false
-        overlay.addSubview(banner)
+        let title = UILabel()
+        title.translatesAutoresizingMaskIntoConstraints = false
+        title.font = .systemFont(ofSize: 24, weight: .bold)
+        title.textColor = .white
+        title.textAlignment = .center
+        title.text = "Basset Attached"
+        overlay.addSubview(title)
 
-        let text = UILabel()
-        text.translatesAutoresizingMaskIntoConstraints = false
-        text.font = .systemFont(ofSize: 13, weight: .semibold)
-        text.textColor = .black
-        text.textAlignment = .center
-        text.numberOfLines = 2
-        banner.addSubview(text)
+        let why = UILabel()
+        why.translatesAutoresizingMaskIntoConstraints = false
+        why.font = .systemFont(ofSize: 16, weight: .regular)
+        why.textColor = UIColor.white.withAlphaComponent(0.8)
+        why.textAlignment = .center
+        why.numberOfLines = 0
+        overlay.addSubview(why)
 
+        var configuration = UIButton.Configuration.filled()
+        configuration.title = "Cancel"
+        configuration.baseBackgroundColor = .white
+        configuration.baseForegroundColor = .black
+        configuration.cornerStyle = .capsule
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: 14,
+            leading: 40,
+            bottom: 14,
+            trailing: 40
+        )
+        let cancel = UIButton(
+            configuration: configuration,
+            primaryAction: UIAction { _ in cancelTapped() }
+        )
+        cancel.translatesAutoresizingMaskIntoConstraints = false
+        overlay.addSubview(cancel)
+
+        let strip = UIView()
+        strip.translatesAutoresizingMaskIntoConstraints = false
+        strip.backgroundColor = UIColor.black.withAlphaComponent(0.9)
+        strip.layer.cornerRadius = 14
+        strip.isUserInteractionEnabled = false
+        overlay.addSubview(strip)
+
+        let stripText = UILabel()
+        stripText.translatesAutoresizingMaskIntoConstraints = false
+        stripText.font = .systemFont(ofSize: 13, weight: .semibold)
+        stripText.textColor = .white
+        stripText.textAlignment = .center
+        stripText.numberOfLines = 2
+        strip.addSubview(stripText)
+
+        let safe = overlay.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            banner.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
-            banner.topAnchor.constraint(
-                equalTo: overlay.safeAreaLayoutGuide.topAnchor,
-                constant: 6
-            ),
-            banner.leadingAnchor.constraint(
+            title.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            title.centerYAnchor.constraint(equalTo: overlay.centerYAnchor, constant: -24),
+            title.leadingAnchor.constraint(greaterThanOrEqualTo: safe.leadingAnchor, constant: 24),
+            why.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 10),
+            why.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 32),
+            why.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -32),
+            cancel.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            cancel.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -24),
+            strip.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            strip.topAnchor.constraint(equalTo: safe.topAnchor, constant: 6),
+            strip.leadingAnchor.constraint(
                 greaterThanOrEqualTo: overlay.leadingAnchor,
                 constant: 24
             ),
-            text.topAnchor.constraint(equalTo: banner.topAnchor, constant: 6),
-            text.bottomAnchor.constraint(equalTo: banner.bottomAnchor, constant: -6),
-            text.leadingAnchor.constraint(equalTo: banner.leadingAnchor, constant: 14),
-            text.trailingAnchor.constraint(equalTo: banner.trailingAnchor, constant: -14),
+            stripText.topAnchor.constraint(equalTo: strip.topAnchor, constant: 6),
+            stripText.bottomAnchor.constraint(equalTo: strip.bottomAnchor, constant: -6),
+            stripText.leadingAnchor.constraint(equalTo: strip.leadingAnchor, constant: 14),
+            stripText.trailingAnchor.constraint(equalTo: strip.trailingAnchor, constant: -14),
         ])
 
         window = overlay
-        label = text
+        backdrop = black
+        banner = strip
+        titleLabel = title
+        whyLabel = why
+        bannerLabel = stripText
+        cancelButton = cancel
         return overlay
     }
 }

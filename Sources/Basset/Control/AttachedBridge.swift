@@ -46,7 +46,11 @@ public enum AttachedBridge {
         ids.forEach { components.append(.instrument($0.rawValue)) }
         let relevant = Entity(.relevantInstruments, components: components)
 
-        return [device, relevant].map { encoder.frame(encoder.encode($0)) }
+        var entities = [device, relevant]
+        if let icon = AppIcon.reading()?.tagged(.deviceInfo) {
+            entities.append(icon)
+        }
+        return entities.map { encoder.frame(encoder.encode($0)) }
     }
 
     public static func open(_ channel: AttachedChannel) {

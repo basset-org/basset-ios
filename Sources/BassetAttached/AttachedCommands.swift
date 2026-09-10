@@ -79,6 +79,8 @@ enum AttachedCommands {
 
     static let done = "done"
 
+    static let cancelled = "cancelled"
+
     private static let queue: DispatchQueue = .init(label: "dev.basset.attached.commands")
     private static let lock: NSLock = .init()
     private nonisolated(unsafe) static var lastAnswer: Task<Void, Never>?
@@ -120,6 +122,16 @@ enum AttachedCommands {
         Entity(.command, components: [.mechanismStatus(status)] + extra)
     }
 
+    /// Sent on its own, with no `commandId`, so it reaches the machine as a reading rather
+    /// than as the answer to anything.
+    static func overlayCancelled() -> Data {
+        let encoder = FrameEncoder()
+        return encoder.frame(encoder.encode(Entity(
+            .overlay,
+            components: [.mechanismStatus(cancelled)]
+        )))
+    }
+
     private static func entities(answering command: AttachedCommand) async -> [Entity] {
         switch command.name {
         case screenshot:
@@ -152,7 +164,8 @@ enum AttachedCommands {
 
                 let shown = DrivingOverlay.show(
                     text: command.string("text") ?? "Basset is driving this app",
-                    blocksTouches: command.bool("blocksTouches") ?? true
+                    blocksTouches: command.bool("blocksTouches") ?? true,
+                    onCancel: { BassetAttached.send(overlayCancelled()) }
                 )
                 return [finished(shown ? done : "noForegroundScene")]
             }
