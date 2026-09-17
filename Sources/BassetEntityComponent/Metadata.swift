@@ -757,6 +757,7 @@ public extension InstrumentID {
                     "CPU nanoseconds consumed per thread over the window just closed, highest first",
                     "the window each count covers, so a rate can be computed rather than assumed",
                     "which thread is main, what it is named, and whether it was running or waiting when sampled",
+                    "the QoS class the thread requested, since most libdispatch pool threads carry no name at all",
                 ],
                 related: [
                     "concurrency.thread.inventory",

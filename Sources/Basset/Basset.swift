@@ -3,6 +3,8 @@ import Foundation
 import Network
 
 public struct Config: Sendable {
+    /// Empty means no control plane: the process never polls or streams anywhere, and
+    /// instruments run only for a machine attached over `BassetAttached`.
     public var apiKey: String
     public var control: URL
     public var quicPort: UInt16
@@ -175,6 +177,10 @@ final class DeviceLoop: @unchecked Sendable {
     func start() {
         // Before the network, so an at_launch instrument isn't measuring something already over.
         runner.startFromDisk()
+
+        guard !config.apiKey.isEmpty else {
+            return
+        }
 
         following = Task.detached(priority: .utility) { [self] in
             await follow()

@@ -11,7 +11,12 @@ enum ScreenshotPolicy {
     private static let remote: Mutex<Bool> = .init(false)
 
     static var isPermitted: Bool {
-        AttachedBridge.channel != nil || remote.withLock { $0 }
+        #if DEBUG
+        if AttachedBridge.channel != nil {
+            return true
+        }
+        #endif
+        return remote.withLock { $0 }
     }
 
     static func allowRemote(_ allowed: Bool) {

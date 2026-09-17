@@ -21,6 +21,8 @@ public enum AttachedBridge {
     /// matter: state arriving before there is a loop to apply it to is applied once
     /// there is one.
     private nonisolated(unsafe) static var pending: Data?
+    private nonisolated(unsafe) static var lastApplied: Data?
+    private nonisolated(unsafe) static var isPaused = false
 
     static var channel: AttachedChannel? {
         lock.withLock { attached }
@@ -46,7 +48,11 @@ public enum AttachedBridge {
         ids.forEach { components.append(.instrument($0.rawValue)) }
         let relevant = Entity(.relevantInstruments, components: components)
 
-        return [device, relevant].map { encoder.frame(encoder.encode($0)) }
+        var entities = [device, relevant]
+        if let icon = AppIcon.reading()?.tagged(.deviceInfo) {
+            entities.append(icon)
+        }
+        return entities.map { encoder.frame(encoder.encode($0)) }
     }
 
     public static func open(_ channel: AttachedChannel) {
@@ -80,10 +86,45 @@ public enum AttachedBridge {
 
     public static func apply(_ desiredState: Data) throws {
         let state = try JSONDecoder().decode(DesiredState.self, from: desiredState)
+        let paused = lock.withLock {
+            lastApplied = desiredState
+            return isPaused
+        }
+        guard !paused else {
+            return
+        }
         guard Basset.converge(to: state) else {
             lock.withLock { pending = desiredState }
             return
         }
+    }
+
+    /// Desired state arriving while paused is held and applied on resume.
+    public static func pause(_ wanted: Bool) throws {
+        let (changed, replay) = lock.withLock { () -> (Bool, Data?) in
+            let changed = isPaused != wanted
+            isPaused = wanted
+            return (changed, lastApplied)
+        }
+        guard changed else {
+            return
+        }
+        guard wanted else {
+            if let replay {
+                try apply(replay)
+            }
+            return
+        }
+        guard let replay else {
+            return
+        }
+
+        let held = try JSONDecoder().decode(DesiredState.self, from: replay)
+        Basset.converge(to: DesiredState(
+            ingestEndpoint: held.ingestEndpoint,
+            requests: [],
+            stateVersion: held.stateVersion
+        ))
     }
 
     /// The same document the control plane answers a poll with, pushed down the

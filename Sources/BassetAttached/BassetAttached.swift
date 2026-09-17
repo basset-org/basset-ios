@@ -3,8 +3,6 @@ import Foundation
 import Network
 #if canImport(UIKit)
 import UIKit
-#elseif canImport(AppKit)
-import AppKit
 #endif
 
 // Linking this module is what lets a developer's machine reach an app on the same
@@ -59,9 +57,13 @@ public enum BassetAttached {
     /// why, when no port was free.
     @discardableResult
     public static func listen() -> UInt16? {
+        // A listener bound while the app is not yet active dies with the app's first
+        // suspension; treating that launch as backgrounded makes the first activation rebind.
+        let startedInactive = launchedInactive()
         lock.withLock {
             isListening = true
             rebindAttempts = 0
+            backgrounded = startedInactive
         }
         watchForeground()
         return bind()
@@ -87,6 +89,24 @@ public enum BassetAttached {
         for observer in removed {
             center.removeObserver(observer)
         }
+    }
+
+    static func send(_ frame: Data) {
+        lock.withLock { link }?.send(frame)
+    }
+
+    private static func launchedInactive() -> Bool {
+        #if canImport(UIKit)
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated { UIApplication.shared.applicationState != .active }
+        }
+
+        return DispatchQueue.main.sync {
+            MainActor.assumeIsolated { UIApplication.shared.applicationState != .active }
+        }
+        #else
+        return false
+        #endif
     }
 
     @discardableResult
@@ -147,18 +167,9 @@ public enum BassetAttached {
             object: nil,
             queue: nil
         ) { _ in rebindIfBackgrounded() })
-        #elseif canImport(AppKit)
-        installed.append(center.addObserver(
-            forName: NSApplication.didResignActiveNotification,
-            object: nil,
-            queue: nil
-        ) { _ in lock.withLock { backgrounded = true } })
-        installed.append(center.addObserver(
-            forName: NSApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: nil
-        ) { _ in rebindIfBackgrounded() })
         #endif
+        // A Mac app keeps its sockets while inactive, so there is nothing to rebind on
+        // activation; doing so dropped the connection on every window switch.
 
         let stillListening = lock.withLock { () -> Bool in
             guard isListening else {

@@ -74,9 +74,13 @@ enum AttachedCommands {
     static let swipe = "swipe"
     static let type = "type"
     static let overlay = "overlay"
+    static let keepAwake = "keepAwake"
+    static let pause = "pause"
     static let screenText = "screenText"
 
     static let done = "done"
+
+    static let cancelled = "cancelled"
 
     private static let queue: DispatchQueue = .init(label: "dev.basset.attached.commands")
     private static let lock: NSLock = .init()
@@ -119,6 +123,13 @@ enum AttachedCommands {
         Entity(.command, components: [.mechanismStatus(status)] + extra)
     }
 
+    static func overlayCancelled() -> Data {
+        var out = Readings(.overlay)
+        out.put(.mechanismStatus(cancelled))
+        let encoder = FrameEncoder()
+        return encoder.frame(encoder.encode(out.tagged(.deviceInfo)))
+    }
+
     private static func entities(answering command: AttachedCommand) async -> [Entity] {
         switch command.name {
         case screenshot:
@@ -151,11 +162,24 @@ enum AttachedCommands {
 
                 let shown = DrivingOverlay.show(
                     text: command.string("text") ?? "Basset is driving this app",
-                    blocksTouches: command.bool("blocksTouches") ?? true
+                    blocksTouches: command.bool("blocksTouches") ?? true,
+                    onCancel: { BassetAttached.send(overlayCancelled()) }
                 )
                 return [finished(shown ? done : "noForegroundScene")]
             }
+        case keepAwake:
+            return await MainActor.run {
+                KeepAwake.hold(command.bool("awake") ?? true)
+                return [finished(done, [.settingEnabled(KeepAwake.isHeld)])]
+            }
         #endif
+        case pause:
+            do {
+                try AttachedBridge.pause(command.bool("paused") ?? true)
+                return [finished()]
+            } catch {
+                return [finished("\(error)")]
+            }
         default:
             return [finished("unknown command: \(command.name)")]
         }
