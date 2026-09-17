@@ -97,7 +97,9 @@ struct MemoryLedger {
         from info: task_vm_info_data_t,
         wordsWritten: mach_msg_type_number_t
     ) -> UInt64? {
-        #if targetEnvironment(simulator)
+        // A Mac process has no jetsam limit; the kernel's remaining-bytes figure there is
+        // not a ceiling the app can be measured against.
+        #if targetEnvironment(simulator) || os(macOS)
         return nil
         #else
         if wordsWritten >= wordsThroughRemainingBytes {

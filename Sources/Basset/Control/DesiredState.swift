@@ -167,6 +167,12 @@ struct DesiredState: Decodable, Sendable {
     /// Echoed on the next poll so the control plane answers at once when it has moved on.
     let stateVersion: String?
 
+    init(ingestEndpoint: String, requests: [BassetRequest], stateVersion: String?) {
+        self.ingestEndpoint = ingestEndpoint
+        self.requests = requests
+        self.stateVersion = stateVersion
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         ingestEndpoint = try container.decode(String.self, forKey: .ingestEndpoint)

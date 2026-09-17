@@ -45,9 +45,10 @@ graph is held by whoever remembers to build it before pushing.
 that decides the platform floor: iOS 17, macOS 13. Adding a source file means
 adding it to both graphs.
 
-Instruments that touch UIKit or AVFoundation only compile for iOS; the macOS
-floor exists so the tests and the demo can run on a development machine, not
-because the library targets the Mac.
+Instruments that touch UIKit or AVFoundation compile to no-ops on macOS. The
+macOS floor exists for the tests, the demo, and a macOS app that starts the
+library with an empty API key: such an app never contacts a control plane and
+runs instruments only for a machine attached over `BassetAttached` on loopback.
 
 ## Before your first commit
 

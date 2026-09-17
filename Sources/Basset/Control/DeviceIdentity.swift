@@ -61,14 +61,21 @@ private func hardwareModel() -> String {
         return simulated
     }
 
+    // hw.machine is the model identifier on iOS (iPhone17,1) but only the
+    // architecture on macOS, where hw.model carries the identifier (Mac16,6).
+    #if os(macOS)
+    let key = "hw.model"
+    #else
+    let key = "hw.machine"
+    #endif
     var size = 0
-    sysctlbyname("hw.machine", nil, &size, nil, 0)
+    sysctlbyname(key, nil, &size, nil, 0)
     guard size > 0 else {
         return "unknown"
     }
 
     var value = [CChar](repeating: 0, count: size)
-    sysctlbyname("hw.machine", &value, &size, nil, 0)
+    sysctlbyname(key, &value, &size, nil, 0)
     return String(cString: value)
 }
 

@@ -6,12 +6,22 @@ import UIKit
 #if DEBUG && canImport(UIKit)
 @MainActor
 enum KeepAwake {
+    private static var appsOwnValue: Bool?
+
     static var isHeld: Bool {
-        UIApplication.shared.isIdleTimerDisabled
+        appsOwnValue != nil
     }
 
     static func hold(_ wanted: Bool) {
-        UIApplication.shared.isIdleTimerDisabled = wanted
+        if wanted {
+            if appsOwnValue == nil {
+                appsOwnValue = UIApplication.shared.isIdleTimerDisabled
+            }
+            UIApplication.shared.isIdleTimerDisabled = true
+        } else if let restored = appsOwnValue {
+            UIApplication.shared.isIdleTimerDisabled = restored
+            appsOwnValue = nil
+        }
     }
 
     nonisolated static func releaseFromAnyThread() {

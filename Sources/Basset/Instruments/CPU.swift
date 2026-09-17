@@ -126,6 +126,7 @@ final class ThreadCPUUsage: Streamable, Configurable {
         out.put(.threadIsMain(entry.sample.isMain))
         out.put(.threadRunState(entry.sample.runState))
         out.put(.cpuUsageRatio(entry.sample.cpuUsageRatio))
+        out.put(.threadRequestedQos(entry.sample.requestedQos))
         if !entry.sample.name.isEmpty {
             out.put(.threadName(entry.sample.name))
         }

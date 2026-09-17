@@ -75,6 +75,7 @@ enum AttachedCommands {
     static let type = "type"
     static let overlay = "overlay"
     static let keepAwake = "keepAwake"
+    static let pause = "pause"
     static let screenText = "screenText"
 
     static let done = "done"
@@ -122,14 +123,11 @@ enum AttachedCommands {
         Entity(.command, components: [.mechanismStatus(status)] + extra)
     }
 
-    /// Sent on its own, with no `commandId`, so it reaches the machine as a reading rather
-    /// than as the answer to anything.
     static func overlayCancelled() -> Data {
+        var out = Readings(.overlay)
+        out.put(.mechanismStatus(cancelled))
         let encoder = FrameEncoder()
-        return encoder.frame(encoder.encode(Entity(
-            .overlay,
-            components: [.mechanismStatus(cancelled)]
-        )))
+        return encoder.frame(encoder.encode(out.tagged(.deviceInfo)))
     }
 
     private static func entities(answering command: AttachedCommand) async -> [Entity] {
@@ -175,6 +173,13 @@ enum AttachedCommands {
                 return [finished(done, [.settingEnabled(KeepAwake.isHeld)])]
             }
         #endif
+        case pause:
+            do {
+                try AttachedBridge.pause(command.bool("paused") ?? true)
+                return [finished()]
+            } catch {
+                return [finished("\(error)")]
+            }
         default:
             return [finished("unknown command: \(command.name)")]
         }

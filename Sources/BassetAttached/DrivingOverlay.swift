@@ -4,10 +4,7 @@ import UIKit
 #endif
 
 #if DEBUG && canImport(UIKit)
-/// A window above the app saying Basset is attached. When it blocks, real fingers stop at
-/// it and only its Cancel button answers; synthetic touches never meet it, since they are
-/// delivered to the app's own key window, and a screenshot never shows it, since only the
-/// key window is drawn.
+/// Synthetic touches and screenshots target the key window, so this window never meets either.
 @MainActor
 enum DrivingOverlay {
     private final class OverlayWindow: UIWindow {
@@ -45,7 +42,9 @@ enum DrivingOverlay {
         Self.onCancel = onCancel
         whyLabel?.text = text
         bannerLabel?.text = text
-        backdrop?.isHidden = !blocksTouches
+        for view in [backdrop, titleLabel, whyLabel, cancelButton] {
+            view?.isHidden = !blocksTouches
+        }
         banner?.isHidden = blocksTouches
         overlay.isHidden = false
         return true
@@ -74,6 +73,13 @@ enum DrivingOverlay {
         handler?()
     }
 
+    private static func shadow(_ label: UILabel) {
+        label.layer.shadowColor = UIColor.black.cgColor
+        label.layer.shadowOpacity = 0.8
+        label.layer.shadowRadius = 4
+        label.layer.shadowOffset = .zero
+    }
+
     private static func make(in scene: UIWindowScene) -> OverlayWindow {
         let overlay = OverlayWindow(windowScene: scene)
         overlay.windowLevel = .alert + 1
@@ -81,7 +87,7 @@ enum DrivingOverlay {
 
         let black = UIView(frame: overlay.bounds)
         black.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        black.backgroundColor = .black
+        black.backgroundColor = UIColor.black.withAlphaComponent(0.5)
         black.isUserInteractionEnabled = false
         overlay.addSubview(black)
 
@@ -91,6 +97,7 @@ enum DrivingOverlay {
         title.textColor = .white
         title.textAlignment = .center
         title.text = "Basset Attached"
+        shadow(title)
         overlay.addSubview(title)
 
         let why = UILabel()
@@ -99,6 +106,7 @@ enum DrivingOverlay {
         why.textColor = UIColor.white.withAlphaComponent(0.8)
         why.textAlignment = .center
         why.numberOfLines = 0
+        shadow(why)
         overlay.addSubview(why)
 
         var configuration = UIButton.Configuration.filled()
